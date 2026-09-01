@@ -1,8 +1,9 @@
 package SSE;
 
-import beast.core.BEASTObject;
-import beast.core.Input;
-import beast.core.parameter.RealParameter;
+import beast.base.core.BEASTObject;
+import beast.base.core.Input;
+import beast.base.inference.util.InputUtil;
+import beast.base.inference.parameter.RealParameter;
 
 import java.util.Arrays;
 
@@ -31,12 +32,12 @@ public class NormalCenteredAtObservedLinkFn extends BEASTObject implements LinkF
 
         boolean refreshedSomething = false;
 
-        if (quTraitsInput.isDirty()) {
+        if (InputUtil.isDirty(quTraitsInput)) {
             quTraits = quTraitsInput.get();
             refreshedSomething = true;
         }
 
-        if (sdNormalQuTrValueInput.isDirty()) {
+        if (InputUtil.isDirty(sdNormalQuTrValueInput)) {
             sdNormalQuTrValue = sdNormalQuTrValueInput.get().getValue();
             refreshedSomething = true;
         }

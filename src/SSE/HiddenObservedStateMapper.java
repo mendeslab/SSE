@@ -9,8 +9,8 @@ import java.util.regex.Pattern;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 
-import beast.core.BEASTObject;
-import beast.core.Input;
+import beast.base.core.BEASTObject;
+import beast.base.core.Input;
 
 public class HiddenObservedStateMapper extends BEASTObject {
 

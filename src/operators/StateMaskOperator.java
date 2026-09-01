@@ -1,10 +1,10 @@
 package operators;
 
-import beast.core.Input;
-import beast.core.Operator;
-import beast.core.Input.Validate;
-import beast.core.parameter.IntegerParameter;
-import beast.util.Randomizer;
+import beast.base.core.Input;
+import beast.base.inference.Operator;
+import beast.base.core.Input.Validate;
+import beast.base.inference.parameter.IntegerParameter;
+import beast.base.util.Randomizer;
 
 public class StateMaskOperator extends Operator {
     final public Input<IntegerParameter> stateMaskInput =

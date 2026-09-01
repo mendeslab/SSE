@@ -7,11 +7,11 @@ import java.util.Set;
 
 import org.apache.commons.lang3.ArrayUtils;
 
-import beast.core.CalculationNode;
-import beast.core.Input;
-import beast.core.Input.Validate;
-import beast.core.parameter.IntegerParameter;
-import beast.core.parameter.RealParameter;
+import beast.base.inference.CalculationNode;
+import beast.base.core.Input;
+import beast.base.core.Input.Validate;
+import beast.base.inference.parameter.IntegerParameter;
+import beast.base.inference.parameter.RealParameter;
 
 public class MasqueradeBall extends CalculationNode {
 	final public Input<IntegerParameter> statesMaskFlagInput = new Input<>("stateMask", "Series of integers that collectively determine what observed states have a hidden state.");

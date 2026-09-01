@@ -1,8 +1,8 @@
 package SSE;
 
-import beast.core.Input;
-import beast.core.State;
-import beast.evolution.tree.Node;
+import beast.base.core.Input;
+import beast.base.inference.State;
+import beast.base.evolution.tree.Node;
 
 import java.util.Arrays;
 import java.util.List;

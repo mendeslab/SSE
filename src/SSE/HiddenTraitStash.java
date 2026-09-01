@@ -3,7 +3,7 @@ package SSE;
 import java.util.HashMap;
 import java.util.Map.Entry;
 
-import beast.core.Input;
+import beast.base.core.Input;
 
 public class HiddenTraitStash extends TraitStash implements Cloneable {
 

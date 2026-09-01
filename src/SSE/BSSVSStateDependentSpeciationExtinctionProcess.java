@@ -3,10 +3,10 @@ package SSE;
 import java.util.Arrays;
 import java.util.concurrent.Executors;
 
-import beast.app.BeastMCMC;
-import beast.core.Input;
-import beast.core.Input.Validate;
-import beast.evolution.tree.Tree;
+import beast.base.core.ProgramStatus;
+import beast.base.core.Input;
+import beast.base.core.Input.Validate;
+import beast.base.evolution.tree.Tree;
 
 public class BSSVSStateDependentSpeciationExtinctionProcess extends HiddenStateDependentSpeciationExtinctionProcess {
 
@@ -56,10 +56,10 @@ public class BSSVSStateDependentSpeciationExtinctionProcess extends HiddenStateD
 		storedBranchLengths = new double[tree.getNodeCount()];
 		hasDirt = Tree.IS_FILTHY;
 
-		useThreads = useThreadsInput.get() && (BeastMCMC.m_nThreads > 1);
-		nrOfThreads = useThreads ? BeastMCMC.m_nThreads : 1;
+		useThreads = useThreadsInput.get() && (ProgramStatus.m_nThreads > 1);
+		nrOfThreads = useThreads ? ProgramStatus.m_nThreads : 1;
 		if (useThreads && maxNrOfThreadsInput.get() > 0) {
-			nrOfThreads = Math.min(maxNrOfThreadsInput.get(), BeastMCMC.m_nThreads);
+			nrOfThreads = Math.min(maxNrOfThreadsInput.get(), ProgramStatus.m_nThreads);
 		}
 		if (useThreads) {
 			exec = Executors.newFixedThreadPool(nrOfThreads);

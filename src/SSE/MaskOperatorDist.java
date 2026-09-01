@@ -3,11 +3,11 @@ package SSE;
 import java.util.List;
 import java.util.Random;
 
-import beast.core.Distribution;
-import beast.core.Input;
-import beast.core.State;
-import beast.core.parameter.IntegerParameter;
-import beast.core.Input.Validate;
+import beast.base.inference.Distribution;
+import beast.base.core.Input;
+import beast.base.inference.State;
+import beast.base.inference.parameter.IntegerParameter;
+import beast.base.core.Input.Validate;
 
 public class MaskOperatorDist extends Distribution {
 

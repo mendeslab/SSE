@@ -1,12 +1,12 @@
 package SSE;
 
-import beast.core.Input;
-import beast.core.State;
-import beast.evolution.alignment.Alignment;
-import beast.evolution.sitemodel.SiteModel;
-import beast.evolution.sitemodel.SiteModelInterface;
-import beast.evolution.substitutionmodel.SubstitutionModel;
-import beast.evolution.tree.Node;
+import beast.base.core.Input;
+import beast.base.inference.State;
+import beast.base.evolution.alignment.Alignment;
+import beast.base.evolution.sitemodel.SiteModel;
+import beast.base.evolution.sitemodel.SiteModelInterface;
+import beast.base.evolution.substitutionmodel.SubstitutionModel;
+import beast.base.evolution.tree.Node;
 import org.shared.array.RealArray;
 
 import java.util.List;

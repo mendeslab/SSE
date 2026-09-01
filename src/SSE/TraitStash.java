@@ -5,9 +5,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map.Entry;
 
-import beast.core.Input;
-import beast.core.util.Log;
-import beast.evolution.tree.*;
+import beast.base.core.Input;
+import beast.base.core.Log;
+import beast.base.evolution.tree.*;
 
 public class TraitStash extends TraitSet {
 

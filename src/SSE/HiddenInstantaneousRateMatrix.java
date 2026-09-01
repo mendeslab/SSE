@@ -9,10 +9,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import com.google.common.base.Joiner;
-import beast.core.CalculationNode;
-import beast.core.Input;
-import beast.core.Input.Validate;
-import beast.core.parameter.RealParameter;
+import beast.base.inference.CalculationNode;
+import beast.base.core.Input;
+import beast.base.core.Input.Validate;
+import beast.base.inference.parameter.RealParameter;
 
 /*
  * Note: getCell is where dirty check is done

@@ -3,12 +3,12 @@ package SSE;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.Executors;
-import beast.app.BeastMCMC;
-import beast.core.Citation;
-import beast.core.Description;
-import beast.core.Input;
-import beast.core.Input.Validate;
-import beast.evolution.tree.*;
+import beast.base.core.ProgramStatus;
+import beast.base.core.Citation;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.core.Input.Validate;
+import beast.base.evolution.tree.*;
 
 @Description("More general class capable of inferring under ClaSSE model, but also (Mu)HiSSE.")
 @Citation(value="Goldberg EE, Igic B (2012) Tempo and mode in plant breeding system evolution. Evolution 16(12):3701-3709",
@@ -72,10 +72,10 @@ public class HiddenStateDependentSpeciationExtinctionProcess extends StateDepend
 		storedBranchLengths = new double[tree.getNodeCount()];
 		hasDirt = Tree.IS_FILTHY;
 
-        useThreads = useThreadsInput.get() && (BeastMCMC.m_nThreads > 1);
-		nrOfThreads = useThreads ? BeastMCMC.m_nThreads : 1;
+        useThreads = useThreadsInput.get() && (ProgramStatus.m_nThreads > 1);
+		nrOfThreads = useThreads ? ProgramStatus.m_nThreads : 1;
 		if (useThreads && maxNrOfThreadsInput.get() > 0) {
-			nrOfThreads = Math.min(maxNrOfThreadsInput.get(), BeastMCMC.m_nThreads);
+			nrOfThreads = Math.min(maxNrOfThreadsInput.get(), ProgramStatus.m_nThreads);
 		}
 		if (useThreads) {
 		     exec = Executors.newFixedThreadPool(nrOfThreads);

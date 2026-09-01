@@ -1,7 +1,7 @@
 package SSE;
 
 /*
- * This class is the analog of 'LikelihoodCore' in beast.evolution.likelihood.
+ * This class is the analog of 'LikelihoodCore' in beast.base.evolution.likelihood.
  *
  * Note that unlike 'LikelihoodCore' or any of its daughter classes such
  * as BeerLikelihoodCore, we do not manage all site patterns. We only look at
