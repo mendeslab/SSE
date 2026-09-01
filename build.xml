@@ -51,7 +51,7 @@
   <!-- Compile the active SSE sources without packaging them in a jar. -->
   <target name="compile" depends="init">
     <javac release="${javaVersion}" srcdir="${src}" destdir="${build}" includeantruntime="false"
-           includes="SSE/**/*.java,operators/**/*.java">
+           includes="SSE/**/*.java,loggers/**/*.java,operators/**/*.java">
       <classpath>
 	<pathelement path="${classpath}"/>
 	<pathelement path="${beast.jar}"/>

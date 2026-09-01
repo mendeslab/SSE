@@ -22,6 +22,7 @@
     <provider classname="SSE.StateDependentSpeciationExtinctionProcess"/>
     <provider classname="SSE.StateDependentSpeciationExtinctionProcessV0"/>
     <provider classname="SSE.TraitStash"/>
+    <provider classname="loggers.StocCharMapLogger"/>
     <provider classname="operators.CIDMaskOperator"/>
     <provider classname="operators.StateMaskOperator"/>
   </service>
