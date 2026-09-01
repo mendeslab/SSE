@@ -41,6 +41,9 @@ Running mosse unit tests also require the java library path to be added in the J
 
 ## QuaSSE classes
 
+QuaSSE currently performs its FFTs in Java using JTransforms. The JNI setup
+above applies only to the separate MoSSE implementation.
+
 ### QuaSSEProcess
 
 TODO
