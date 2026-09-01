@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<beast namespace="beast.core:beast.evolution.alignment:beast.evolution.tree.coalescent:beast.core.util:beast.evolution.nuc:beast.evolution.operators:beast.evolution.sitemodel:beast.evolution.substitutionmodel:beast.evolution.likelihood" required="BEAST v2.5.0" version="2.5">
+<beast namespace="beast.pkgmgmt:beast.base.core:beast.base.inference:beast.base.inference.util:beast.base.inference.distribution:beast.base.evolution:beast.base.evolution.alignment:beast.base.evolution.tree:beast.base.evolution.tree.coalescent:beast.base.evolution.operator:beast.base.inference.operator:beast.base.evolution.sitemodel:beast.base.evolution.substitutionmodel:beast.base.evolution.likelihood" required="" version="2.7">
 
 <run id="mcmc" spec="MCMC" chainLength="1000000">
     <state id="state" storeEvery="10000">
@@ -11,53 +11,53 @@
         <stateNode idref="FlatQMatrix"/>
     </state>
 
-    <distribution id="posterior" spec="util.CompoundDistribution">   
+    <distribution id="posterior" spec="CompoundDistribution">   
 
-        <distribution id="prior" spec="util.CompoundDistribution">        
+        <distribution id="prior" spec="CompoundDistribution">        
 
-            <distribution id="SympatricRatePrior" spec="beast.math.distributions.Prior" x="@SympatricRate"> 
-            	<distr id="LogNormal.SympatricRate" spec="beast.math.distributions.LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
+            <distribution id="SympatricRatePrior" spec="Prior" x="@SympatricRate"> 
+            	<distr id="LogNormal.SympatricRate" spec="LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
             		<parameter name="M" value="-1.465125" estimate="false"/>
             		<parameter name="S" value="1.0" estimate="false"/>
             	</distr>
             </distribution>
                        
-            <distribution id="SubsympatricRatePrior" spec="beast.math.distributions.Prior" x="@SubsympatricRate"> 
-            	<distr id="LogNormal.SubSympatricRate" spec="beast.math.distributions.LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
+            <distribution id="SubsympatricRatePrior" spec="Prior" x="@SubsympatricRate"> 
+            	<distr id="LogNormal.SubSympatricRate" spec="LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
             		<parameter name="M" value="-1.465125" estimate="false"/>
             		<parameter name="S" value="1.0" estimate="false"/>
             	</distr>
             </distribution>
                        
-            <distribution id="VicariantRatePrior" spec="beast.math.distributions.Prior" x="@VicariantRate"> 
-            	<distr id="LogNormal.VicariantRate" spec="beast.math.distributions.LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
+            <distribution id="VicariantRatePrior" spec="Prior" x="@VicariantRate"> 
+            	<distr id="LogNormal.VicariantRate" spec="LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
             		<parameter name="M" value="-1.465125" estimate="false"/>
             		<parameter name="S" value="1.0" estimate="false"/>
             	</distr>
             </distribution>
             
-            <distribution id="JumpRatePrior" spec="beast.math.distributions.Prior" x="@JumpRate"> 
-            	<distr id="LogNormal.JumpRate" spec="beast.math.distributions.LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
+            <distribution id="JumpRatePrior" spec="Prior" x="@JumpRate"> 
+            	<distr id="LogNormal.JumpRate" spec="LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
             		<parameter name="M" value="-1.465125" estimate="false"/>
             		<parameter name="S" value="1.0" estimate="false"/>
             	</distr>
             </distribution>
             
-            <distribution id="MuPrior" spec="beast.math.distributions.Prior" x="@Mu"> 
-            	<distr id="LogNormal.Mu" spec="beast.math.distributions.LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
+            <distribution id="MuPrior" spec="Prior" x="@Mu"> 
+            	<distr id="LogNormal.Mu" spec="LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
             		<parameter name="M" value="-1.465125" estimate="false"/>
             		<parameter name="S" value="1.0" estimate="false"/>
             	</distr>
             </distribution>
             
-            <distribution id="FlatQMatrixPrior" spec="beast.math.distributions.Prior" x="@FlatQMatrix"> 
-            	<distr id="LogNormal.FlatQMatrix" spec="beast.math.distributions.Exponential" offset="0.0" mean="0.01"/>
+            <distribution id="FlatQMatrixPrior" spec="Prior" x="@FlatQMatrix"> 
+            	<distr id="LogNormal.FlatQMatrix" spec="Exponential" offset="0.0" mean="0.01"/>
             </distribution>
         </distribution> <!-- END prior -->
         
-        <distribution id="likelihood" spec="util.CompoundDistribution" useThreads="true">
+        <distribution id="likelihood" spec="CompoundDistribution" useThreads="true">
 			<distribution id="StateDependentSpeciationExtinctionProcess" spec="SSE.StateDependentSpeciationExtinctionProcess" incorporateCladogenesis="true">
-			    <tree id="FixedTree" spec="beast.util.TreeParser" IsLabelledNewick="true" adjustTipHeights="false" newick="(((Human:1.0,Chimp:1.0):1.0,Gorilla:2.0):1.0,Orang:3.0);" offset="0" singlechild="false">
+			    <tree id="FixedTree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false" newick="(((Human:1.0,Chimp:1.0):1.0,Gorilla:2.0):1.0,Orang:3.0);" offset="0" singlechild="false">
 			        <taxonset id="TaxonSet" spec="TaxonSet">
 			            <taxon id="Human" spec="Taxon"/>
 			            <taxon id="Chimp" spec="Taxon"/>
@@ -123,7 +123,7 @@
     </logger>
 
     <logger id="treelog.t:firsthalf" fileName="CLaSSE_fixed_tree.trees" logEvery="1000000" mode="tree">
-        <log id="TreeWithMetaDataLogger" spec="beast.evolution.tree.TreeWithMetaDataLogger" tree="@FixedTree"/>
+        <log id="TreeWithMetaDataLogger" spec="TreeWithMetaDataLogger" tree="@FixedTree"/>
     </logger>
 
 </run>

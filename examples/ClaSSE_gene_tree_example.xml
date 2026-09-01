@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?><beast beautitemplate='Standard' beautistatus='' namespace="beast.core:beast.evolution.alignment:beast.evolution.tree.coalescent:beast.core.util:beast.evolution.nuc:beast.evolution.operators:beast.evolution.sitemodel:beast.evolution.substitutionmodel:beast.evolution.likelihood" required="BEAST v2.5.0" version="2.5">
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><beast beautitemplate='Standard' beautistatus='' namespace="beast.pkgmgmt:beast.base.core:beast.base.inference:beast.base.inference.util:beast.base.inference.distribution:beast.base.evolution:beast.base.evolution.alignment:beast.base.evolution.tree:beast.base.evolution.tree.coalescent:beast.base.evolution.operator:beast.base.inference.operator:beast.base.evolution.sitemodel:beast.base.evolution.substitutionmodel:beast.base.evolution.likelihood" required="" version="2.7">
         
     <data id="seq0" name="alignment">
         <sequence id="seq_sp10" taxon="sp10" totalcount="4" value="CAATCTGCAATTCGAGATGCGTGATTTGAGGCCTCACGTT"/>
@@ -66,16 +66,16 @@
       	</taxonset>
     </data>
       
-    <map name="Uniform" >beast.math.distributions.Uniform</map>    
-    <map name="Exponential" >beast.math.distributions.Exponential</map>    
-    <map name="LogNormal" >beast.math.distributions.LogNormalDistributionModel</map>
-    <map name="Normal" >beast.math.distributions.Normal</map>    
-    <map name="Beta" >beast.math.distributions.Beta</map>    
-    <map name="Gamma" >beast.math.distributions.Gamma</map>    
-    <map name="LaplaceDistribution" >beast.math.distributions.LaplaceDistribution</map>    
-    <map name="prior" >beast.math.distributions.Prior</map>    
-    <map name="InverseGamma" >beast.math.distributions.InverseGamma</map>    
-    <map name="OneOnX" >beast.math.distributions.OneOnX</map>
+    <map name="Uniform" >distribution.Uniform</map>    
+    <map name="Exponential" >distribution.Exponential</map>    
+    <map name="LogNormal" >distribution.LogNormalDistributionModel</map>
+    <map name="Normal" >distribution.Normal</map>    
+    <map name="Beta" >distribution.Beta</map>    
+    <map name="Gamma" >distribution.Gamma</map>    
+    <map name="LaplaceDistribution" >distribution.LaplaceDistribution</map>    
+    <map name="prior" >distribution.Prior</map>    
+    <map name="InverseGamma" >distribution.InverseGamma</map>    
+    <map name="OneOnX" >distribution.OneOnX</map>
     
     <run id="mcmc" spec="MCMC" chainLength="10000000">            
 
@@ -95,14 +95,14 @@
 	<parameter id="freqParameter.s:seq0" dimension="4" lower="0.0" name="stateNode" upper="1.0">0.25</parameter>
       </state>
             
-      <init id="RandomTree.t:seq0" spec="beast.evolution.tree.RandomTree" estimate="false" initial="@Tree.t:seq0" taxa="@seq0">
+      <init id="RandomTree.t:seq0" spec="RandomTree" estimate="false" initial="@Tree.t:seq0" taxa="@seq0">
         <populationModel id="ConstantPopulation0.t:seq0" spec="ConstantPopulation">
           <parameter id="randomPopSize.t:seq0" name="popSize">1.0</parameter>
         </populationModel>
       </init>
         
-      <distribution id="posterior" spec="util.CompoundDistribution">
-        <distribution id="prior" spec="util.CompoundDistribution">
+      <distribution id="posterior" spec="CompoundDistribution">
+        <distribution id="prior" spec="CompoundDistribution">
 	  <distribution id="StateDependentSpeciationExtinctionProcess" spec="SSE.StateDependentSpeciationExtinctionProcess" incorporateCladogenesis="true">
 
 	    <tree idref="Tree.t:seq0"/>
@@ -132,27 +132,27 @@
 	    <pi id="Pi" dimension="6" spec="parameter.RealParameter">0 0 0 0.333333333333 0.333333333333 0.333333333333</pi>
 	  </distribution>
 	  
-	  <distribution id="SympatricRatePrior" spec="beast.math.distributions.Prior" x="@SympatricRate">
-	    <distr id="Exponential.SympatricRate" spec="beast.math.distributions.Exponential" offset="0.0" mean="0.05"/>
+	  <distribution id="SympatricRatePrior" spec="Prior" x="@SympatricRate">
+	    <distr id="Exponential.SympatricRate" spec="Exponential" offset="0.0" mean="0.05"/>
           </distribution>
                        
-          <distribution id="SubsympatricRatePrior" spec="beast.math.distributions.Prior" x="@SubsympatricRate">
-	    <distr id="Exponential.SubsympatricRate" spec="beast.math.distributions.Exponential" offset="0.0" mean="0.05"/>
+          <distribution id="SubsympatricRatePrior" spec="Prior" x="@SubsympatricRate">
+	    <distr id="Exponential.SubsympatricRate" spec="Exponential" offset="0.0" mean="0.05"/>
 	  </distribution>
                        
-          <distribution id="VicariantRatePrior" spec="beast.math.distributions.Prior" x="@VicariantRate">
-	    <distr id="Exponential.VicariantRate" spec="beast.math.distributions.Exponential" offset="0.0" mean="0.05"/>
+          <distribution id="VicariantRatePrior" spec="Prior" x="@VicariantRate">
+	    <distr id="Exponential.VicariantRate" spec="Exponential" offset="0.0" mean="0.05"/>
           </distribution>
                         
-          <distribution id="MuPrior" spec="beast.math.distributions.Prior" x="@Mu"> 
-	    <distr id="Exponential.Mu" spec="beast.math.distributions.Exponential" offset="0.0" mean="0.0125"/>
+          <distribution id="MuPrior" spec="Prior" x="@Mu"> 
+	    <distr id="Exponential.Mu" spec="Exponential" offset="0.0" mean="0.0125"/>
 	  </distribution>
             
-          <distribution id="FlatQMatrixPrior" spec="beast.math.distributions.Prior" x="@FlatQMatrix"> 
-	    <distr id="Exponential.FlatQMatrix" spec="beast.math.distributions.Exponential" offset="0.0" mean="0.05"/>
+          <distribution id="FlatQMatrixPrior" spec="Prior" x="@FlatQMatrix"> 
+	    <distr id="Exponential.FlatQMatrix" spec="Exponential" offset="0.0" mean="0.05"/>
 	  </distribution>
 
-	  <distribution id="root.prior" spec="beast.math.distributions.MRCAPrior" monophyletic="true" tree="@Tree.t:seq0">
+	  <distribution id="root.prior" spec="MRCAPrior" monophyletic="true" tree="@Tree.t:seq0">
 	    <taxonset idref="TaxonSet"/>
 	    <LogNormal id="LogNormalDistributionModel.1" name="distr">
               <parameter id="RealParameter.3" estimate="false" name="M">3.4</parameter>
@@ -168,7 +168,7 @@
           </prior>
         </distribution>
                     
-      <distribution id="likelihood" spec="util.CompoundDistribution" useThreads="true">
+      <distribution id="likelihood" spec="CompoundDistribution" useThreads="true">
           <distribution id="treeLikelihood.seq0" spec="ThreadedTreeLikelihood" data="@seq0" tree="@Tree.t:seq0">
             <siteModel id="SiteModel.s:seq0" spec="SiteModel">
               <parameter id="mutationRate.s:seq0" estimate="false" name="mutationRate">1.0</parameter>
@@ -180,7 +180,7 @@
               </substModel>
             </siteModel>
                                     
-            <branchRateModel id="StrictClock.c:seq0" spec="beast.evolution.branchratemodel.StrictClockModel">
+            <branchRateModel id="StrictClock.c:seq0" spec="branchratemodel.StrictClockModel">
               <parameter id="clockRate.c:seq0" estimate="false" name="clock.rate">0.006568651</parameter>
             </branchRateModel>
                                 
@@ -192,7 +192,7 @@
             
       <operator id="TreeRootScaler.t:seq0" spec="ScaleOperator" rootOnly="true" scaleFactor="0.5" tree="@Tree.t:seq0" weight="3.0"/>
             
-      <operator id="UniformOperator.t:seq0" spec="Uniform" tree="@Tree.t:seq0" weight="30.0"/>
+      <operator id="UniformOperator.t:seq0" spec="operator.Uniform" tree="@Tree.t:seq0" weight="30.0"/>
             
       <operator id="SubtreeSlide.t:seq0" spec="SubtreeSlide" tree="@Tree.t:seq0" weight="15.0"/>
             
@@ -228,7 +228,7 @@
         <log idref="VicariantRate"/>
         <log idref="Mu"/>
         <log idref="FlatQMatrix"/>
-        <log id="TreeHeight.t:seq0" spec="beast.evolution.tree.TreeHeightLogger" tree="@Tree.t:seq0"/>         <log idref="kappa.s:seq0"/>
+        <log id="TreeHeight.t:seq0" spec="TreeHeightLogger" tree="@Tree.t:seq0"/>         <log idref="kappa.s:seq0"/>
       </logger>
             
       <logger id="screenlog" logEvery="5000">                    
@@ -239,7 +239,7 @@
       </logger>
             
       <logger id="treelog.t:seq0" fileName="$(tree).trees" logEvery="1000" mode="tree">
-        <log id="TreeWithMetaDataLogger.t:seq0" spec="beast.evolution.tree.TreeWithMetaDataLogger" tree="@Tree.t:seq0"/>
+        <log id="TreeWithMetaDataLogger.t:seq0" spec="TreeWithMetaDataLogger" tree="@Tree.t:seq0"/>
       </logger>
         
     </run>

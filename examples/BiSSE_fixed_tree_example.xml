@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<beast namespace="beast.core:beast.evolution.alignment:beast.evolution.tree.coalescent:beast.core.util:beast.evolution.nuc:beast.evolution.operators:beast.evolution.sitemodel:beast.evolution.substitutionmodel:beast.evolution.likelihood" required="BEAST v2.5.0" version="2.5">
+<beast namespace="beast.pkgmgmt:beast.base.core:beast.base.inference:beast.base.inference.util:beast.base.inference.distribution:beast.base.evolution:beast.base.evolution.alignment:beast.base.evolution.tree:beast.base.evolution.tree.coalescent:beast.base.evolution.operator:beast.base.inference.operator:beast.base.evolution.sitemodel:beast.base.evolution.substitutionmodel:beast.base.evolution.likelihood" required="" version="2.7">
 
   <run id="mcmc" spec="MCMC" chainLength="1000000">
     <state id="state" storeEvery="10000">
@@ -8,26 +8,26 @@
       <stateNode idref="FlatQMatrix"/>
     </state>
 
-    <distribution id="posterior" spec="util.CompoundDistribution">   
+    <distribution id="posterior" spec="CompoundDistribution">   
       
       <!-- START prior -->
-      <distribution id="prior" spec="util.CompoundDistribution">        
-        <distribution id="LambdaPrior" spec="beast.math.distributions.Prior" x="@Lambda"> 
-          <distr id="LogNormal.Lambda" spec="beast.math.distributions.LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
+      <distribution id="prior" spec="CompoundDistribution">        
+        <distribution id="LambdaPrior" spec="Prior" x="@Lambda"> 
+          <distr id="LogNormal.Lambda" spec="LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
             <parameter name="M" value="-1.465125" estimate="false"/>
             <parameter name="S" value="1.0" estimate="false"/>
           </distr>
         </distribution>
             
-        <distribution id="MuPrior" spec="beast.math.distributions.Prior" x="@Mu"> 
-          <distr id="LogNormal.Mu" spec="beast.math.distributions.LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
+        <distribution id="MuPrior" spec="Prior" x="@Mu"> 
+          <distr id="LogNormal.Mu" spec="LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
             <parameter name="M" value="-1.465125" estimate="false"/>
             <parameter name="S" value="1.0" estimate="false"/>
           </distr>
         </distribution>
             
-        <distribution id="FlatQMatrixPrior" spec="beast.math.distributions.Prior" x="@FlatQMatrix"> 
-          <distr id="LogNormal.FlatQMatrix" spec="beast.math.distributions.LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
+        <distribution id="FlatQMatrixPrior" spec="Prior" x="@FlatQMatrix"> 
+          <distr id="LogNormal.FlatQMatrix" spec="LogNormalDistributionModel" offset="0.0" meanInRealSpace="false">
           	<parameter name="M" value="-1.465125" estimate="false"/>
             <parameter name="S" value="1.0" estimate="false"/>
           </distr>
@@ -35,9 +35,9 @@
       </distribution> 
       <!-- END prior -->
         
-      <distribution id="likelihood" spec="util.CompoundDistribution" useThreads="true">
-	<distribution id="StateDependentSpeciationExtinctionProcess" spec="biogeo.StateDependentSpeciationExtinctionProcess" incorporateCladogenesis="false">
-	  <tree id="FixedTree" spec="beast.util.TreeParser" IsLabelledNewick="true" adjustTipHeights="false" newick="((Human:1.0,Chimp:1.0):1.0,Gorilla:2.0);" offset="0" singlechild="false">
+      <distribution id="likelihood" spec="CompoundDistribution" useThreads="true">
+	<distribution id="StateDependentSpeciationExtinctionProcess" spec="SSE.StateDependentSpeciationExtinctionProcess" incorporateCladogenesis="false">
+	  <tree id="FixedTree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false" newick="((Human:1.0,Chimp:1.0):1.0,Gorilla:2.0);" offset="0" singlechild="false">
 	    <taxonset id="TaxonSet" spec="TaxonSet">
 	      <taxon id="Human" spec="Taxon"/>
 	      <taxon id="Chimp" spec="Taxon"/>
@@ -45,11 +45,11 @@
 	    </taxonset>
 	  </tree>
 			
-	  <traitStash id="TraitStash" spec="biogeo.TraitStash" value="Human=2,Chimp=2,Gorilla=2" numberOfStates="2">
+	  <traitStash id="TraitStash" spec="SSE.TraitStash" value="Human=2,Chimp=2,Gorilla=2" numberOfStates="2">
 	    <taxa idref="TaxonSet"/>
 	  </traitStash>
 
-	  <instantaneousRateMatrix id="InstantaneousRateMatrix" spec="biogeo.InstantaneousRateMatrix" numberOfStates="2">
+	  <instantaneousRateMatrix id="InstantaneousRateMatrix" spec="SSE.InstantaneousRateMatrix" numberOfStates="2">
 	    <parameter id="FlatQMatrix" dimension="2" lower="0.0" name="flatQMatrix" upper="1.0">0.9 0.9</parameter>
 	  </instantaneousRateMatrix>
 	  
@@ -83,7 +83,7 @@
     </logger>
 
     <logger id="treelog.t:firsthalf" fileName="BiSSE_fixed_tree.trees" logEvery="1000000" mode="tree">
-        <log id="TreeWithMetaDataLogger" spec="beast.evolution.tree.TreeWithMetaDataLogger" tree="@FixedTree"/>
+        <log id="TreeWithMetaDataLogger" spec="TreeWithMetaDataLogger" tree="@FixedTree"/>
     </logger>
   </run>
 </beast>
