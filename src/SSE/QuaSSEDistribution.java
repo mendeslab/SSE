@@ -72,8 +72,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     public void populateMacroevolParams(boolean ignoreRefresh) {
         birthRatesLo = q2mLambda.getY(xLo, birthRatesLo, ignoreRefresh);
         birthRatesHi = q2mLambda.getY(xHi, birthRatesHi, ignoreRefresh);
-        deathRatesLo = q2mMu.getY(deathRatesLo, deathRatesLo, ignoreRefresh);
-        deathRatesHi = q2mMu.getY(deathRatesHi, deathRatesHi, ignoreRefresh);
+        deathRatesLo = q2mMu.getY(xLo, deathRatesLo, ignoreRefresh);
+        deathRatesHi = q2mMu.getY(xHi, deathRatesHi, ignoreRefresh);
     }
 
     @Override

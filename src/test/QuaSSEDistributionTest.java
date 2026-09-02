@@ -355,6 +355,27 @@ public class QuaSSEDistributionTest {
     }
 
     /*
+     * Trait-dependent extinction must be evaluated on both x rulers, just like speciation. This
+     * supplements the constant-μ checks and becomes redundant if link evaluation moves out of QuaSSE.
+     */
+    @Test
+    public void testTraitDependentExtinctionRates() {
+        QuaSSEDistribution distribution = new QuaSSEDistribution();
+        distribution.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
+                "tc", tc100Rp,
+                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
+                "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
+                "drift", driftRp, "diffusion", diffusionRp0001,
+                "q2mLambda", lfn, "q2mMu", lfn,
+                "tree", bifTreeHeight001,
+                "q2d", nfn2Sp,
+                "priorProbAtRootType", rootPriorType);
+
+        Assert.assertArrayEquals(distribution.getLambda(true), distribution.getMu(true), 0.0);
+        Assert.assertArrayEquals(distribution.getLambda(false), distribution.getMu(false), 0.0);
+    }
+
+    /*
      * Checks that two species in a 2sp-tree get their D's correctly
      * initialized (using standard QuaSSE initialization, in high resolution).
      * "sp1" and "sp2" are assigned trait values of 0.0 and 0.01, respectively.
