@@ -46,9 +46,27 @@ the appropriate JDK include subdirectory when porting it to another platform.
 
 ## QuaSSE classes
 
-QuaSSE currently performs its FFTs in Java using JTransforms. The JNI setup
-above applies only to the separate MoSSE implementation. The retained QuaSSE C
-wrapper is not connected to the Java implementation.
+QuaSSE currently performs its active FFTs in Java using `JavaFftService` from
+the bundled shared library. A JTransforms implementation is retained and
+covered by lower-level tests, but is not selected by the likelihood. The JNI
+setup above applies only to the separate MoSSE implementation. The retained
+QuaSSE C wrapper is not connected to the Java implementation.
+
+The QuaSSE computational grid is fixed when the likelihood is initialized.
+Its padding and trait rulers are derived from the initial constant drift,
+diffusion, and `dtMax`. Fixed nonzero drift is supported, but changing drift or
+diffusion during an MCMC run can require different padding and is not yet
+supported safely. Dynamic grid reconstruction and its cache invalidation must
+be implemented before those parameters are inferred.
+
+Use `dynDt=true`. This mode divides each branch into an integer number of equal
+steps no longer than `dtMax`. The retained `dynDt=false` path does not integrate
+a branch-length remainder and is unfinished. FFTW integration, incomplete
+sampling, and other unfinished QuaSSE extensions are also deferred.
+
+Each `calculateLogP()` currently performs a full pruning calculation from
+freshly populated tip values. Incremental BEAST node-partial caching is a later
+performance feature rather than part of the current correctness model.
 
 ### QuaSSEProcess
 
