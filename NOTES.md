@@ -8,41 +8,47 @@ relevant implementation details
 * Go over the unit tests in a logical order
 
 ## Configuring JNI for MoSSE C libraries
-Building requires fftw3 and Java 8 on your OS (Ubuntu is recommended).
+Building requires FFTW3, a C compiler, and a JDK compatible with the Java used
+to run BEAST. SSE targets Java 17 and also builds with newer JDKs.
 
 Install fftw3 on ubuntu  
 ```
 sudo apt-get install -y libfftw3-dev
 ```
 
-Install Java 8
+Install Java 17
 ```
-sudo apt-get install openjdk-8-jdk
-```
-
-To build the JNI methods 
-```
-cd SSE/jni
-make
+sudo apt-get install openjdk-17-jdk
 ```
 
-To configure your IDE to access the C libraries. 
+Build the JNI methods from the repository root. The Makefile uses `JAVA_HOME`
+when it is set and otherwise derives the JDK location from `javac`:
 
-For IntelliJ, go to **Run -> Edit configurations**
-
-Then, add the JNI path to your Java VM option 
 ```
--Djava.library.path=/your_path/SSE/jni
+make -C jni
 ```
 
-Running mosse unit tests also require the java library path to be added in the JUnit configuration (following same steps as above).
+Run the portable tests and the native MoSSE tests separately:
 
-*Note: Instructions for Mac and Windows OS coming soon.*
+```
+ant test
+ant test-mosse
+```
+
+After building the JNI library, `ant test-all` runs both suites. `test-mosse`
+and `test-all` supply the JNI library path. The native tests cover
+`MosseTreeLikelihood` initialization, but its likelihood calculation remains
+disabled because that unfinished path can abort inside the native integration
+code.
+
+The native build currently defaults to Linux. Set `JNI_PLATFORM` to the name of
+the appropriate JDK include subdirectory when porting it to another platform.
 
 ## QuaSSE classes
 
 QuaSSE currently performs its FFTs in Java using JTransforms. The JNI setup
-above applies only to the separate MoSSE implementation.
+above applies only to the separate MoSSE implementation. The retained QuaSSE C
+wrapper is not connected to the Java implementation.
 
 ### QuaSSEProcess
 

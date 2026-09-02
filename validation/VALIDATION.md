@@ -10,6 +10,11 @@ You are going to need the following R packages:
 * gridExtra
 * ggplot2
 
+The calibrated-validation commands in section 1 are historical. Several input
+templates, Python scripts, and generated data directories referenced there are
+not present in this checkout, so that section is not currently reproducible
+without obtaining those files separately.
+
 ## (1) Calibrated validation of BiSSE and ClaSSE    
 
 We will simulate 2000 trees ("-n 2000"; some will not be considered for being too small or too large) with a simulation stop time of 50 ("-st 50") in step (1.1).
@@ -60,8 +65,11 @@ We compare our implementation to diversitree's like they do (and produce the sam
 
 ### (3.1) Preparing input for stochastic character mapping (tree, tip data, internal node data, diversitree reconstructions) in R
 
-The following command will simulate a tree and tip states given parameters λ<sub>0</sub>=0.2, λ<sub>1</sub>=0.4, µ<sub>0</sub>=0.01, µ<sub>1</sub>=0.1, q<sub>01</sub>=0.1, <sub>q10</sub>=0.4 (we use a fixed seed to obtain the same graph in Freyman and H&ouml;hna, 2017).
-The R script this command executes also performs ancestral state reconstruction using diversitree.
+The following command will simulate a tree and tip states given parameters
+λ<sub>0</sub>=0.2, λ<sub>1</sub>=0.4, µ<sub>0</sub>=0.001,
+µ<sub>1</sub>=0.1, q<sub>01</sub>=0.1, and q<sub>10</sub>=0.4. We use a fixed
+seed to obtain the same graph in Freyman and H&ouml;hna (2017). The R script also
+performs ancestral state reconstruction using diversitree.
 
 Below, "/path/to/SSE/validation" should be replaced with your local path to the validation folder that comes with this git repository.
 
@@ -79,10 +87,16 @@ The following files will be produced:
 
 ### (3.2) Running stochastic character mapping (both only on internal nodes and along branches as well) in Java
 
-Below, "/path/to/SSE/SSE.jar" should be replaced with the full path to the SSE.jar file.
+Compile the test and validation classes, then run the restored source directly.
+The output argument is relative to the repository root in this example.
 
 ```
-java -cp /path/to/SSE/SSE.jar validation.SDSEPValidationBiSSEASR asr/
+cd /path/to/SSE
+ant compile-test
+java -cp 'build:build-test:../beast2/build/dist/launcher.jar:'\
+'../beast2/build/dist/BEAST.base.jar:'\
+'../beast2/lib/junit/junit-platform-console-standalone-1.8.2.jar:lib/*' \
+  validation.SDSEPValidationBiSSEASR validation/asr/
 ```
 
 The following files will be produced:

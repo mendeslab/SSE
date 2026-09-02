@@ -130,10 +130,9 @@ After running .xml, remove header lines (starting with '#') from .log file, and 
 
 ### (1.5) BiSSE_fixed_tree_SDSEP_SCM.trees (stochastic character mapping on 60-sp tree under BiSSE)
 
-```
-cd validation/
-python scripts/parse_asm_treesfile.py ../examples/BiSSE_fixed_tree_SDSEP_SCM.trees 101 BiSSE_fixed_tree_SDSEP_SCM_parsed.txt
-```
+The historical `scripts/parse_asm_treesfile.py` helper is not present in this
+repository or its available history. This post-processing step cannot currently
+be reproduced without obtaining or replacing that parser.
 
 ## (2) Plotting all graphs in R (see examples_xml_plots.R)    
 
@@ -145,4 +144,3 @@ We will just call the script and let it do all the work.
 mkdir /path/to/SSE/validation/plots
 Rscript r_scripts/example_xml_plots.R /path/to/SSE/validation
 ```
-
