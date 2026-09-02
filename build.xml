@@ -38,6 +38,8 @@
     <pathelement location="${build-test}"/>
     <pathelement location="${launcher.jar}"/>
     <pathelement location="${junit.jar}"/>
+    <!-- This source directory locates BEAST's version.xml without exposing BEAST's compiled tests. -->
+    <pathelement location="${beast.dir}/src"/>
   </path>
 
   <!-- Prepare for compilation -->
