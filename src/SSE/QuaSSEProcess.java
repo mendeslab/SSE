@@ -133,12 +133,14 @@ public abstract class QuaSSEProcess extends Distribution {
      * that will not contribute to... (fill this out later)
      */
     protected void prepareDimensionsInPlace() {
-        // left flank bins
-        nLeftNRightFlanksLo[0] = (int)(Math.ceil(-(changeInXNormalMean - flankWidthScaler * changeInXNormalSd) / dXbin));
+        // The backward kernel has mean m = −drift·Δt and support [m − wσ, m + wσ]. These
+        // expressions cover its negative and positive extents, which differ when drift is nonzero.
+        nLeftNRightFlanksLo[0] = (int)(Math.ceil(
+                -(changeInXNormalMean - flankWidthScaler * changeInXNormalSd) / dXbin));
         nLeftNRightFlanksHi[0] = hiLoRatio * nLeftNRightFlanksLo[0];
 
-        // right flank bins
-        nLeftNRightFlanksLo[1] = (int)(Math.ceil(-(changeInXNormalMean - flankWidthScaler * changeInXNormalSd) / dXbin));
+        nLeftNRightFlanksLo[1] = (int)(Math.ceil(
+                (changeInXNormalMean + flankWidthScaler * changeInXNormalSd) / dXbin));
         nLeftNRightFlanksHi[1] = hiLoRatio * nLeftNRightFlanksLo[1];
 
         // nXbinsHi = hiLoRatio * nXbinsLo;

@@ -376,6 +376,56 @@ public class QuaSSEDistributionTest {
     }
 
     /*
+     * Positive and negative drift require mirrored padding and backward-time kernel shifts. Zero-drift
+     * tests cannot expose duplicated flank formulas; this is obsolete if padding becomes dynamic.
+     */
+    @Test
+    public void testNonzeroDriftPaddingAndKernelDirection() {
+        RealParameter positiveDrift = new RealParameter(new Double[] { 1.0 });
+        RealParameter negativeDrift = new RealParameter(new Double[] { -1.0 });
+        QuaSSEDistribution positive = new QuaSSEDistribution();
+        positive.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
+                "tc", tc100Rp,
+                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
+                "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
+                "drift", positiveDrift, "diffusion", diffusionRp0001,
+                "q2mLambda", lfn, "q2mMu", cfn,
+                "tree", bifTreeHeight001,
+                "q2d", nfn2Sp,
+                "priorProbAtRootType", rootPriorType);
+        QuaSSEDistribution negative = new QuaSSEDistribution();
+        negative.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
+                "tc", tc100Rp,
+                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
+                "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
+                "drift", negativeDrift, "diffusion", diffusionRp0001,
+                "q2mLambda", lfn, "q2mMu", cfn,
+                "tree", bifTreeHeight001,
+                "q2d", nfn2Sp,
+                "priorProbAtRootType", rootPriorType);
+
+        Assert.assertEquals(5, positive.getNLeftFlanks(true));
+        Assert.assertEquals(3, positive.getNRightFlanks(true));
+        Assert.assertEquals(3, negative.getNLeftFlanks(true));
+        Assert.assertEquals(5, negative.getNRightFlanks(true));
+        Assert.assertEquals(20, positive.getNLeftFlanks(false));
+        Assert.assertEquals(12, positive.getNRightFlanks(false));
+        Assert.assertEquals(12, negative.getNLeftFlanks(false));
+        Assert.assertEquals(20, negative.getNRightFlanks(false));
+
+        positive.populatefY(dt001, true, false, false, true, false);
+        negative.populatefY(dt001, true, false, false, true, false);
+        double[] positiveKernel = positive.getfY(true);
+        double[] negativeKernel = negative.getfY(true);
+        for (int i = 0; i < nXbins32Ip.getValue(); i++) {
+            int mirrored = (nXbins32Ip.getValue() - i) % nXbins32Ip.getValue();
+            Assert.assertEquals(positiveKernel[2 * i], negativeKernel[2 * mirrored], 1e-15);
+        }
+        Assert.assertTrue(positiveKernel[2 * 31] > positiveKernel[0]);
+        Assert.assertTrue(negativeKernel[2] > negativeKernel[0]);
+    }
+
+    /*
      * Checks that two species in a 2sp-tree get their D's correctly
      * initialized (using standard QuaSSE initialization, in high resolution).
      * "sp1" and "sp2" are assigned trait values of 0.0 and 0.01, respectively.
