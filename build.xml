@@ -8,6 +8,10 @@
   <property name="javaVersion" value="17"/>
   <property name="beast.dir" location="../beast2"/>
   <property name="beast.jar" location="${beast.dir}/build/dist/BEAST.base.jar"/>
+  <property name="launcher.jar" location="${beast.dir}/build/dist/launcher.jar"/>
+  <property name="junit.jar"
+            location="${beast.dir}/lib/junit/junit-platform-console-standalone-1.8.2.jar"/>
+  <property name="classpath" value=""/>
   <!--*******************************************************************-->
 
   <!-- Directories necessary for all BEAST 2 packages -->
@@ -17,11 +21,24 @@
 
   <!-- Names of temporary build/test directories -->
   <property name="build" location="build"/>
-  <property name="build-lib" location="build-lib"/>
   <property name="build-test" location="build-test"/>
   <property name="test-reports" location="test-reports"/>
   <property name="dist" location="dist"/>
   <property name="pack" location="${dist}/package"/>
+
+  <path id="compile.classpath">
+    <pathelement path="${classpath}"/>
+    <pathelement location="${beast.jar}"/>
+    <fileset dir="${lib}" includes="*.jar"/>
+  </path>
+
+  <path id="test.classpath">
+    <path refid="compile.classpath"/>
+    <pathelement location="${build}"/>
+    <pathelement location="${build-test}"/>
+    <pathelement location="${launcher.jar}"/>
+    <pathelement location="${junit.jar}"/>
+  </path>
 
   <!-- Prepare for compilation -->
   <target name="init">
@@ -51,12 +68,8 @@
   <!-- Compile the active SSE sources without packaging them in a jar. -->
   <target name="compile" depends="init">
     <javac release="${javaVersion}" srcdir="${src}" destdir="${build}" includeantruntime="false"
-           includes="SSE/**/*.java,loggers/**/*.java,operators/**/*.java">
-      <classpath>
-	<pathelement path="${classpath}"/>
-	<pathelement path="${beast.jar}"/>
-	<fileset dir="${lib}" includes="*.jar"/>
-      </classpath>
+           includes="SSE/**/*.java,loggers/**/*.java,operators/**/*.java,mosse/**/*.java">
+      <classpath refid="compile.classpath"/>
     </javac>
   </target>
 
@@ -65,40 +78,64 @@
   <target name="init-test" depends="init">
     <mkdir dir="${build-test}"/>
     <mkdir dir="${test-reports}"/>
+
+    <available file="${launcher.jar}" property="launcherAvailable"/>
+    <fail unless="launcherAvailable">
+      ** BEAST launcher.jar was not found at ${launcher.jar}. **
+      Build the sibling BEAST 2 checkout first, or pass -Dbeast.dir=/path/to/beast2.
+    </fail>
+
+    <available file="${junit.jar}" property="junitAvailable"/>
+    <fail unless="junitAvailable">
+      ** JUnit was not found at ${junit.jar}. **
+      The BEAST 2 checkout must contain its JUnit Platform standalone jar.
+    </fail>
   </target>
 
 
   <!-- Compile unit tests -->
   <target name="compile-test" depends="init-test,compile">
-    <javac target="${targetVersion}" source="${sourceVersion}" srcdir="${test}" destdir="${build-test}" includeantruntime="false">
-      <classpath>
-	<pathelement path="${classpath}"/>
-	<pathelement path="${build}" />
-	<fileset dir="${build-lib}" includes="*.jar"/>
-      </classpath>
+    <javac release="${javaVersion}" srcdir="${src}" destdir="${build-test}" includeantruntime="false"
+           includes="test/**/*.java,drivers/**/*.java,validation/**/*.java">
+      <classpath refid="test.classpath"/>
+    </javac>
+    <javac release="${javaVersion}" srcdir="${test}" destdir="${build-test}" includeantruntime="false">
+      <classpath refid="test.classpath"/>
     </javac>
   </target>
 
 
   <!-- Run unit tests -->
   <target name="test" depends="compile-test">
-    <junit printsummary="yes" maxmemory="1g" failureproperty="testFailed">
-      <classpath>
-	<pathelement path="${classpath}"/>
-	<pathelement path="${build}" />
-	<pathelement path="${build-test}" />
-	<fileset dir="${build-lib}" includes="*.jar"/>
-      </classpath>
-      <batchtest fork="yes" todir="${test-reports}">
-	<fileset dir="${test}">
-	  <include name="**/*Test.java"/>
-	</fileset>
-	<formatter type="plain"/> <!-- usefile="false" -->
-      </batchtest>
-    </junit>
-
-    <fail if="testFailed" status="1" message="Unit test failed."/>
+    <java classname="org.junit.platform.console.ConsoleLauncher" fork="true" failonerror="true"
+          dir="${basedir}" maxmemory="1g">
+      <classpath refid="test.classpath"/>
+      <arg value="--disable-banner"/>
+      <arg value="--details=summary"/>
+      <arg value="--reports-dir=${test-reports}"/>
+      <arg value="--select-package=test"/>
+    </java>
   </target>
+
+  <!-- MoSSE tests require the separately built FFTW JNI library. -->
+  <target name="test-mosse" depends="compile-test">
+    <available file="${basedir}/jni/libtest.so" property="mosseNativeAvailable"/>
+    <fail unless="mosseNativeAvailable">
+      ** MoSSE JNI library was not found at ${basedir}/jni/libtest.so. **
+      Run "make -C jni" before running the MoSSE tests.
+    </fail>
+    <java classname="org.junit.platform.console.ConsoleLauncher" fork="true" failonerror="true"
+          dir="${basedir}" maxmemory="1g">
+      <classpath refid="test.classpath"/>
+      <jvmarg value="-Djava.library.path=${basedir}/jni"/>
+      <arg value="--disable-banner"/>
+      <arg value="--details=summary"/>
+      <arg value="--reports-dir=${test-reports}/mosse"/>
+      <arg value="--select-package=mosse"/>
+    </java>
+  </target>
+
+  <target name="test-all" depends="test-mosse,test"/>
 
 
   <!-- Create BEAST 2 package -->
@@ -156,7 +193,6 @@
   <!-- Revert to pristine state. -->
   <target name="clean">
     <delete dir="${build}" />
-    <delete dir="${build-lib}" />
     <delete dir="${dist}" />
     <delete dir="${build-test}" />
     <delete dir="${test-reports}" />
