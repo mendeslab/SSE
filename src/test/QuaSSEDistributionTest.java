@@ -1381,6 +1381,52 @@ public class QuaSSEDistributionTest {
     }
 
     /*
+     * The full likelihood must support trait-dependent extinction, beyond merely populating its
+     * rate arrays. The reference comes from validation/r_scripts/QuaSSENonconstantMuReference.R.
+     */
+    @Test
+    public void testTraitDependentExtinctionLikelihoodAgainstDiversitree() {
+        Tree tree = new TreeParser("(sp1:0.1,sp2:0.1);", false, false, true, 0);
+
+        RealParameter traits = new RealParameter();
+        traits.initByName("value", Arrays.asList(0.0, 0.1), "keys", "sp1 sp2");
+
+        ConstantLinkFn speciation = new ConstantLinkFn();
+        speciation.initByName("yV", new RealParameter(new Double[] { 0.15 }));
+
+        LogisticFunction extinction = new LogisticFunction();
+        extinction.initByName(
+                "curveYBaseValue", new RealParameter(new Double[] { 0.01 }),
+                "curveMaxY", new RealParameter(new Double[] { 0.08 }),
+                "sigmoidMidpoint", new RealParameter(new Double[] { 0.05 }),
+                "logisticGrowthRate", new RealParameter(new Double[] { 20.0 }));
+
+        NormalCenteredAtObservedLinkFn tipLink = new NormalCenteredAtObservedLinkFn();
+        tipLink.initByName("quTraits", traits,
+                "sdNormalQuTrValue", new RealParameter(new Double[] { 0.05 }));
+
+        QuaSSEDistribution distribution = new QuaSSEDistribution();
+        distribution.initByName(
+                "dtMax", new RealParameter(new Double[] { 0.005 }),
+                "dynDt", new BooleanParameter(new Boolean[] { true }),
+                "tc", new RealParameter(new Double[] { 0.005 }),
+                "nX", new IntegerParameter(new Integer[] { 128 }),
+                "dX", new RealParameter(new Double[] { 0.01 }),
+                "xMid", new RealParameter(new Double[] { 0.0 }),
+                "flankWidthScaler", new RealParameter(new Double[] { 10.0 }),
+                "hiLoRatio", new IntegerParameter(new Integer[] { 4 }),
+                "drift", new RealParameter(new Double[] { 0.0 }),
+                "diffusion", new RealParameter(new Double[] { 0.001 }),
+                "q2mLambda", speciation,
+                "q2mMu", extinction,
+                "tree", tree,
+                "q2d", tipLink,
+                "priorProbAtRootType", "Observed");
+
+        Assert.assertEquals(-6.433266509330742, distribution.calculateLogP(), 1e-9);
+    }
+
+    /*
      * A full likelihood call must depend only on current inputs, not arrays mutated by an earlier
      * traversal. This becomes redundant if QuaSSE adopts independently stored node partials.
      */
