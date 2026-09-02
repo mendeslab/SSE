@@ -1,7 +1,7 @@
 package mosse;
 
-import beast.core.Description;
-import beast.evolution.likelihood.BeerLikelihoodCore;
+import beast.base.core.Description;
+import beast.base.evolution.likelihood.BeerLikelihoodCore;
 
 
 /**

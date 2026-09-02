@@ -1,12 +1,12 @@
 package mosse;
 
-import beast.core.Description;
-import beast.core.Input;
-import beast.core.State;
-import beast.core.parameter.IntegerParameter;
-import beast.core.parameter.RealParameter;
-import beast.evolution.tree.Tree;
-import beast.evolution.tree.TreeDistribution;
+import beast.base.core.Description;
+import beast.base.core.Input;
+import beast.base.inference.State;
+import beast.base.inference.parameter.IntegerParameter;
+import beast.base.inference.parameter.RealParameter;
+import beast.base.evolution.tree.Tree;
+import beast.base.evolution.tree.TreeDistribution;
 
 import java.util.Arrays;
 import java.util.List;

@@ -1,17 +1,17 @@
 package mosse;
 
-import beast.core.Description;
-import beast.core.Distribution;
-import beast.core.Input;
-import beast.core.parameter.IntegerParameter;
-import beast.core.parameter.RealParameter;
-import beast.core.util.Log;
-import beast.evolution.alignment.Alignment;
-import beast.evolution.likelihood.TreeLikelihood;
-import beast.evolution.sitemodel.SiteModel;
-import beast.evolution.tree.Node;
-import beast.evolution.tree.TraitSet;
-import beast.evolution.tree.Tree;
+import beast.base.core.Description;
+import beast.base.inference.Distribution;
+import beast.base.core.Input;
+import beast.base.inference.parameter.IntegerParameter;
+import beast.base.inference.parameter.RealParameter;
+import beast.base.core.Log;
+import beast.base.evolution.alignment.Alignment;
+import beast.base.evolution.likelihood.TreeLikelihood;
+import beast.base.evolution.sitemodel.SiteModel;
+import beast.base.evolution.tree.Node;
+import beast.base.evolution.tree.TraitSet;
+import beast.base.evolution.tree.Tree;
 import java.lang.UnsupportedOperationException;
 
 import java.util.ArrayList;
