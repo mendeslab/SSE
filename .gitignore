@@ -2,6 +2,8 @@
 .project
 .classpath
 *.class
+jni/*.o
+jni/*.so
 .idea/*
 *.iml
 out/*
