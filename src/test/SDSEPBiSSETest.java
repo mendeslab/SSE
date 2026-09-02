@@ -10,10 +10,10 @@ import SSE.TraitStash;
 
 import java.util.Arrays;
 import java.util.List;
-import beast.core.parameter.RealParameter;
-import beast.evolution.alignment.Taxon;
-import beast.evolution.alignment.TaxonSet;
-import beast.util.TreeParser;
+import beast.base.inference.parameter.RealParameter;
+import beast.base.evolution.alignment.Taxon;
+import beast.base.evolution.alignment.TaxonSet;
+import beast.base.evolution.tree.TreeParser;
 
 public class SDSEPBiSSETest {
 	final static double EPSILON1 = 1e-4;
