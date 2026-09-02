@@ -413,6 +413,57 @@ public class PropagatesQuaSSETest {
     }
 
     /*
+     * Both retained FFT paths must implement general circular convolution, including kernels with
+     * imaginary spectra. The older symmetric-kernel checks cannot detect loss of the imaginary part.
+     */
+    @Test
+    public void testConvolveAsymmetricKernel() {
+        int size = 8;
+        double[] data = { 1.0, 2.0, 0.0, 1.0, 3.0, 0.0, 2.0, 4.0 };
+        double[] kernel = { 0.0, 0.25, 0.5, 0.0, 0.0, 0.0, 0.0, 0.25 };
+        double[] expected = new double[size];
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                expected[i] += data[j] * kernel[(i - j + size) % size];
+            }
+        }
+
+        double[][] jTransformsData = new double[1][2 * size];
+        double[] jTransformsKernel = new double[2 * size];
+        System.arraycopy(data, 0, jTransformsData[0], 0, size);
+        System.arraycopy(kernel, 0, jTransformsKernel, 0, size);
+        DoubleFFT_1D jTransformsFft = new DoubleFFT_1D(size);
+        jTransformsFft.realForwardFull(jTransformsKernel);
+        SSEUtils.convolveInPlace(jTransformsData, jTransformsKernel, 1, 0, jTransformsFft);
+
+        double[] jTransformsResult = new double[size];
+        for (int i = 0; i < size; i++) {
+            jTransformsResult[i] = jTransformsData[0][2 * i] / size;
+        }
+        assertArrayEquals(expected, jTransformsResult, 1e-12);
+
+        int[] dimensions = { size };
+        JavaFftService javaFft = new JavaFftService();
+        double[][] javaFftData = new double[1][2 * size];
+        double[][] javaFftBuffer = new double[1][2 * size];
+        double[] javaFftKernel = new double[2 * size];
+        double[] javaFftKernelSpectrum = new double[2 * size];
+        for (int i = 0; i < size; i++) {
+            javaFftData[0][2 * i] = data[i];
+            javaFftKernel[2 * i] = kernel[i];
+        }
+        javaFft.fft(dimensions, javaFftKernel, javaFftKernelSpectrum);
+        SSEUtils.convolveInPlaceSSTJavaFftService(
+                javaFftData, javaFftBuffer, javaFftKernelSpectrum, 1, 0, dimensions, javaFft);
+
+        double[] javaFftResult = new double[size];
+        for (int i = 0; i < size; i++) {
+            javaFftResult[i] = javaFftData[0][2 * i];
+        }
+        assertArrayEquals(expected, javaFftResult, 1e-12);
+    }
+
+    /*
      * Test for propagating in x (quantitative trait value)
      *
      * Prepares normal kernel (fY), FFTs it, then calls convolve function.

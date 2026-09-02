@@ -418,8 +418,12 @@ public class SSEUtils {
             // System.out.println("After FFT scratchAtNode[" + ithDim + "] = " + Arrays.toString(scratchAtNode[ithDim]));
 
             for (int i = 0; i < fY.length; i += 2) {
-                esDsAtNode[ithDim][i] *= fY[i]; // real part
-                esDsAtNode[ithDim][i + 1] *= fY[i]; // complex part
+                // For (a + bi)(c + di), preserve a and b because the products overwrite
+                // the input spectrum.
+                double dataReal = esDsAtNode[ithDim][i];
+                double dataImag = esDsAtNode[ithDim][i + 1];
+                esDsAtNode[ithDim][i] = dataReal * fY[i] - dataImag * fY[i + 1];
+                esDsAtNode[ithDim][i + 1] = dataReal * fY[i + 1] + dataImag * fY[i];
             }
 
             // uncomment for testIntegrateOneBranchHiResOutsideClassJustX
@@ -488,8 +492,12 @@ public class SSEUtils {
 
             // convolving
             for (int i=0; i < fftFY.length; i += 2) {
-                fftEsDsAtNode[ithDim][i] *= fftFY[i]; // real part
-                fftEsDsAtNode[ithDim][i + 1] *= fftFY[i]; // complex part
+                // For (a + bi)(c + di), preserve a and b because the products overwrite
+                // the input spectrum.
+                double dataReal = fftEsDsAtNode[ithDim][i];
+                double dataImag = fftEsDsAtNode[ithDim][i + 1];
+                fftEsDsAtNode[ithDim][i] = dataReal * fftFY[i] - dataImag * fftFY[i + 1];
+                fftEsDsAtNode[ithDim][i + 1] = dataReal * fftFY[i + 1] + dataImag * fftFY[i];
             }
 
             // ifft-ing
