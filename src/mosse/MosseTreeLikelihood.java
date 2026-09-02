@@ -192,7 +192,8 @@ public class MosseTreeLikelihood extends TreeLikelihood {
         double deltaT = 0.001;
         double rate = 1.0;
         Node node = new Node();
-        int numStates = substitutionModel.getStateCount();
+        // BEAST 2.7 substitution models need not expose their state count; the alignment defines the matrix size.
+        int numStates = dataInput.get().getMaxStateCount();
         double[] transitionMatrix = new double[numStates * numStates];
         substitutionModel.getTransitionProbabilities(node, 0, deltaT, rate, transitionMatrix);
         double[] vars = new double[1024];
