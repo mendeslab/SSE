@@ -16,8 +16,10 @@ import beast.base.evolution.tree.TreeParser;
 import org.apache.commons.lang3.ArrayUtils;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Assume;
 import org.junit.Test;
 
+import java.io.File;
 import java.util.*;
 
 public class SDSEPSampleCLaSSECredibleSetLargeTest {
@@ -274,6 +276,8 @@ public class SDSEPSampleCLaSSECredibleSetLargeTest {
 	@Test
 	public void test() throws Exception {
 	    String baseTestName = "data/large/large";
+		Assume.assumeTrue("External large CLaSSE validation data are not present",
+				new File(baseTestName + "1.tree").isFile());
 	    int numTrees = 100;
 		double credibleThreshold = 0.7;
 

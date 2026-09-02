@@ -20,9 +20,11 @@ import beast.base.evolution.tree.TreeParser;
 import org.apache.commons.lang3.ArrayUtils;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Assume;
 import org.junit.Test;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.lang.reflect.Array;
 import java.util.*;
@@ -199,6 +201,8 @@ public class SDSEPSampleCLaSSECredibleSetTest {
 	@Test
 	public void test() throws Exception {
 	    String baseTestName = "data/test/test"; // dir + exp name
+		Assume.assumeTrue("External CLaSSE validation data are not present",
+				new File(baseTestName + "1.tree").isFile());
 	    int numTrees = 10;
 		double credibleThreshold = 0.7;
 
