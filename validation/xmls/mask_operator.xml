@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<beast namespace="beast.core:beast.evolution.alignment:beast.core.util:beast.evolution.nuc:beast.evolution.operators:beast.evolution.sitemodel:beast.evolution.substitutionmodel:beast.evolution.likelihood" required="BEAST v2.5.0" version="2.5">
+<beast namespace="beast.pkgmgmt:beast.base.core:beast.base.inference:beast.base.inference.parameter:beast.base.inference.util:beast.base.inference.distribution:beast.base.evolution:beast.base.evolution.alignment:beast.base.evolution.tree:beast.base.evolution.operator" required="" version="2.7">
 
   <run id="mcmc" spec="MCMC" chainLength="1000000">
     <state id="state" storeEvery="1">
@@ -7,27 +7,27 @@
       <stateNode idref="CIDMask"/>
     </state>
 
-    <distribution id="posterior" spec="util.CompoundDistribution">   
+    <distribution id="posterior" spec="CompoundDistribution">   
       
       <!-- START prior -->
-      <distribution id="prior" spec="util.CompoundDistribution">
-        <distribution id="DummyPrior" spec="beast.math.distributions.Prior" x="@StateMask">
-          <distr id="DummyPriorStateMask" spec="beast.math.distributions.Uniform" lower="0" upper="2">
+      <distribution id="prior" spec="CompoundDistribution">
+        <distribution id="DummyPrior" spec="Prior" x="@StateMask">
+          <distr id="DummyPriorStateMask" spec="Uniform" lower="0" upper="2">
           </distr>
         </distribution>
         
-        <distribution id="DummyPrior2" spec="beast.math.distributions.Prior" x="@CIDMask">
-          <distr id="DummyPriorCIDMask" spec="beast.math.distributions.Uniform" lower="0" upper="1">
+        <distribution id="DummyPrior2" spec="Prior" x="@CIDMask">
+          <distr id="DummyPriorCIDMask" spec="Uniform" lower="0" upper="1">
           </distr>
         </distribution>
       </distribution>
       <!-- END prior -->
       
       <!-- START likelihood -->
-      <distribution id="likelihood" spec="util.CompoundDistribution">
+      <distribution id="likelihood" spec="CompoundDistribution">
 	    <distribution id="MaskOperatorDist" spec="SSE.MaskOperatorDist">        
-	  	  <stateMask id="StateMask" dimension="3" spec="parameter.IntegerParameter">0 0 0</stateMask>
-	  	  <cidMask id="CIDMask" dimension="1" spec="parameter.IntegerParameter">0</cidMask>
+	  	  <stateMask id="StateMask" dimension="3" spec="IntegerParameter">0 0 0</stateMask>
+	  	  <cidMask id="CIDMask" dimension="1" spec="IntegerParameter">0</cidMask>
         </distribution>
       </distribution>
       <!-- END likelihood -->
