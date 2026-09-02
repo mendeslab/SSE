@@ -9,8 +9,8 @@ import org.apache.commons.math3.ode.nonstiff.DormandPrince853Integrator;
 import SSE.InstantaneousRateMatrix;
 import SSE.SSEODE;
 import SSE.TraitStash;
-import beast.evolution.alignment.Taxon;
-import beast.evolution.alignment.TaxonSet;
+import beast.base.evolution.alignment.Taxon;
+import beast.base.evolution.alignment.TaxonSet;
 
 public class SSEODETestDriver {
 

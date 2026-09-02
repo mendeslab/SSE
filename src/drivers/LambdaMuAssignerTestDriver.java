@@ -3,7 +3,7 @@ package drivers;
 import java.util.Arrays;
 
 import SSE.LambdaMuAssigner;
-import beast.core.parameter.RealParameter;
+import beast.base.inference.parameter.RealParameter;
 
 public class LambdaMuAssignerTestDriver {
 

@@ -2,8 +2,8 @@ package drivers;
 
 import java.util.Arrays;
 
-import beast.core.State;
-import beast.core.parameter.IntegerParameter;
+import beast.base.inference.State;
+import beast.base.inference.parameter.IntegerParameter;
 import operators.StateMaskOperator;
 
 public class MaskOperatorTestDriver {

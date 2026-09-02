@@ -7,7 +7,7 @@ import java.util.List;
 import SSE.CladoTriplet;
 import SSE.CladogeneticSpeciationRateStash;
 import SSE.CladoTriplet.speciationType;
-import beast.core.parameter.RealParameter;
+import beast.base.inference.parameter.RealParameter;
 
 public class CladogeneticSpeciationRateStashTestDriver {
 
