@@ -8,6 +8,14 @@ jni/*.so
 *.iml
 out/*
 *.state
+/build/
+/build-test/
+/dist/
+/test-reports/
+/beast_*.csv
+/test2-*.csv
+/beast.log
+/state.backup.xml
 
 plots/*
 data/*
