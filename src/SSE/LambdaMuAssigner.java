@@ -62,15 +62,15 @@ public class LambdaMuAssigner extends CalculationNode {
 		if (cladoStashInput.get() == null) {
 			numberOfDistinctLambdas = nDistinctLambdasInput.get();
 			lambdasContent = lambdaInput.get().getValues();
+			storedLambdasContent = new Double[lambdasContent.length];
+			storedLambdaAssignments = new int[lambdaAssignments.length];
 		}
 		
 		numberOfDistinctMus = nDistinctMusInput.get();
 		musContent = muInput.get().getValues();
 		
 		// mcmc
-		storedLambdasContent = new Double[lambdasContent.length];
 		storedMusContent = new Double[musContent.length];
-		storedLambdaAssignments = new int[lambdaAssignments.length];
 		storedMuAssignments = new int[muAssignments.length];
 		
 		populateAssigner(totalNumberOfStates, numberOfDistinctLambdas, numberOfDistinctMus, lambdasContent, musContent, lambdaAssignments, muAssignments);
@@ -256,9 +256,12 @@ public class LambdaMuAssigner extends CalculationNode {
 
 	@Override
 	protected void store() {
-		System.arraycopy(lambdasContent, 0, storedLambdasContent, 0, lambdasContent.length);
+		// Cladogenetic models keep speciation rates in their stash, so this assigner has no lambda arrays.
+		if (cladoStashInput.get() == null) {
+			System.arraycopy(lambdasContent, 0, storedLambdasContent, 0, lambdasContent.length);
+			System.arraycopy(lambdaAssignments, 0, storedLambdaAssignments, 0, lambdaAssignments.length);
+		}
 		System.arraycopy(musContent, 0, storedMusContent, 0, musContent.length);
-		System.arraycopy(lambdaAssignments, 0, storedLambdaAssignments, 0, lambdaAssignments.length);
 		System.arraycopy(muAssignments, 0, storedMuAssignments, 0, muAssignments.length);
 		storedTotalNumberOfStates = totalNumberOfStates;
 		storedNumberOfDistinctLambdas = numberOfDistinctLambdas;
