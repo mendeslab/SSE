@@ -1381,6 +1381,48 @@ public class QuaSSEDistributionTest {
     }
 
     /*
+     * A full likelihood call must depend only on current inputs, not arrays mutated by an earlier
+     * traversal. This becomes redundant if QuaSSE adopts independently stored node partials.
+     */
+    @Test
+    public void testRepeatedLikelihoodCalculation() {
+        double first = q32ThreeSpTreeDt0005.calculateLogP();
+        double second = q32ThreeSpTreeDt0005.calculateLogP();
+
+        Assert.assertEquals(first, second, 1e-12);
+    }
+
+    /*
+     * Revisiting a parameter value must reproduce its likelihood after an intervening proposal.
+     * Ordinary one-shot likelihood checks do not cover proposal-history contamination.
+     */
+    @Test
+    public void testLikelihoodParameterRoundTrip() {
+        RealParameter deathRate = new RealParameter(new Double[] { 0.03 });
+        ConstantLinkFn deathLink = new ConstantLinkFn();
+        deathLink.initByName("yV", deathRate);
+        QuaSSEDistribution distribution = new QuaSSEDistribution();
+        distribution.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
+                "tc", tc0005Rp,
+                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
+                "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
+                "drift", driftRp, "diffusion", diffusionRp0001,
+                "q2mLambda", lfn, "q2mMu", deathLink,
+                "tree", threeSpTreeHeight002,
+                "q2d", nfn3Sp,
+                "priorProbAtRootType", rootPriorType);
+
+        double initial = distribution.calculateLogP();
+        deathRate.setValue(0.06);
+        double changed = distribution.calculateLogP();
+        deathRate.setValue(0.03);
+        double restored = distribution.calculateLogP();
+
+        Assert.assertNotEquals(initial, changed, 1e-8);
+        Assert.assertEquals(initial, restored, 1e-12);
+    }
+
+    /*
      * Checks log-likelihood and other internal quantities
      * for tree with 15 species, with 1024 quantitative trait
      * bins.

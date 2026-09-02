@@ -683,6 +683,18 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         // refreshing qu trait parameters
         drift = driftInput.get().getValue();
         diffusion = diffusionInput.get().getValue();
+
+        // Pruning mutates every node partial in place, so a full calculation must rebuild them from tips.
+        Arrays.fill(logNormalizationFactors, 0.0);
+        for (int nodeIdx = 0; nodeIdx < esDsLo.length; nodeIdx++) {
+            for (int dimension = 0; dimension < nDimensions; dimension++) {
+                Arrays.fill(esDsLo[nodeIdx][dimension], 0.0);
+                Arrays.fill(esDsHi[nodeIdx][dimension], 0.0);
+            }
+        }
+        // Refresh q2d's cached inputs; the forced call then repopulates arrays that were just cleared.
+        q2d.refreshParams();
+        populateTipsEsDs(nDimensions, nXbinsHi, true, false);
         
         boolean forceRecalcKernel = false;
         if (driftInput.get().somethingIsDirty() || diffusionInput.get().somethingIsDirty())
