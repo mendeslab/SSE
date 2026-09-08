@@ -114,7 +114,10 @@ public abstract class QuaSSEProcess extends Distribution {
         changeInXNormalMean = drift * -dtMax;
         changeInXNormalSd = Math.sqrt(diffusion * dtMax);
 
-        prepareDimensionsInPlace(); // in parent class
+        int[] padding = calculatePadding(drift, diffusion);
+        if (padding == null)
+            throw new IllegalArgumentException("Invalid QuaSSE drift/diffusion or insufficient grid for kernel support.");
+        prepareDimensionsInPlace(padding); // in parent class
         prepareXRulers(); // in parent class
 
         // getting indices for transferring high- to low-res E's and D's during pruning
@@ -145,14 +148,9 @@ public abstract class QuaSSEProcess extends Distribution {
         // populatefY(dtMax, true, false, true, false); // force populate fY, and do FFT
     }
 
-    /*
-     * Set up the number of left and right discrete bins at both low and high resolution
-     * that will not contribute to... (fill this out later)
-     */
-    protected void prepareDimensionsInPlace() {
-        int[] padding = calculatePadding(drift, diffusion);
-        if (padding == null)
-            throw new IllegalArgumentException("Invalid QuaSSE drift/diffusion or insufficient grid for kernel support.");
+    // Apply caller-validated coarse padding to both resolutions and update their useful bin counts.
+    // Validation stays with the caller so invalid proposals cannot partially modify the live grid.
+    protected void prepareDimensionsInPlace(int[] padding) {
         nLeftNRightFlanksLo[0] = padding[0];
         nLeftNRightFlanksHi[0] = hiLoRatio * nLeftNRightFlanksLo[0];
 

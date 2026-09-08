@@ -748,7 +748,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         drift = currentDrift;
         diffusion = currentDiffusion;
         if (!Arrays.equals(padding, nLeftNRightFlanksLo)) {
-            prepareDimensionsInPlace();
+            prepareDimensionsInPlace(padding);
             prepareXRulers();
             hiLoIdxs4Transfer = new int[nUsefulXbinsLo];
             populateIndicesHiLo(hiLoIdxs4Transfer, hiLoRatio, nUsefulXbinsLo, false);
@@ -757,7 +757,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             deathRatesLo = new double[nUsefulXbinsLo];
             deathRatesHi = new double[nUsefulXbinsHi];
             priorProbsAtRoot = null;
-            populateMacroevolParams(true);
         }
         return true;
     }
