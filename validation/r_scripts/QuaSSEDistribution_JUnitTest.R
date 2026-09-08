@@ -1,4 +1,7 @@
 ### author: Fabio K. Mendes
+## Historical inline likelihood output below predates the root-conditioning correction.
+## Conditioned log likelihoods increase by -2*log(root-grid dx); pre-root arrays are unchanged.
+## Use the isolated corrected package documented in ../QuaSSEReference.md for current references.
 ##
 ## This R script gives us the expected values for JUnit tests
 ## inside QuaSSEDistributionTest.java

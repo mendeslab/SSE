@@ -1,7 +1,7 @@
 ## Generate the diversitree reference value used by
 ## QuaSSEDistributionTest.testTraitDependentExtinctionLikelihoodAgainstDiversitree.
 ## Nonzero-drift references require the locally corrected diversitree, not the ordinary installation.
-## Expected source: ../diversitree, commit 5af1bf7bef1742512f3bc84beaf0e6115fc08e42, version 0.10-1.
+## Expected source: ../diversitree, commit 6e991378c226e4a3b283236f15c78fe51496a2a4, version 0.10-1.
 ## See validation/QuaSSEReference.md for the isolated build and exact invocation.
 
 args <- commandArgs(trailingOnly=TRUE)
@@ -10,6 +10,19 @@ if (length(args) != 1L)
 reference.library <- normalizePath(args[1], mustWork=TRUE)
 .libPaths(c(reference.library, .libPaths()))
 library(diversitree, lib.loc=reference.library)
+
+## A constant birth rate with no extinction gives conditioning factor lambda, independent of dx.
+## Cross-backend comparisons miss their shared historical dx^2 error; keep this until upstream fixes it.
+root.tree <- ape::read.tree(text="(sp1:0.1,sp2:0.1);")
+for (dx in c(.01, .005)) {
+  root.likelihood <- make.quasse(root.tree, c(sp1=0, sp2=.1), .05, constant.x, constant.x,
+                                list(nx=as.integer(1.28/dx), dx=dx, xmid=.05, tc=.01,
+                                     dt.max=.001, r=4L, w=5, method="fftC"))
+  p <- c(.15, 0, 0, .01)
+  difference <- root.likelihood(p) - root.likelihood(p, condition.surv=FALSE)
+  if (!is.finite(difference) || abs(difference + log(.15)) > 1e-10)
+    stop("Reference preflight: root conditioning has incorrect grid-spacing normalization.")
+}
 
 ## Sum input[i-offset] for every circular kernel offset, independently of either FFT backend.
 ## Entry j represents offset j-1 modulo n; wrapping here fixes the convolution orientation.
@@ -115,7 +128,7 @@ cat("constant mu(0) log likelihood:", format(log.likelihood.constant.mu, digits=
 ## This guards against legitimising a shared boundary artefact by comparing only Java with one backend.
 cases <- rbind(c(0, .001), c(0, .004), c(-.1, .001), c(.1, .001), c(-1, .001), c(1, .001))
 cat("reference library:", find.package("diversitree"), "\n")
-cat("expected reference source commit: 5af1bf7bef1742512f3bc84beaf0e6115fc08e42\n")
+cat("expected reference source commit: 6e991378c226e4a3b283236f15c78fe51496a2a4\n")
 cat("reference preflight: passed; installed source revision is not verified\n")
 cat("drift diffusion left right xLoMin xHiMin logP\n")
 for (i in seq_len(nrow(cases))) {

@@ -1266,7 +1266,36 @@ public class QuaSSEDistributionTest {
         double sumLogNormalizationFactors = -0.384716957244803;
         double logLik = q32Dt0005.getLogPFromRelevantObjects(esDs, sumLogNormalizationFactors, lambda, q32Dt001.getdXbin(), jtransforms);
 
-        Assert.assertEquals(-6.389642, logLik, 1e-6); // R prints to this decimal precision...
+        Assert.assertEquals(2.820698371976182, logLik, 1e-6); // Corrected R reference; original precision retained.
+    }
+
+    // Analytical root integrals detect spacing errors shared with diversitree references.
+    // Both layouts need this check while root conditioning is implemented as grid quadrature.
+    @Test
+    public void testRootConditioningQuadrature() {
+        for (boolean jtransforms : new boolean[] { false, true }) {
+            for (int n : new int[] { 4, 8, 16 }) {
+                double dx = 1.0 / n;
+                for (boolean varying : new boolean[] { false, true }) {
+                    // Fresh D arrays are required because root conditioning modifies them in place.
+                    double[][] esDs = new double[2][2*n];
+                    double[] lambda = new double[n];
+                    for (int i = 0; i < n; ++i) {
+                        int index = jtransforms ? i : 2*i;
+                        esDs[1][index] = 2.0;
+                        esDs[0][index] = varying && i % 2 == 1 ? .5 : 0.0;
+                        lambda[i] = varying ? (i % 2 == 0 ? .2 : .6) : .15;
+                    }
+                    q32Dt0005.initializePriorProbAtRoot(n);
+                    q32Dt0005.populatePriorProbAtRoot(esDs[1], dx, n, n, "Observed", jtransforms);
+                    // D=2 implies p=1 over a unit interval. For varying rates, the conditioning
+                    // integral is (.2*1^2 + .6*.5^2)/2=.175; the restored numerator is 2*3=6.
+                    double expected = Math.log(6.0 / (varying ? .175 : .15));
+                    Assert.assertEquals(expected, q32Dt0005.getLogPFromRelevantObjects(
+                            esDs, Math.log(3), lambda, dx, jtransforms), 1e-12);
+                }
+            }
+        }
     }
 
     /*
@@ -1315,7 +1344,7 @@ public class QuaSSEDistributionTest {
         Assert.assertArrayEquals(expectedHiLoIdxs4Transfer, hiLoIdxs4Transfer);
         Assert.assertArrayEquals(expectedDsHiAtNodeInitialSp1, Arrays.copyOfRange(esDsHiAtNodeInitial0[1], 0, 256), 1E-13);
         Assert.assertArrayEquals(expectedDsHiAtNodeInitialSp2, Arrays.copyOfRange(esDsHiAtNodeInitial1[1], 0, 256), 1E-13);
-        Assert.assertEquals( -6.389642, logLik, 1e-6);
+        Assert.assertEquals(2.820698371976182, logLik, 1e-6);
     }
 
     /*
@@ -1367,7 +1396,7 @@ public class QuaSSEDistributionTest {
         Assert.assertArrayEquals(expectedHiLoIdxs4Transfer, hiLoIdxs4Transfer);
         Assert.assertArrayEquals(expectedDsHiAtNodeInitialSp1, Arrays.copyOfRange(esDsHiAtNodeInitial0[1], 0, 256), 1E-13);
         Assert.assertArrayEquals(expectedDsHiAtNodeInitialSp2, Arrays.copyOfRange(esDsHiAtNodeInitial1[1], 0, 256), 1E-13);
-        Assert.assertEquals(-6.394235, logLik, 1e-6);
+        Assert.assertEquals(2.816105371976182, logLik, 1e-6);
     }
 
     /*
@@ -1379,7 +1408,7 @@ public class QuaSSEDistributionTest {
     public void testPruneThreeSpTree32Bins() {
         double logLik = q32ThreeSpTreeDt0005.calculateLogP();
 
-        Assert.assertEquals( -9.085542, logLik, 1e-6);
+        Assert.assertEquals(0.124798371976182, logLik, 1e-6);
     }
 
     /*
@@ -1392,12 +1421,12 @@ public class QuaSSEDistributionTest {
         QuaSSEDistribution distribution = smallDistribution(0.0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
         // drift, diffusion, left, right, xLo minimum, log likelihood (Observed prior).
         double[][] references = {
-                {0, .001, 3, 3, -.60, -6.4332665093307444},
-                {0, .004, 5, 5, -.58, -6.4393468458465106},
-                {-.1, .001, 3, 3, -.60, -6.4332697105077781},
-                {.1, .001, 3, 3, -.60, -6.4332640462738668},
-                {-1, .001, 2, 3, -.61, -6.4476487030504739},
-                {1, .001, 3, 2, -.61, -6.4472248594468686}
+                {0, .001, 3, 3, -.60, 2.7770738626454392},
+                {0, .004, 5, 5, -.58, 2.7709935261296716},
+                {-.1, .001, 3, 3, -.60, 2.7770706614684051},
+                {.1, .001, 3, 3, -.60, 2.7770763257023154},
+                {-1, .001, 2, 3, -.61, 2.7626916689257088},
+                {1, .001, 3, 2, -.61, 2.7631155125293141}
         };
         for (double[] reference : references) {
             QuaSSEDistribution fresh = smallDistribution(reference[0], reference[1], .005,
@@ -1575,7 +1604,7 @@ public class QuaSSEDistributionTest {
             Assert.assertSame(ruler, distribution.getX(true));
         }
         distribution.diffusionInput.get().setValue(.001);
-        Assert.assertEquals(-6.433266509330742, distribution.calculateLogP(), 1e-9);
+        Assert.assertEquals(2.7770738626454392, distribution.calculateLogP(), 1e-9);
         distribution.dtMaxInput.get().setValue(.01);
         Assert.assertThrows(IllegalArgumentException.class, distribution::calculateLogP);
     }
@@ -1726,7 +1755,8 @@ public class QuaSSEDistributionTest {
     public void testPruneFifteenSpTree1024Bins() {
         double logLik = q32FifteenSp.calculateLogP();
 
-        Assert.assertEquals( -61.27245, logLik, 1e-5);
+        // Original rounded R reference, corrected by -2*log(dx) with this model's dx=0.01027592.
+        Assert.assertEquals(-61.27245 - 2*Math.log(0.01027592), logLik, 1e-5);
     }
 
     /*

@@ -180,8 +180,10 @@ make.rootfunc.quasse.debug <- function(cache) {
 
             print(paste0("lambda (size=", length(lambda), ") = "))
             print(paste(lambda, collapse=", "))
-            d.root <- d.root /
-                sum(root.p * lambda * (1 - e.root)^2) * dx ## normalizing by this sum here accounts for conditioning for survival, P(tree_exists)
+            ## Root-prior values are densities: multiply the denominator by dx before dividing D.
+            ## This conditions on survival without introducing the historical extra dx^2 factor.
+            p.surv <- sum(root.p * lambda * (1 - e.root)^2) * dx
+            d.root <- d.root / p.surv
             ## e.root is the probability of extinction of a lineage starting at the root
             ## (1 - e.root) is the probability that lineage survives until today
             ## we square it because there are two lineages coming from the root (i.e., the definition of a tree)

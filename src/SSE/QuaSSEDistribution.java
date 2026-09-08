@@ -647,9 +647,12 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             else denomSumForConditioning += (priorProbsAtRoot[i] * birthRates[i] * Math.pow(1 - esAtRoot[j], 2));
         }
 
+        // Root-prior values are densities: the conditioning integral is the sum times dx.
+        // Integrate before dividing D; multiplying D by dx afterwards adds an erroneous dx^2.
+        denomSumForConditioning *= dXAtRightRes;
         for (int i=0, j=0; i<priorProbsAtRoot.length; ++i, j+=2) {
-            if (jtransforms) dsAtRoot[i] = dsAtRoot[i] / denomSumForConditioning * dXAtRightRes;
-            else dsAtRoot[j] = dsAtRoot[j] / denomSumForConditioning * dXAtRightRes;
+            if (jtransforms) dsAtRoot[i] /= denomSumForConditioning;
+            else dsAtRoot[j] /= denomSumForConditioning;
         }
 
         // debugging
