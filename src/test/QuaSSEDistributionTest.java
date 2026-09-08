@@ -1437,6 +1437,32 @@ public class QuaSSEDistributionTest {
         return distribution;
     }
 
+    // Kernel validity is per resolution and representation, not a global dt/dirty hint. Compare
+    // non-forced calls with forced construction through raw/FFT and parameter A-B-A transitions.
+    @Test
+    public void testKernelValidity() {
+        QuaSSEDistribution distribution = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        QuaSSEDistribution fresh = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        for (double[] parameters : new double[][] {{0, .001}, {.1, .001}, {0, .001}, {0, .0011}, {0, .001}}) {
+            distribution.driftInput.get().setValue(parameters[0]);
+            fresh.driftInput.get().setValue(parameters[0]);
+            distribution.diffusionInput.get().setValue(parameters[1]);
+            fresh.diffusionInput.get().setValue(parameters[1]);
+            for (boolean jtransforms : new boolean[] {false, true, false}) {
+                for (boolean doFFT : new boolean[] {false, true, false, true}) {
+                    for (double dt : new double[] {.005, .002, .005}) {
+                        for (boolean low : new boolean[] {true, false, true}) {
+                            distribution.populatefY(dt, false, false, doFFT, low, jtransforms);
+                            fresh.populatefY(dt, true, false, doFFT, low, jtransforms);
+                            Assert.assertArrayEquals(fresh.getfY(low), distribution.getfY(low), 0.0);
+                            Assert.assertArrayEquals(fresh.getfftFY(low), distribution.getfftFY(low), 0.0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // A reused distribution must match a fresh one across padding changes, including equal-size
     // grids with exchanged left/right support. Invalid proposals must not mutate the usable grid.
     @Test

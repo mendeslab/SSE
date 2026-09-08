@@ -696,8 +696,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         populateTipsEsDs(nDimensions, nXbinsHi, true, false);
         
         boolean forceRecalcKernel = false;
-        if (driftInput.get().somethingIsDirty() || diffusionInput.get().somethingIsDirty())
-        	forceRecalcKernel = true;
+        // Kernel keys track actual parameter values, including clean restored values after rejection.
 
         // start recursion for likelihood calculation
         boolean jtransforms = false;

@@ -61,6 +61,13 @@ public abstract class QuaSSEProcess extends Distribution {
     protected double changeInXNormalSd; // (=diversitree's diffusion)
     protected double[] fYLo, fYHi, fftFYLo, fftFYHi;
     protected DoubleFFT_1D fftForEandDLo, fftForEandDHi;
+    // One kernel per resolution (0=coarse, 1=fine). These arrays describe the contents of fY/fftFY,
+    // not the accepted MCMC state; comparing values also handles clean restored parameters.
+    private final boolean[] kernelValid = new boolean[2], kernelHasFFT = new boolean[2];
+    private final boolean[] kernelJTransforms = new boolean[2];
+    private final double[] kernelDt = new double[2], kernelDrift = new double[2];
+    private final double[] kernelDiffusion = new double[2], kernelDx = new double[2];
+    private final int[] kernelLeft = new int[2], kernelRight = new int[2];
     // using SST library
     JavaFftService jffts;
 
@@ -132,6 +139,7 @@ public abstract class QuaSSEProcess extends Distribution {
         nXbinsLoSST = new int[] { nXbinsLo };
         nXbinsHiSST = new int[] { nXbinsHi };
         jffts = new JavaFftService();
+        Arrays.fill(kernelValid, false);
 
         // populatefY(dtMax, true, false, true, true); // force populate fY, and do FFT
         // populatefY(dtMax, true, false, true, false); // force populate fY, and do FFT
@@ -238,56 +246,52 @@ public abstract class QuaSSEProcess extends Distribution {
     /*
      *
      */
-    protected void populatefY(double aDt, boolean forceRecalcKernel, boolean dtChanged, boolean doFFT, boolean lowRes, boolean jtransforms) {
-        // finding out if we need to recalculate fY or not
-        boolean didRefreshNowMustRecalcKernel = false;
-        if (dtChanged || forceRecalcKernel) {
-            changeInXNormalMean = drift * -aDt;
-            didRefreshNowMustRecalcKernel = true;
+    // Reuse only a kernel whose parameters, resolution and representation match this request.
+    protected void populatefY(double aDt, boolean forceRecalcKernel, boolean dtChanged,
+                              boolean doFFT, boolean lowRes, boolean jtransforms) {
+        int resolution = lowRes ? 0 : 1;
+        int size = lowRes ? nXbinsLo : nXbinsHi;
+        int[] padding = lowRes ? nLeftNRightFlanksLo : nLeftNRightFlanksHi;
+        double dx = lowRes ? dXbin : dXbin / hiLoRatio;
+        double currentDrift = driftInput.get().getValue();
+        double currentDiffusion = diffusionInput.get().getValue();
+        if (!Double.isFinite(aDt) || aDt <= 0 || !Double.isFinite(currentDrift)
+                || !Double.isFinite(currentDiffusion) || currentDiffusion <= 0)
+            throw new IllegalArgumentException("A QuaSSE kernel requires finite drift and positive finite dt/diffusion.");
+        // dtChanged is only a caller hint; the actual per-resolution key decides validity.
+        // Require the same raw/FFT request: JTransforms overwrites its raw array with the spectrum.
+        if (!forceRecalcKernel && kernelValid[resolution] && kernelDt[resolution] == aDt
+                && kernelDrift[resolution] == currentDrift && kernelDiffusion[resolution] == currentDiffusion
+                && kernelDx[resolution] == dx && kernelLeft[resolution] == padding[0]
+                && kernelRight[resolution] == padding[1] && kernelJTransforms[resolution] == jtransforms
+                && kernelHasFFT[resolution] == doFFT)
+            return;
+
+        kernelValid[resolution] = false;
+        double[] raw = lowRes ? fYLo : fYHi;
+        double[] spectrum = lowRes ? fftFYLo : fftFYHi;
+        Arrays.fill(raw, 0.0);
+        Arrays.fill(spectrum, 0.0);
+        changeInXNormalMean = -currentDrift * aDt;
+        changeInXNormalSd = Math.sqrt(currentDiffusion * aDt);
+        if (jtransforms) {
+            SSEUtils.makeNormalKernelInPlace(raw, changeInXNormalMean, changeInXNormalSd,
+                    size, padding[0], padding[1], dx);
+            if (doFFT) (lowRes ? fftForEandDLo : fftForEandDHi).realForwardFull(raw);
+        } else {
+            SSEUtils.makeNormalKernelInPlaceSSTJavaFftService(raw, changeInXNormalMean, changeInXNormalSd,
+                    size, padding[0], padding[1], dx);
+            if (doFFT) jffts.fft(lowRes ? nXbinsLoSST : nXbinsHiSST, raw, spectrum);
         }
-        if (dtChanged || forceRecalcKernel) {
-            changeInXNormalSd = Math.sqrt(diffusion * aDt);
-            didRefreshNowMustRecalcKernel = true;
-        }
-
-        if (forceRecalcKernel || didRefreshNowMustRecalcKernel) {
-        	
-        	// System.out.println("changeInXNormalMean = " + changeInXNormalMean);
-        	// System.out.println("changeInXNormalSd = " + changeInXNormalSd);
-        	
-            if (lowRes) {
-                if (jtransforms) {
-                    SSEUtils.makeNormalKernelInPlace(fYLo, changeInXNormalMean, changeInXNormalSd, nXbinsLo, nLeftNRightFlanksLo[0], nLeftNRightFlanksLo[1], dXbin); // normalizes inside already
-                } else {
-                    SSEUtils.makeNormalKernelInPlaceSSTJavaFftService(fYLo, changeInXNormalMean, changeInXNormalSd, nXbinsLo, nLeftNRightFlanksLo[0], nLeftNRightFlanksLo[1], dXbin);
-                }
-
-                // debugging
-                // System.out.println("pre-FFT fYLo = " + Arrays.toString(fYLo));
-
-                // FFTs normal kernel
-                if (jtransforms && doFFT) fftForEandDLo.realForwardFull(fYLo); // with JTransforms
-                else if (doFFT) {
-                    jffts.fft(nXbinsLoSST, fYLo, fftFYLo); // result left in fftFYLo
-                }
-            }
-            else {
-                if (jtransforms) {
-                    SSEUtils.makeNormalKernelInPlace(fYHi, changeInXNormalMean, changeInXNormalSd, nXbinsHi, nLeftNRightFlanksHi[0], nLeftNRightFlanksHi[1], dXbin / hiLoRatio); // normalizes inside already
-                } else {
-                    SSEUtils.makeNormalKernelInPlaceSSTJavaFftService(fYHi, changeInXNormalMean, changeInXNormalSd, nXbinsHi, nLeftNRightFlanksHi[0], nLeftNRightFlanksHi[1], dXbin / hiLoRatio); // normalizes inside already
-                }
-
-                // debugging
-                // System.out.println("pre-FFT fYHi = " + Arrays.toString(fYHi));
-
-                // FFTs normal kernel
-                if (jtransforms && doFFT) fftForEandDHi.realForwardFull(fYHi); // with JTransforms
-                else if (doFFT) {
-                    jffts.fft(nXbinsHiSST, fYHi, fftFYHi); // result left in fftFYHi
-                }
-            }
-        }
+        kernelDt[resolution] = aDt;
+        kernelDrift[resolution] = currentDrift;
+        kernelDiffusion[resolution] = currentDiffusion;
+        kernelDx[resolution] = dx;
+        kernelLeft[resolution] = padding[0];
+        kernelRight[resolution] = padding[1];
+        kernelJTransforms[resolution] = jtransforms;
+        kernelHasFFT[resolution] = doFFT;
+        kernelValid[resolution] = true;
     }
 
     /*
