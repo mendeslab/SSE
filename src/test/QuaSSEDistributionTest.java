@@ -1387,11 +1387,35 @@ public class QuaSSEDistributionTest {
     /*
      * The full likelihood must support trait-dependent extinction, beyond merely populating its
      * rate arrays. The reference comes from validation/r_scripts/QuaSSENonconstantMuReference.R.
+     * Corrected diversitree commit 5af1bf7bef1742512f3bc84beaf0e6115fc08e42; C/R and wider grids agree.
      */
     @Test
     public void testTraitDependentExtinctionLikelihoodAgainstDiversitree() {
         QuaSSEDistribution distribution = smallDistribution(0.0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
-        Assert.assertEquals(-6.433266509330742, distribution.calculateLogP(), 1e-9);
+        // drift, diffusion, left, right, xLo minimum, log likelihood (Observed prior).
+        double[][] references = {
+                {0, .001, 3, 3, -.60, -6.4332665093307444},
+                {0, .004, 5, 5, -.58, -6.4393468458465106},
+                {-.1, .001, 3, 3, -.60, -6.4332697105077781},
+                {.1, .001, 3, 3, -.60, -6.4332640462738668},
+                {-1, .001, 2, 3, -.61, -6.4476487030504739},
+                {1, .001, 3, 2, -.61, -6.4472248594468686}
+        };
+        for (double[] reference : references) {
+            QuaSSEDistribution fresh = smallDistribution(reference[0], reference[1], .005,
+                    "(sp1:0.1,sp2:0.1);", "Observed");
+            distribution.driftInput.get().setValue(reference[0]);
+            distribution.diffusionInput.get().setValue(reference[1]);
+            Assert.assertEquals(reference[5], fresh.calculateLogP(), 1e-9);
+            Assert.assertEquals(reference[5], distribution.calculateLogP(), 1e-9);
+            Assert.assertEquals((int) reference[2], distribution.getNLeftFlanks(true));
+            Assert.assertEquals((int) reference[3], distribution.getNRightFlanks(true));
+            Assert.assertEquals(reference[4], distribution.getXMinLo(), 1e-14);
+            Assert.assertEquals(reference[4] - .0075, distribution.getXMinHi(), 1e-14);
+            int[] transfer = distribution.getHiLoIdxs4Transfer();
+            for (int i = 0; i < transfer.length; i++)
+                Assert.assertEquals(distribution.getX(true)[i], distribution.getX(false)[transfer[i]/2], 1e-13);
+        }
     }
 
     // Build the small reference model with independent inputs, so comparisons cannot share caches.
