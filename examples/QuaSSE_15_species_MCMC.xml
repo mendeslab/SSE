@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beast version="2.7"
+       namespace="beast.base.core:beast.base.inference:beast.base.inference.distribution:beast.base.inference.operator:beast.base.evolution.tree:beast.base.evolution.operator:SSE">
+  <!-- Short execution/timing example, not a converged posterior analysis. See the companion README.
+       Data: diversitree/inst/tests/phy.Rdata; do not regenerate from the historical RNG seed.
+       Starting values are the simulation parameters, not estimates. -->
+  <run id="mcmc" spec="MCMC" chainLength="100">
+    <state id="state" storeEvery="10">
+      <stateNode id="lambda0" spec="parameter.RealParameter" lower="0.0">0.1</stateNode>
+      <stateNode id="lambda1" spec="parameter.RealParameter" lower="0.0">0.2</stateNode>
+      <stateNode id="mu" spec="parameter.RealParameter" lower="0.0">0.03</stateNode>
+      <stateNode id="midpoint" spec="parameter.RealParameter">0.0</stateNode>
+      <stateNode id="steepness" spec="parameter.RealParameter" lower="0.0">2.5</stateNode>
+      <stateNode id="diffusion" spec="parameter.RealParameter" lower="0.0">0.025</stateNode>
+    </state>
+
+    <distribution id="posterior" spec="CompoundDistribution">
+      <distribution id="prior" spec="CompoundDistribution">
+        <distribution id="lambda0Prior" spec="Prior" x="@lambda0">
+          <distr spec="Exponential" mean="0.2"/>
+        </distribution>
+        <distribution id="lambda1Prior" spec="Prior" x="@lambda1">
+          <distr spec="Exponential" mean="0.2"/>
+        </distribution>
+        <distribution id="muPrior" spec="Prior" x="@mu">
+          <distr spec="Exponential" mean="0.05"/>
+        </distribution>
+        <distribution id="midpointPrior" spec="Prior" x="@midpoint">
+          <distr spec="Normal" mean="0.0" sigma="1.0"/>
+        </distribution>
+        <distribution id="steepnessPrior" spec="Prior" x="@steepness">
+          <distr spec="LogNormalDistributionModel" M="0.9162907318741551" S="1.0"
+                 meanInRealSpace="false"/>
+        </distribution>
+        <distribution id="diffusionPrior" spec="Prior" x="@diffusion">
+          <distr spec="Exponential" mean="0.025"/>
+        </distribution>
+      </distribution>
+
+      <!-- QuaSSE supplies the tree/trait likelihood, including survival conditioning.
+           The tree is fixed and deliberately absent from the MCMC state and operators. -->
+      <distribution id="likelihood" spec="QuaSSEDistribution" priorProbAtRootType="Observed"
+                    diffusion="@diffusion">
+        <tree id="tree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false"
+              offset="0" singlechild="false"
+              newick="(sp2:13.773202550247193,(sp1:12.766883843390154,((((sp12:1.170387028082835,sp13:1.170387028082835)nd16:0.98377203253569978,sp9:2.1541590606185328)nd11:5.4514010923658338,((sp5:4.3116453428710377,(sp14:0.89100552792334031,sp15:0.89100552792334031)nd14:3.4206398149476924)nd9:2.5366637762168405,((sp16:0.30118661250958267,sp17:0.30118661250958267)nd12:4.2643836673599331,(sp6:3.950838430033377,sp7:3.950838430033377)nd13:0.61473184983612239)nd10:2.2827388392183647)nd8:0.75725103389649229)nd5:2.5547391408670661,((sp10:2.0594782024944212,sp11:2.0594782024944212)nd15:0.41987890184391496,sp8:2.479357104338332)nd6:7.6809421895130914)nd4:2.6065845495387281)nd3:1.0063187068570474)nd1;"/>
+        <q2mLambda spec="LogisticFunction" curveYBaseValue="@lambda0" curveMaxY="@lambda1"
+                   sigmoidMidpoint="@midpoint" logisticGrowthRate="@steepness"/>
+        <q2mMu spec="ConstantLinkFn" yV="@mu"/>
+        <q2d spec="NormalCenteredAtObservedLinkFn">
+          <quTraits spec="parameter.RealParameter"
+                    keys="sp1 sp2 sp5 sp6 sp7 sp8 sp9 sp10 sp11 sp12 sp13 sp14 sp15 sp16 sp17"
+                    value="-0.053845942474322228 -0.37091895712405348 0.59169194709245065 0.14947512522958339 0.46156790938156161 0.2734568016260141 1.7335895874490215 0.38883347418439501 0.4223362483325323 1.5501178711124703 1.1716968145593605 0.72422970882039839 0.84092251329970213 0.19645522661796372 0.48495091957415187"/>
+          <sdNormalQuTrValue spec="parameter.RealParameter" value="0.005"/>
+        </q2d>
+
+        <!-- Fixed controls match diversitree defaults for these data. Padding can still change
+             with diffusion. dynDt=true subdivides branches; it is not error-adaptive stepping. -->
+        <drift spec="parameter.RealParameter" value="0.0"/>
+        <dtMax spec="parameter.RealParameter" value="0.013773202550247199"/>
+        <dynDt spec="parameter.BooleanParameter" value="true"/>
+        <tc spec="parameter.RealParameter" value="1.3773202550247199"/>
+        <nX spec="parameter.IntegerParameter" value="1024"/>
+        <dX spec="parameter.RealParameter" value="0.010275920627798219"/>
+        <xMid spec="parameter.RealParameter" value="0.68133531516248402"/>
+        <flankWidthScaler spec="parameter.RealParameter" value="5.0"/>
+        <hiLoRatio spec="parameter.IntegerParameter" value="4"/>
+      </distribution>
+    </distribution>
+
+    <!-- Endpoint ordering is unrestricted: positive steepness allows either increasing or
+         decreasing speciation through lambda1 - lambda0. -->
+    <operator id="lambda0Scaler" spec="ScaleOperator" parameter="@lambda0" scaleFactor="0.75" weight="1"/>
+    <operator id="lambda1Scaler" spec="ScaleOperator" parameter="@lambda1" scaleFactor="0.75" weight="1"/>
+    <operator id="muScaler" spec="ScaleOperator" parameter="@mu" scaleFactor="0.75" weight="1"/>
+    <operator id="midpointWalk" spec="RealRandomWalkOperator" parameter="@midpoint" windowSize="0.25" weight="1"/>
+    <operator id="steepnessScaler" spec="ScaleOperator" parameter="@steepness" scaleFactor="0.75" weight="1"/>
+    <operator id="diffusionScaler" spec="ScaleOperator" parameter="@diffusion" scaleFactor="0.75" weight="1"/>
+
+    <logger id="trace" fileName="QuaSSE_15_species.log" logEvery="1" model="@posterior">
+      <log idref="posterior"/>
+      <log idref="likelihood"/>
+      <log idref="prior"/>
+      <log idref="lambda0Prior"/>
+      <log idref="lambda1Prior"/>
+      <log idref="muPrior"/>
+      <log idref="midpointPrior"/>
+      <log idref="steepnessPrior"/>
+      <log idref="diffusionPrior"/>
+      <log idref="lambda0"/>
+      <log idref="lambda1"/>
+      <log idref="mu"/>
+      <log idref="midpoint"/>
+      <log idref="steepness"/>
+      <log idref="diffusion"/>
+    </logger>
+    <logger id="screen" logEvery="10">
+      <log idref="posterior"/>
+      <log idref="likelihood"/>
+      <log idref="prior"/>
+    </logger>
+  </run>
+</beast>

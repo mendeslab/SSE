@@ -51,3 +51,7 @@ Use `beast.pkgmgmt.launcher.BeastLauncher` as the run configuration's main class
 replace the SSE `build` entry with your IDE's compiled output, and append the XML path.
 Set the working directory to your run directory. Let IntelliJ/Eclipse compile SSE for debugging.
 Use dependencies from the configured BEAST installation; sources can be attached in the IDE.
+
+For a short fixed-tree QuaSSE MCMC example, see
+[the 15-species example](examples/QuaSSE_15_species_MCMC.md), including its priors,
+run commands, validation status, and numerical caveats.
