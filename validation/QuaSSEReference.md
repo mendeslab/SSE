@@ -29,9 +29,16 @@ Rscript validation/r_scripts/QuaSSENonconstantMuReference.R build/diversitree-re
 The Git archive command only reads a jj-created commit; all change management remains in jj.
 Building from the archive keeps generated native files out of the source checkout. Installation
 does not replace the ordinary R package. The generator requires an explicit library path and
-prints the loaded package path, version, and the expected source revision above. The revision
-is documented provenance, not automatically inferred from an arbitrary installed package;
-use the archive/build commands to ensure the library actually contains that revision.
+prints the loaded package path, version, and a separately labelled expected source revision.
+Before calculating reference likelihoods, it checks asymmetric/all-timestep padding and compares
+both FFT backends with direct convolution at asymmetric boundaries. These checks reject an ordinary
+uncorrected installation even when its end-to-end likelihood comparisons would pass. The checks use
+the generator's existing dependencies, not the broader R test suite.
+
+Passing the preflight qualifies the checked behavior; it does not verify the installed package's
+exact source revision. Use the archive/build commands to obtain the expected revision. The printed
+commit is documented provenance for the reference build, not a detected property of an arbitrary
+installed package. The preflight preserves the C/R boundary-policy distinction described above.
 
 The generator retains the original zero-drift check and adds diffusion 0.004 and drift ±0.1,
 ±1 (diffusion 0.001). Every case uses constant λ and logistic μ, checks C/R agreement within
