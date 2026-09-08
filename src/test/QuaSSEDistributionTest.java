@@ -1437,6 +1437,68 @@ public class QuaSSEDistributionTest {
         return distribution;
     }
 
+    // Rejecting a proposal leaves unsnapshotted grids and link scalars at proposed values. A later
+    // change to a different parameter must recover clean restored inputs, not merely the logP snapshot.
+    @Test
+    public void testGridRejectionLifecycle() {
+        QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
+        RealParameter drift = distribution.driftInput.get();
+        RealParameter diffusion = distribution.diffusionInput.get();
+        RealParameter lambda = ((ConstantLinkFn) distribution.q2mLambdaInput.get()).yValueInput.get();
+        RealParameter mu = ((LogisticFunction) distribution.q2mMuInput.get()).curveYBaseValueInput.get();
+        NormalCenteredAtObservedLinkFn tip = (NormalCenteredAtObservedLinkFn) distribution.q2dInput.get();
+        RealParameter sd = tip.sdNormalQuTrValueInput.get();
+        RealParameter traits = tip.quTraitsInput.get();
+        Tree tree = distribution.treeInput.get();
+        State state = new State();
+        state.initByName("stateNode", Arrays.asList(drift, diffusion, lambda, mu, sd, traits, tree));
+        state.initialise();
+        CompoundDistribution posterior = new CompoundDistribution();
+        posterior.initByName("distribution", distribution);
+        state.setPosterior(posterior);
+        double accepted = state.robustlyCalcPosterior(posterior);
+        for (double proposedDiffusion : new double[] {.004, .0011, 1e100}) {
+            state.store(1);
+            diffusion.setValue(proposedDiffusion);
+            drift.setValue(1.0);
+            mu.setValue(.02);
+            sd.setValue(.07);
+            traits.setValue(0, .01);
+            tree.getRoot().setHeight(.11);
+            state.storeCalculationNodes();
+            state.checkCalculationNodesDirtiness();
+            double proposed = posterior.calculateLogP();
+            if (proposedDiffusion < 1) {
+                QuaSSEDistribution fresh = smallDistribution(1, proposedDiffusion, .1,
+                        "(sp1:0.11,sp2:0.11);", "Observed");
+                ((ConstantLinkFn) fresh.q2mLambdaInput.get()).yValueInput.get().setValue(lambda.getValue());
+                ((LogisticFunction) fresh.q2mMuInput.get()).curveYBaseValueInput.get().setValue(.02);
+                NormalCenteredAtObservedLinkFn freshTip = (NormalCenteredAtObservedLinkFn) fresh.q2dInput.get();
+                freshTip.sdNormalQuTrValueInput.get().setValue(.07);
+                freshTip.quTraitsInput.get().setValue(0, .01);
+                Assert.assertEquals(fresh.calculateLogP(), proposed, 1e-12);
+            } else {
+                Assert.assertEquals(Double.NEGATIVE_INFINITY, proposed, 0.0);
+            }
+            state.restore();
+            state.restoreCalculationNodes();
+            state.setEverythingDirty(false);
+            Assert.assertEquals(accepted, distribution.getCurrentLogP(), 0.0);
+
+            // Do not recalculate after rejection: only lambda is dirty in this next proposal.
+            state.store(2);
+            lambda.setValue(lambda.getValue() + .01);
+            state.storeCalculationNodes();
+            state.checkCalculationNodesDirtiness();
+            QuaSSEDistribution fresh = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
+            ((ConstantLinkFn) fresh.q2mLambdaInput.get()).yValueInput.get().setValue(lambda.getValue());
+            accepted = posterior.calculateLogP();
+            Assert.assertEquals(fresh.calculateLogP(), accepted, 1e-12);
+            state.acceptCalculationNodes();
+            state.setEverythingDirty(false);
+        }
+    }
+
     // Kernel validity is per resolution and representation, not a global dt/dirty hint. Compare
     // non-forced calls with forced construction through raw/FFT and parameter A-B-A transitions.
     @Test
@@ -1547,7 +1609,7 @@ public class QuaSSEDistributionTest {
 
     /*
      * A full likelihood call must depend only on current inputs, not arrays mutated by an earlier
-     * traversal. This becomes redundant if QuaSSE adopts independently stored node partials.
+     * traversal or a shared link's cache. Independent node/rate caches could replace this check.
      */
     @Test
     public void testRepeatedLikelihoodCalculation() {
@@ -1555,6 +1617,21 @@ public class QuaSSEDistributionTest {
         double second = q32ThreeSpTreeDt0005.calculateLogP();
 
         Assert.assertEquals(first, second, 1e-12);
+
+        QuaSSEDistribution a = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        QuaSSEDistribution b = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        b.q2mMuInput.setValue(a.q2mMuInput.get(), b);
+        b.initAndValidate();
+        RealParameter mu = ((LogisticFunction) a.q2mMuInput.get()).curveYBaseValueInput.get();
+        for (double value : new double[] {.02, .03, .02}) {
+            mu.setValue(value);
+            mu.setEverythingDirty(false);
+            QuaSSEDistribution fresh = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+            ((LogisticFunction) fresh.q2mMuInput.get()).curveYBaseValueInput.get().setValue(value);
+            double expected = fresh.calculateLogP();
+            Assert.assertEquals(expected, a.calculateLogP(), 1e-12);
+            Assert.assertEquals(expected, b.calculateLogP(), 1e-12);
+        }
     }
 
     /*
