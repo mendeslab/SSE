@@ -673,6 +673,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     @Override
     public double calculateLogP() {
 
+        if (!refreshGrid()) return logP = Double.NEGATIVE_INFINITY;
+
         // refreshing parameters
         populateMacroevolParams(false);
 
@@ -681,10 +683,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         Node rootNode = tree.getRoot();
         int rootIdx = rootNode.getNr();
         
-        // refreshing qu trait parameters
-        drift = driftInput.get().getValue();
-        diffusion = diffusionInput.get().getValue();
-
         // Pruning mutates every node partial in place, so a full calculation must rebuild them from tips.
         Arrays.fill(logNormalizationFactors, 0.0);
         for (int nodeIdx = 0; nodeIdx < esDsLo.length; nodeIdx++) {
@@ -733,6 +731,36 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         logP = getLogPFromRelevantObjects(esDsAtRootAtRightRes, sumOfLogNormalizationFactors, birthRatesAtRightRes, dxAtRightRes, jtransforms);
 
         return logP;
+    }
+
+    // Reconcile the live grid with current parameters, including clean values restored after rejection.
+    // Validate before touching any live arrays; invalid proposals leave the last usable grid intact.
+    private boolean refreshGrid() {
+        if (nXbinsInput.get().getValue() != nXbinsLo || highLowRatioInput.get().getValue() != hiLoRatio
+                || dXBinInput.get().getValue() != dXbin || xMidInput.get().getValue() != xMid
+                || dtMaxInput.get().getValue() != dtMax || tcInput.get().getValue() != tc
+                || flankWidthScalerInput.get().getValue() != flankWidthScaler
+                || dynamicDtInput.get().getValue() != dynamicallyAdjustDt)
+            throw new IllegalArgumentException("QuaSSE numerical grid controls must remain fixed after initialization.");
+        double currentDrift = driftInput.get().getValue();
+        double currentDiffusion = diffusionInput.get().getValue();
+        int[] padding = calculatePadding(currentDrift, currentDiffusion);
+        if (padding == null) return false;
+        drift = currentDrift;
+        diffusion = currentDiffusion;
+        if (!Arrays.equals(padding, nLeftNRightFlanksLo)) {
+            prepareDimensionsInPlace();
+            prepareXRulers();
+            hiLoIdxs4Transfer = new int[nUsefulXbinsLo];
+            populateIndicesHiLo(hiLoIdxs4Transfer, hiLoRatio, nUsefulXbinsLo, false);
+            birthRatesLo = new double[nUsefulXbinsLo];
+            birthRatesHi = new double[nUsefulXbinsHi];
+            deathRatesLo = new double[nUsefulXbinsLo];
+            deathRatesHi = new double[nUsefulXbinsHi];
+            priorProbsAtRoot = null;
+            populateMacroevolParams(true);
+        }
+        return true;
     }
 
 

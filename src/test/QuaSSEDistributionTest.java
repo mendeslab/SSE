@@ -381,7 +381,7 @@ public class QuaSSEDistributionTest {
 
     /*
      * Positive and negative drift require mirrored padding and backward-time kernel shifts. Zero-drift
-     * tests cannot expose duplicated flank formulas; this is obsolete if padding becomes dynamic.
+     * tests cannot expose duplicated flank formulas; this remains useful for the constant-drift kernel.
      */
     @Test
     public void testNonzeroDriftPaddingAndKernelDirection() {
@@ -1435,6 +1435,39 @@ public class QuaSSEDistributionTest {
                 "priorProbAtRootType", prior);
 
         return distribution;
+    }
+
+    // A reused distribution must match a fresh one across padding changes, including equal-size
+    // grids with exchanged left/right support. Invalid proposals must not mutate the usable grid.
+    @Test
+    public void testDynamicGridAgainstFreshCalculation() {
+        QuaSSEDistribution distribution = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        for (double[] parameters : new double[][] {{0, .004}, {1, .001}, {-1, .001}, {.1, .001}, {0, .001}}) {
+            distribution.driftInput.get().setValue(parameters[0]);
+            distribution.diffusionInput.get().setValue(parameters[1]);
+            QuaSSEDistribution fresh = smallDistribution(parameters[0], parameters[1], .005,
+                    "(sp1:0.1,sp2:0.1);", "Observed");
+            Assert.assertEquals(fresh.calculateLogP(), distribution.calculateLogP(), 1e-12);
+            Assert.assertEquals(fresh.getNLeftFlanks(true), distribution.getNLeftFlanks(true));
+            Assert.assertEquals(fresh.getNRightFlanks(true), distribution.getNRightFlanks(true));
+            Assert.assertArrayEquals(fresh.getX(true), distribution.getX(true), 0.0);
+        }
+        double[] ruler = distribution.getX(true);
+        for (double invalid : new double[] {Double.NaN, Double.POSITIVE_INFINITY, 1e100}) {
+            distribution.driftInput.get().setValue(invalid);
+            Assert.assertEquals(Double.NEGATIVE_INFINITY, distribution.calculateLogP(), 0.0);
+            Assert.assertSame(ruler, distribution.getX(true));
+        }
+        distribution.driftInput.get().setValue(0.0);
+        for (double invalid : new double[] {-1, 0, Double.NaN, Double.POSITIVE_INFINITY, 1e100}) {
+            distribution.diffusionInput.get().setValue(invalid);
+            Assert.assertEquals(Double.NEGATIVE_INFINITY, distribution.calculateLogP(), 0.0);
+            Assert.assertSame(ruler, distribution.getX(true));
+        }
+        distribution.diffusionInput.get().setValue(.001);
+        Assert.assertEquals(-6.433266509330742, distribution.calculateLogP(), 1e-9);
+        distribution.dtMaxInput.get().setValue(.01);
+        Assert.assertThrows(IllegalArgumentException.class, distribution::calculateLogP);
     }
 
     // Padding must cover short-step support, not only dtMax, and allow valid one-bin strips.
