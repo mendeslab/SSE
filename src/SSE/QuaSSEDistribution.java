@@ -51,7 +51,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         scratchLo = new double[nNodes][nDimensions][2 * nXbinsLo]; // for real and complex part after FFT using JTransforms
         scratchHi = new double[nNodes][nDimensions][2 * nXbinsHi]; // for real and complex part after FFT using JTransforms
 
-        populateMacroevolParams(true);
+        populateMacroevolParams();
 
         int nDimensionsFFT = nDimensions;
         initializeEsDs(nNodes, nDimensionsFFT, nXbinsLo, nXbinsHi);
@@ -61,7 +61,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public void populateMacroevolParams(boolean ignoreRefresh) {
+    public void populateMacroevolParams() {
         // Refresh once, then populate both rulers. Another likelihood may share the link and have
         // already refreshed its scalars; that must not prevent refreshing this likelihood's arrays.
         q2mLambda.refreshParams();
@@ -308,13 +308,11 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         // dealing with dt
         double dt, nIntervals;
-        boolean dtChanged = false;
         // double nonIntegratedDt;
 
         if (dynamicallyAdjust) {
             nIntervals = Math.ceil(aLength / maxDt);
             dt = aLength / nIntervals; // dynamically adjusted dt
-            dtChanged = true;
         } else {
             nIntervals = Math.floor(aLength / maxDt);
             dt = maxDt;
@@ -323,7 +321,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         // updating fY if necessary
         // remove next two later
-        populatefY(dt, forceRecalcKernel, dtChanged, true, lowRes, false);
+        populatefY(dt, forceRecalcKernel, true, lowRes, false);
 
         // integrating!
         for (int i=0; i<nIntervals; i++) {
@@ -445,8 +443,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
      * Math-y methods start below
      */
     @Override
-    public void populatefY(double aDt, boolean forceRecalcKernel, boolean dtChanged, boolean doFFT, boolean lowRes, boolean jtransforms) {
-        super.populatefY(aDt, forceRecalcKernel, dtChanged, doFFT, lowRes, jtransforms);
+    public void populatefY(double aDt, boolean forceRecalcKernel, boolean doFFT, boolean lowRes, boolean jtransforms) {
+        super.populatefY(aDt, forceRecalcKernel, doFFT, lowRes, jtransforms);
     }
 
     @Override
@@ -548,7 +546,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         // System.out.println("scratchAtNode[1] after propagate in t and before x = " + Arrays.toString(scratchAtNode[1]));
 
         // make normal kernel and FFTs it
-        // populatefY(aDt, true, true, lowRes);
+        // populatefY(aDt, true, true, lowRes, jtransforms);
 
         // integrate over diffusion of quantitative trait
         // debugging
@@ -676,7 +674,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         if (!refreshGrid()) return logP = Double.NEGATIVE_INFINITY;
 
         // refreshing parameters
-        populateMacroevolParams(false);
+        populateMacroevolParams();
 
         // refreshing tree and root
         tree = treeInput.get();

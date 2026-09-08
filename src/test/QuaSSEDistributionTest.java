@@ -417,8 +417,8 @@ public class QuaSSEDistributionTest {
         Assert.assertEquals(12, negative.getNLeftFlanks(false));
         Assert.assertEquals(20, negative.getNRightFlanks(false));
 
-        positive.populatefY(dt001, true, false, false, true, false);
-        negative.populatefY(dt001, true, false, false, true, false);
+        positive.populatefY(dt001, true, false, true, false);
+        negative.populatefY(dt001, true, false, true, false);
         double[] positiveKernel = positive.getfY(true);
         double[] negativeKernel = negative.getfY(true);
         for (int i = 0; i < nXbins32Ip.getValue(); i++) {
@@ -581,7 +581,7 @@ public class QuaSSEDistributionTest {
          * here we are just grabbing it to verify its values in the asserts
          * below
          */
-        q32Dt001.populatefY(0.01, true, false, true, true, true);
+        q32Dt001.populatefY(0.01, true, true, true, true);
         double[] fftedfY = q32Dt001.getfY(true);
 
         // copying fY for assert (leaving original one inside class untouched)
@@ -653,7 +653,7 @@ public class QuaSSEDistributionTest {
          * here we are just grabbing it to verify its values in the asserts
          * below
          */
-        q32Dt001.populatefY(0.01, true, false, true, true, false);
+        q32Dt001.populatefY(0.01, true, true, true, false);
         double[] fftedfY = q32Dt001.getfftFY(true);
 
         // copying fY for assert (leaving original one inside class untouched)
@@ -742,7 +742,7 @@ public class QuaSSEDistributionTest {
          * below
          */
         double aDt = 0.01;
-        q1024.populatefY(aDt, true, false, true, true, false);
+        q1024.populatefY(aDt, true, true, true, false);
         double[] fftedfY = q1024.getfftFY(true);
 
         // copying fY for assert (leaving original one inside class untouched)
@@ -830,7 +830,7 @@ public class QuaSSEDistributionTest {
          * below
          */
         double aDt = 0.01;
-        q1024.populatefY(aDt, true, true, true, false, false);
+        q1024.populatefY(aDt, true, true, false, false);
         double[] fftedfY = q1024.getfftFY(false);
 
         // copying fY for assert (leaving original one inside class untouched)
@@ -937,8 +937,7 @@ public class QuaSSEDistributionTest {
          */
         double aDt = 0.01;
         boolean forceRecalcKernel = true;
-        boolean dtChanged = true;
-        q32Dt001.populatefY(aDt, forceRecalcKernel, dtChanged, true, true, false);
+        q32Dt001.populatefY(aDt, forceRecalcKernel, true, true, false);
         double[] fftedfY = q32Dt001.getfftFY(true);
 
         // copying fY for assert (leaving original one inside class untouched)
@@ -1045,8 +1044,7 @@ public class QuaSSEDistributionTest {
          */
         double aDt = 0.02;
         boolean forceRecalcKernel = true;
-        boolean dtChanged = true;
-        q32Dt002.populatefY(aDt, forceRecalcKernel, dtChanged, true, true, false);
+        q32Dt002.populatefY(aDt, forceRecalcKernel, true, true, false);
         double[] fftedfY = q32Dt002.getfftFY(true);
 
         // copying fY for assert (leaving original one inside class untouched)
@@ -1538,8 +1536,8 @@ public class QuaSSEDistributionTest {
                 for (boolean doFFT : new boolean[] {false, true, false, true}) {
                     for (double dt : new double[] {.005, .002, .005}) {
                         for (boolean low : new boolean[] {true, false, true}) {
-                            distribution.populatefY(dt, false, false, doFFT, low, jtransforms);
-                            fresh.populatefY(dt, true, false, doFFT, low, jtransforms);
+                            distribution.populatefY(dt, false, doFFT, low, jtransforms);
+                            fresh.populatefY(dt, true, doFFT, low, jtransforms);
                             Assert.assertArrayEquals(fresh.getfY(low), distribution.getfY(low), 0.0);
                             Assert.assertArrayEquals(fresh.getfftFY(low), distribution.getfftFY(low), 0.0);
                         }

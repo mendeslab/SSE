@@ -159,7 +159,7 @@ public class MoSSEDistribution extends QuaSSEDistribution {
     @Override
     public double calculateLogP() {
 
-        populateMacroevolParams(false);
+        populateMacroevolParams();
 
         // iterating over all unique site patterns (multiply by their frequencies)
 //        for (int i=0; i<nSitePat; ++i) {

@@ -144,8 +144,8 @@ public abstract class QuaSSEProcess extends Distribution {
         jffts = new JavaFftService();
         Arrays.fill(kernelValid, false);
 
-        // populatefY(dtMax, true, false, true, true); // force populate fY, and do FFT
-        // populatefY(dtMax, true, false, true, false); // force populate fY, and do FFT
+        // populatefY(dtMax, true, true, true, false); // force populate fY, and do FFT (coarse)
+        // populatefY(dtMax, true, true, false, false); // force populate fY, and do FFT (fine)
     }
 
     // Apply caller-validated coarse padding to both resolutions and update their useful bin counts.
@@ -239,13 +239,13 @@ public abstract class QuaSSEProcess extends Distribution {
     /*
      *
      */
-    protected abstract void populateMacroevolParams(boolean ignoreRefresh);
+    protected abstract void populateMacroevolParams();
 
     /*
      *
      */
     // Reuse only a kernel whose parameters, resolution and representation match this request.
-    protected void populatefY(double aDt, boolean forceRecalcKernel, boolean dtChanged,
+    protected void populatefY(double aDt, boolean forceRecalcKernel,
                               boolean doFFT, boolean lowRes, boolean jtransforms) {
         int resolution = lowRes ? 0 : 1;
         int size = lowRes ? nXbinsLo : nXbinsHi;
@@ -256,7 +256,7 @@ public abstract class QuaSSEProcess extends Distribution {
         if (!Double.isFinite(aDt) || aDt <= 0 || !Double.isFinite(currentDrift)
                 || !Double.isFinite(currentDiffusion) || currentDiffusion <= 0)
             throw new IllegalArgumentException("A QuaSSE kernel requires finite drift and positive finite dt/diffusion.");
-        // dtChanged is only a caller hint; the actual per-resolution key decides validity.
+        // The actual per-resolution key decides validity, including changes to the timestep.
         // Require the same raw/FFT request: JTransforms overwrites its raw array with the spectrum.
         if (!forceRecalcKernel && kernelValid[resolution] && kernelDt[resolution] == aDt
                 && kernelDrift[resolution] == currentDrift && kernelDiffusion[resolution] == currentDiffusion
