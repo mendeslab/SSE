@@ -65,33 +65,53 @@ to BEAST. Increase logging intervals for long runs. Changing the seed does not c
 parameter values. A short run checks execution and parameter movement, not convergence, mixing,
 parameter recovery, or accuracy throughout the prior/posterior range.
 
-## Validation status and numerical caveat
+## Validation status and numerical refinement
 
 Compilation and XML initialization passed with BEAST 2.7.8. R independently reproduced all six
 logged prior contributions and their sum within 1e-12. At the starting values the log prior is
-4.0493197542526271; the Java log likelihood is -54.712828027798274 and the installed diversitree
-0.10-1 fftC log likelihood is -54.712827824701591 (difference about 2.0e-7).
+4.0493197542526271. After correcting root normalization, the Java log likelihood is
+-45.556924180196084; the corrected diversitree fftC value is -45.556923977099601.
 
-Starting-point sensitivity checks gave:
+Both implementations formerly multiplied D by dX after dividing by the root-conditioning sum.
+They now divide by the integral (sum times dX). This removes an erroneous dX² likelihood factor.
+The error entered diversitree in June 2011, commit `1c44f1c`, when two correct statements were
+combined; Java's root calculation included it when added in November 2021. The factor cancelled
+in this fixed-tree, fixed-spacing MCMC's ratios, but prevented meaningful raw spacing comparisons.
+The correction does not change the priors, grid controls, or branch integration.
 
-| Configuration | Java log likelihood | Change from baseline |
-|---|---:|---:|
-| XML controls | -54.712828027798274 | 0 |
-| Double nX, unchanged dX | -54.712828027798189 | 8.5e-14 |
-| Double nX, halve dX | -56.099127583326414 | -1.38629956 |
-| Double nX, halve dX and dtMax | -56.099255315211295 | -1.38642729 |
+These measurements use the corrected Java calculation and an isolated build of diversitree
+`6e991378c226e4a3b283236f15c78fe51496a2a4`; see [reference instructions](../validation/QuaSSEReference.md).
+They are actual corrected likelihoods, with no offset subtracted afterwards. Only starting-point
+likelihoods were evaluated, without MCMC proposals. Times below cover one likelihood evaluation,
+excluding model construction, and are indicative measurements rather than a controlled benchmark.
 
-The large spacing-dependent shift also occurs in diversitree. Both implementations' root survival
-conditioning divides by a sum and then multiplies by dX, instead of dividing by the integral (sum
-times dX). This contributes an extra dX² factor to the likelihood. Halving dX therefore contributes
--log(4). After removing that offset for comparison only, the latter two differences are approximately
--5.2e-6 and -1.33e-4. No correction has been applied to either implementation or this XML.
+| nX | dX relative to XML | Java log likelihood | R fftC log likelihood | Java seconds | R seconds |
+|---:|---:|---:|---:|---:|---:|
+| 1024 | 1 | -45.556924180196 | -45.556923977100 | 3.398 | 0.087 |
+| 2048 | 1 | -45.556924180196 | -45.556923977099 | 7.233 | 0.175 |
+| 2048 | 1/2 | -45.556929374604 | -45.556929171050 | 7.267 | 0.174 |
+| 4096 | 1/4 | -45.556937195651 | -45.556936991192 | 15.331 | 0.379 |
+| 8192 | 1/8 | -45.556943958240 | -45.556943752914 | 33.066 | 0.786 |
 
-That factor is constant during this fixed-control, fixed-tree run, so by itself it cancels in MCMC
-ratios. It does affect comparisons between grid spacings and absolute likelihoods. Agreement with
-diversitree does not establish correctness because both implementations share the expression.
+The second row doubles domain width without changing spacing; Java's change is about 8.5e-14.
+Subsequent rows halve spacing while doubling bin count, preserving nominal domain width. Their
+successive Java changes are about -5.19e-6, -7.82e-6, and -6.76e-6. The large -log(4) jumps are gone,
+but these small differences alone do not establish an order of spatial convergence.
 
-Validation paused at this finding, before the planned two 100-iteration runs. The completed checks
-used temporary chainLength=0 copies, which each made one proposal. Thus full-run timing and behavior
-are not yet validated. Broader numerical issues, including small-diffusion kernel resolution, remain
-outside this example's scope; the example is not added to `ant test`.
+At 8192 coarse bins and dX equal to one-eighth of the XML spacing, timestep refinement gives:
+
+| dtMax relative to XML | Java log likelihood | R fftC log likelihood | Java seconds | R seconds |
+|---:|---:|---:|---:|---:|
+| 1 | -45.556943958240 | -45.556943752914 | 33.066 | 0.786 |
+| 1/2 | -45.557060219241 | -45.557060167591 | 65.955 | 1.552 |
+| 1/4 | -45.557116927100 | -45.557116914060 | 130.442 | 3.053 |
+| 1/8 | -45.557149926821 | -45.557149923472 | 260.801 | 6.070 |
+
+Successive Java changes are approximately -1.16e-4, -5.67e-5, and -3.30e-5. Java/R disagreement
+decreases from about 2.05e-7 to 3.35e-9. This is evidence of diminishing timestep sensitivity at
+this parameter setting, not an error bound across the posterior. These expensive configurations
+are for selected-point accuracy checks, not the default MCMC grid.
+
+The two 100-iteration MCMC runs remain pending. These checks do not establish full-run behavior,
+convergence, or accuracy throughout the parameter space. In particular, small-diffusion kernel
+resolution remains outside this correction's scope. The example is not added to `ant test`.
