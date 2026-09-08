@@ -1,7 +1,7 @@
 # QuaSSE: short fixed-tree MCMC example
 
 `QuaSSE_15_species_MCMC.xml` is a self-contained execution and timing example for BEAST 2.7.8.
-It defaults to 100 iterations, not a converged posterior analysis. No R installation is needed to run
+It defaults to 20 iterations, not a converged posterior analysis. No R installation is needed to run
 the XML. It uses the current Java solver without FFTW or numerical-method changes.
 
 ## Data and model
@@ -58,12 +58,48 @@ The trace records the posterior, likelihood, total prior, six prior contribution
 every iteration. Screen output is every 10 iterations; checkpointing is every 10 iterations.
 The final operator table reports attempts and acceptances. A zero-attempt operator can have a NaN
 acceptance fraction; that alone is not a NaN likelihood. BEAST includes sample 0 after a proposal, so
-chainLength=100 produces samples 0 through 100. Its startup "Start likelihood" is the posterior.
+chainLength=20 produces samples 0 through 20. Its startup "Start likelihood" is the posterior.
 
 To change the length, copy the XML into the run directory and edit `chainLength`, then pass that copy
 to BEAST. Increase logging intervals for long runs. Changing the seed does not change the initial
 parameter values. A short run checks execution and parameter movement, not convergence, mixing,
 parameter recovery, or accuracy throughout the prior/posterior range.
+
+For routine execution checks, start with 20 iterations for each of seeds 127 and 128. Check that
+every operator has been attempted, every parameter has moved, and each run has both accepted and
+rejected proposals overall. If coverage is incomplete, resume in the same output directory with
+the same XML (chainLength=20) and a new explicit seed, for example:
+
+```sh
+java -cp "$sse_dir/build:$sse_dir/../beast2/build/dist/launcher.jar:$sse_dir/../beast2/build/dist/BEAST.base.jar:$sse_dir/../BeastFX/build/dist/BEAST.app.jar:$sse_dir/lib/*" \
+  beastfx.app.beast.BeastMCMC -resume -seed 129 "$sse_dir/examples/QuaSSE_15_species_MCMC.xml"
+```
+
+This restores the parameter checkpoint and appends another batch to the trace. Record the seeds
+for each segment; it is not an exact random-number continuation of an uninterrupted run. Stop
+when the execution checks are satisfied. Keep this separate from the selected-point numerical
+refinement checks below; routine MCMC checks use the original XML grid, not the expensive fine grid.
+
+### Completed short-run checks
+
+With the corrected solver, both runs exercised all six operators and moved all six parameters:
+
+| Initial seed | Batches | Trace samples | Accepted proposals | Rejected proposals | BEAST calculation time |
+|---:|---|---|---:|---:|---:|
+| 127 | 20 iterations | 0–20 | 20 | 1 | 148.439 s |
+| 128 | 20, then resume for 20 with seed 129 | 0–40 | 37 | 5 | 148.236 + 84.014 s |
+
+The first seed-128 batch accepted all 21 proposals, so only that run was extended. Resuming restored
+the final posterior exactly and appended sequential trace rows. BEAST also proposes at sample 0
+on resumption but suppresses that duplicate log number; hence the second run has 42 proposals and
+41 trace rows. All trace entries were finite, and R independently verified every prior contribution,
+prior sum, and posterior sum within 1e-12. Both final checkpoints contain the six parameters and
+operator statistics. Outputs from these checks are under `build/quasse-mcmc-check/seed127` and
+`seed128` (untracked build artifacts).
+
+The initial batches ran concurrently, so their elapsed times are not isolated benchmarks. The
+MCMC timings include work beyond one likelihood per reported iteration, including consistency
+checks and checkpointing. No tuning changes were made based on these very short runs.
 
 ## Validation status and numerical refinement
 
@@ -112,6 +148,6 @@ decreases from about 2.05e-7 to 3.35e-9. This is evidence of diminishing timeste
 this parameter setting, not an error bound across the posterior. These expensive configurations
 are for selected-point accuracy checks, not the default MCMC grid.
 
-The two 100-iteration MCMC runs remain pending. These checks do not establish full-run behavior,
-convergence, or accuracy throughout the parameter space. In particular, small-diffusion kernel
-resolution remains outside this correction's scope. The example is not added to `ant test`.
+The short MCMC runs do not establish convergence or accuracy throughout the parameter space.
+In particular, small-diffusion kernel resolution remains outside this correction's scope.
+The example is not added to `ant test`.

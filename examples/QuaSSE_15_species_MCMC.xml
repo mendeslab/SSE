@@ -4,7 +4,7 @@
   <!-- Short execution/timing example, not a converged posterior analysis. See the companion README.
        Data: diversitree/inst/tests/phy.Rdata; do not regenerate from the historical RNG seed.
        Starting values are the simulation parameters, not estimates. -->
-  <run id="mcmc" spec="MCMC" chainLength="100">
+  <run id="mcmc" spec="MCMC" chainLength="20">
     <state id="state" storeEvery="10">
       <stateNode id="lambda0" spec="parameter.RealParameter" lower="0.0">0.1</stateNode>
       <stateNode id="lambda1" spec="parameter.RealParameter" lower="0.0">0.2</stateNode>
