@@ -1390,7 +1390,14 @@ public class QuaSSEDistributionTest {
      */
     @Test
     public void testTraitDependentExtinctionLikelihoodAgainstDiversitree() {
-        Tree tree = new TreeParser("(sp1:0.1,sp2:0.1);", false, false, true, 0);
+        QuaSSEDistribution distribution = smallDistribution(0.0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        Assert.assertEquals(-6.433266509330742, distribution.calculateLogP(), 1e-9);
+    }
+
+    // Build the small reference model with independent inputs, so comparisons cannot share caches.
+    private QuaSSEDistribution smallDistribution(double drift, double diffusion, double tc,
+                                                 String newick, String prior) {
+        Tree tree = new TreeParser(newick, false, false, true, 0);
 
         RealParameter traits = new RealParameter();
         traits.initByName("value", Arrays.asList(0.0, 0.1), "keys", "sp1 sp2");
@@ -1413,21 +1420,40 @@ public class QuaSSEDistributionTest {
         distribution.initByName(
                 "dtMax", new RealParameter(new Double[] { 0.005 }),
                 "dynDt", new BooleanParameter(new Boolean[] { true }),
-                "tc", new RealParameter(new Double[] { 0.005 }),
+                "tc", new RealParameter(new Double[] { tc }),
                 "nX", new IntegerParameter(new Integer[] { 128 }),
                 "dX", new RealParameter(new Double[] { 0.01 }),
                 "xMid", new RealParameter(new Double[] { 0.0 }),
                 "flankWidthScaler", new RealParameter(new Double[] { 10.0 }),
                 "hiLoRatio", new IntegerParameter(new Integer[] { 4 }),
-                "drift", new RealParameter(new Double[] { 0.0 }),
-                "diffusion", new RealParameter(new Double[] { 0.001 }),
+                "drift", new RealParameter(new Double[] { drift }),
+                "diffusion", new RealParameter(new Double[] { diffusion }),
                 "q2mLambda", speciation,
                 "q2mMu", extinction,
                 "tree", tree,
                 "q2d", tipLink,
-                "priorProbAtRootType", "Observed");
+                "priorProbAtRootType", prior);
 
-        Assert.assertEquals(-6.433266509330742, distribution.calculateLogP(), 1e-9);
+        return distribution;
+    }
+
+    // Root crossings must resize the prior, with time == tc consistently coarse and empty segments
+    // acting as identities. Fixed-tree reference values never exercise these transitions.
+    @Test
+    public void testResolutionTransitions() {
+        for (String prior : Arrays.asList("Flat", "Observed")) {
+            QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.1,sp2:0.1);", prior);
+            for (double height : new double[] {.09, .1, .11, .1, .09}) {
+                distribution.treeInput.get().getRoot().setHeight(height);
+                QuaSSEDistribution fresh = smallDistribution(0, .001, .1,
+                        "(sp1:" + height + ",sp2:" + height + ");", prior);
+                double expected = fresh.calculateLogP();
+                Assert.assertTrue(Double.isFinite(expected));
+                Assert.assertEquals(expected, distribution.calculateLogP(), 1e-12);
+            }
+            QuaSSEDistribution zero = smallDistribution(0, .001, 0, "(sp1:0.0,sp2:0.0);", prior);
+            Assert.assertTrue(Double.isFinite(zero.calculateLogP()));
+        }
     }
 
     /*

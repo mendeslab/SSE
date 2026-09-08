@@ -145,7 +145,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         double[][] esDsAtRoot;
         double dxAtRightRes;
         int nXBinsRightRes, nUsefulXBinsRightRes;
-        if (rootHeight > tc) {
+        if (rootHeight >= tc) {
             esDsAtRoot = esDsLo[rootIdx];
             dxAtRightRes = dXbin;
             nXBinsRightRes = nXbinsLo;
@@ -159,7 +159,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             got2LowRes = false;
         }
 
-        if (priorProbsAtRoot == null) priorProbsAtRoot = new double[nUsefulXBinsRightRes]; // if root prior probs not given, initialize it!
+        if (priorProbsAtRoot == null || priorProbsAtRoot.length != nUsefulXBinsRightRes)
+            priorProbsAtRoot = new double[nUsefulXBinsRightRes];
 
         populatePriorProbAtRoot(esDsAtRoot[1], dxAtRightRes, nXBinsRightRes, nUsefulXBinsRightRes, rootPriorType, jtransforms); // ok, prior probs are set!
     }
@@ -216,7 +217,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         // option 1: entire branch might already be > tc (all low-res)
         // note that here the high to low res transfer should have already happened
-        if (startTime > tc) {
+        if (startTime >= tc) {
             esDsAtNode = esDsLo[nodeIdx];
             scratchAtNode = scratchLo[nodeIdx];
 
@@ -308,6 +309,10 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     		boolean jtransforms) {
 
         // option of jtransforms, and jni
+
+        // An empty segment is the identity, including when a branch ends exactly at tc.
+        // The caller still transfers fine to coarse bins, but no Gaussian or normalization is needed.
+        if (aLength == 0.0) return;
 
         // dealing with dt
         double dt, nIntervals;
