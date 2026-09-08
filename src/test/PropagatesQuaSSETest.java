@@ -463,6 +463,57 @@ public class PropagatesQuaSSETest {
         assertArrayEquals(expected, javaFftResult, 1e-12);
     }
 
+    // Boundary restoration is separate from FFT correctness. Nonzero E and D at both edges protect
+    // the asymmetric dependency widths in both retained array layouts, unlike likelihood references.
+    @Test
+    public void testAsymmetricBoundaryRestoration() {
+        int size = 32;
+        for (int left : new int[] {2, 5}) {
+            int right = 7 - left;
+            int useful = size - left - right - 1;
+            double[] kernel = new double[size];
+            kernel[0] = .2;
+            kernel[right] = .3;
+            kernel[size-left] = .5;
+            double[][] data = new double[2][size];
+            double[][] expected = new double[2][size];
+            for (int d = 0; d < 2; d++) {
+                for (int i = 0; i < useful; i++) data[d][i] = (d+1.0) * (i+1) / useful;
+                for (int i = 0; i < useful; i++) {
+                    for (int j = 0; j < size; j++)
+                        expected[d][i] += kernel[j] * data[d][(i-j+size) % size];
+                    if (i < right || i >= useful-left) expected[d][i] = data[d][i];
+                }
+            }
+            for (boolean jtransforms : new boolean[] {true, false}) {
+                double[][] actual = new double[2][2*size];
+                double[] raw = new double[2*size];
+                for (int i = 0; i < size; i++) {
+                    int j = jtransforms ? i : 2*i;
+                    raw[j] = kernel[i];
+                    for (int d = 0; d < 2; d++) actual[d][j] = data[d][i];
+                }
+                if (jtransforms) {
+                    DoubleFFT_1D fft = new DoubleFFT_1D(size);
+                    fft.realForwardFull(raw);
+                    SSEUtils.propagateEandDinXQuaLike(actual, new double[2][2*size], raw,
+                            size, left, right, 1, 1, fft);
+                } else {
+                    JavaFftService fft = new JavaFftService();
+                    double[] spectrum = new double[2*size];
+                    fft.fft(new int[] {size}, raw, spectrum);
+                    SSEUtils.propagateEandDinXQuaLikeSSTJavaFftService(actual, new double[2][2*size],
+                            spectrum, new double[2][2*size], size, left, right, 1, 1, fft);
+                }
+                for (int d = 0; d < 2; d++) {
+                    double[] result = new double[size];
+                    for (int i = 0; i < size; i++) result[i] = actual[d][jtransforms ? i : 2*i];
+                    assertArrayEquals(expected[d], result, 1e-12);
+                }
+            }
+        }
+    }
+
     /*
      * Test for propagating in x (quantitative trait value)
      *

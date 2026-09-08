@@ -215,16 +215,17 @@ public class SSEUtils {
         // System.out.println("esDsAtNode = " + Arrays.toString(esDsAtNode[1]));
         // System.out.println("scratchAtNode = " + Arrays.toString(scratchAtNode[1]));
 
-        // recording the first nLeftFlankBins and the last nRightFlankBins to put them back later
+        // Convolution reads input[i-offset]: preserve nRightFlankBins on the left and
+        // nLeftFlankBins on the right. Keep this backend's existing E/D restoration policy.
         int nPad = nLeftFlankBins + nRightFlankBins + 1;
         for (int ithDim=0; ithDim < (nDimensionsE + nDimensionsD); ithDim++) {
-            for (int j = 0; j < nLeftFlankBins; ++j) {
+            for (int j = 0; j < nRightFlankBins; ++j) {
                 scratchAtNode[ithDim][j] = esDsAtNode[ithDim][j];
             }
         }
 
         for (int ithDim=0; ithDim < (nDimensionsE + nDimensionsD); ithDim++) {
-            for (int j = (nXbins - nPad - nRightFlankBins); j < (nXbins - nPad); ++j) {
+            for (int j = (nXbins - nPad - nLeftFlankBins); j < (nXbins - nPad); ++j) {
                 scratchAtNode[ithDim][j] = esDsAtNode[ithDim][j];
             }
         }
@@ -255,7 +256,7 @@ public class SSEUtils {
          * [ ... skipFirst_nLeftFlankBins ..., real1, real2, real3, ...]
          */
         for (int ithDim = 0; ithDim < (nDimensionsE + nDimensionsD); ithDim++) {
-            everyOtherToHeadInPlace(esDsAtNode[ithDim], nXbins, nLeftFlankBins, nRightFlankBins, 2, scaleBy); // grabbing real part and scaling by 1/nXbins
+            everyOtherToHeadInPlace(esDsAtNode[ithDim], nXbins, nRightFlankBins, nLeftFlankBins, 2, scaleBy); // grabbing real part and scaling by 1/nXbins
 
             for (int i=0; i<nXbins; ++i) {
                 // if negative value, set to 0.0
@@ -264,15 +265,15 @@ public class SSEUtils {
             }
         }
 
-        // putting back the first nLeftFlankBins and the last nRightFlankBins
+        // Restore the boundary strips whose convolutions would read unavailable input.
         for (int ithDim=0; ithDim < (nDimensionsE + nDimensionsD); ithDim++) {
-            for (int j = 0; j < nLeftFlankBins; ++j) {
+            for (int j = 0; j < nRightFlankBins; ++j) {
                 esDsAtNode[ithDim][j] = scratchAtNode[ithDim][j];
             }
         }
 
         for (int ithDim=0; ithDim < (nDimensionsE + nDimensionsD); ithDim++) {
-            for (int j = (nXbins - nPad - nRightFlankBins); j < (nXbins - nPad); ++j) {
+            for (int j = (nXbins - nPad - nLeftFlankBins); j < (nXbins - nPad); ++j) {
                 esDsAtNode[ithDim][j] = scratchAtNode[ithDim][j];
             }
         }
@@ -287,12 +288,13 @@ public class SSEUtils {
      * Version for SST using ComplexArray and RealArray (see unit tests in PropagatesQuaSSETest)
      */
     public static void propagateEandDinXQuaLikeSSTModalFftService(double[][] esDsAtNode, ComplexArray fftFYCA, double[][] scratchAtNode, RealArray scratchRA, int nXbins, int nLeftFlankBins, int nRightFlankBins, int nDimensionsE, int nDimensionsD, DoubleFFT_1D fft) {
-        // recording the first nLeftFlankBins and the last nRightFlankBins to put them back later
+        // Convolution reads input[i-offset]: preserve nRightFlankBins on the left and
+        // nLeftFlankBins on the right. Keep this backend's existing E/D restoration policy.
         int nPad = nLeftFlankBins + nRightFlankBins + 1;
         for (int ithDim = 0; ithDim < (nDimensionsE + nDimensionsD); ithDim++)
-            for (int j = 0; j < nLeftFlankBins; ++j) scratchAtNode[ithDim][j] = esDsAtNode[ithDim][j];
+            for (int j = 0; j < nRightFlankBins; ++j) scratchAtNode[ithDim][j] = esDsAtNode[ithDim][j];
         for (int ithDim = 0; ithDim < (nDimensionsE + nDimensionsD); ithDim++)
-            for (int j = (nXbins - nPad - nRightFlankBins); j < (nXbins - nPad); ++j)
+            for (int j = (nXbins - nPad - nLeftFlankBins); j < (nXbins - nPad); ++j)
                 scratchAtNode[ithDim][j] = esDsAtNode[ithDim][j];
 
         SSEUtils.convolveInPlaceSSTModalFftService(esDsAtNode, fftFYCA, scratchRA, nDimensionsE, nDimensionsD);
@@ -304,28 +306,29 @@ public class SSEUtils {
             }
         }
 
-        // restoring the original first nLeftFlankBins and the last nRightFlankBins, which were stored in the scratch array
+        // Restore the left nRightFlankBins and right nLeftFlankBins saved before convolution.
         for (int ithDim=0; ithDim < (nDimensionsE + nDimensionsD); ithDim++) {
-            for (int j = 0; j < nLeftFlankBins; ++j) {
+            for (int j = 0; j < nRightFlankBins; ++j) {
                 esDsAtNode[ithDim][j] = scratchAtNode[ithDim][j];
             }
         }
         for (int ithDim=0; ithDim < (nDimensionsE + nDimensionsD); ithDim++) {
-            for (int j = (nXbins - nPad - nRightFlankBins); j < (nXbins - nPad); ++j) {
+            for (int j = (nXbins - nPad - nLeftFlankBins); j < (nXbins - nPad); ++j) {
                 esDsAtNode[ithDim][j] = scratchAtNode[ithDim][j];
             }
         }
     }
 
     public static void propagateEandDinXQuaLikeSSTJavaFftService(double[][] esDsAtNode, double[][] fftEsDsAtNode, double[] fftFY, double[][] scratchAtNode, int nXbins, int nLeftFlankBins, int nRightFlankBins, int nDimensionsE, int nDimensionsD, JavaFftService ffts) {
-        // recording the first nLeftFlankBins and the last nRightFlankBins to put them back later
+        // Convolution reads input[i-offset]: preserve nRightFlankBins on the left and
+        // nLeftFlankBins on the right. Keep this backend's existing E/D restoration policy.
         int nPad = nLeftFlankBins + nRightFlankBins + 1;
         for (int ithDim=0; ithDim < (nDimensionsE + nDimensionsD); ithDim++)
             // note the additional i index here (as compared to the JTransforms version) to grab every other in esDsAtNode
-            for (int j=0, i=0; j < nLeftFlankBins; ++j, i+=2) scratchAtNode[ithDim][j] = esDsAtNode[ithDim][i];
+            for (int j=0, i=0; j < nRightFlankBins; ++j, i+=2) scratchAtNode[ithDim][j] = esDsAtNode[ithDim][i];
         for (int ithDim=0; ithDim < (nDimensionsE + nDimensionsD); ithDim++)
             // same as above with i index; note that we multiply by 2 because esDsAtNode is twice the length of nXbins because it's real complex real complex
-            for (int j=(nXbins - nPad - nRightFlankBins), i=2 * (nXbins - nPad - nRightFlankBins); j < (nXbins - nPad); ++j, i+=2)
+            for (int j=(nXbins - nPad - nLeftFlankBins), i=2 * (nXbins - nPad - nLeftFlankBins); j < (nXbins - nPad); ++j, i+=2)
                 scratchAtNode[ithDim][j] = esDsAtNode[ithDim][i];
 
         // debugging
@@ -372,14 +375,14 @@ public class SSEUtils {
 //            }
         }
 
-        // restoring the original first nLeftFlankBins and the last nRightFlankBins, which were stored in the scratch array
+        // Restore the left nRightFlankBins and right nLeftFlankBins saved before convolution.
         for (int ithDim=0; ithDim < (nDimensionsE + nDimensionsD); ithDim++) {
-            for (int i=0, j=0; i < nLeftFlankBins; ++i, j+=2) {
+            for (int i=0, j=0; i < nRightFlankBins; ++i, j+=2) {
                 esDsAtNode[ithDim][j] = scratchAtNode[ithDim][i];
             }
         }
         for (int ithDim=0; ithDim < (nDimensionsE + nDimensionsD); ithDim++) {
-            for (int i=(nXbins - nPad - nRightFlankBins), j=(nXbins - nPad - nRightFlankBins)*2; i < (nXbins - nPad); ++i, j+=2) {
+            for (int i=(nXbins - nPad - nLeftFlankBins), j=(nXbins - nPad - nLeftFlankBins)*2; i < (nXbins - nPad); ++i, j+=2) {
                     esDsAtNode[ithDim][j] = scratchAtNode[ithDim][i];
             }
         }
