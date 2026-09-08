@@ -52,12 +52,42 @@ covered by lower-level tests, but is not selected by the likelihood. The JNI
 setup above applies only to the separate MoSSE implementation. The retained
 QuaSSE C wrapper is not connected to the Java implementation.
 
-The QuaSSE computational grid is fixed when the likelihood is initialized.
-Its padding and trait rulers are derived from the initial constant drift,
-diffusion, and `dtMax`. Fixed nonzero drift is supported, but changing drift or
-diffusion during an MCMC run can require different padding and is not yet
-supported safely. Dynamic grid reconstruction and its cache invalidation must
-be implemented before those parameters are inferred.
+QuaSSE keeps its numerical controls fixed after initialization: `nX`, `hiLoRatio`,
+`dX`, `xMid`, `dtMax`, `flankWidthScaler`, `tc`, and `dynDt`. Changing one requires
+reinitialization. Drift and diffusion may change during MCMC. At each full likelihood
+calculation, padding is computed from their current values, covering every timestep
+up to `dtMax`. When either padding count changes, both trait rulers, the resolution
+transfer map, rate arrays, and root prior are rebuilt together. FFT sizes and the
+full-sized work arrays are retained. This is not automatic domain enlargement or
+adaptive timestep selection: adequate domain width and numerical convergence still
+need checking for an analysis.
+
+The backward kernel has mean −drift × dt. With a = flankWidthScaler × √diffusion,
+the growing support extent is |drift| × dtMax + a × √dtMax. The opposing extent is
+maximized at min(dtMax, (a / (2|drift|))²), or at dtMax for zero drift. Positive drift
+requires greater left kernel support. Convolution reads input[i − offset], so the
+boundary strips that must be preserved have the opposite widths: nRight on the left,
+nLeft on the right. Java retains its existing policy of restoring both E and D.
+
+Invalid drift/diffusion proposals or padding that leaves no interior between boundary
+strips return −∞ without changing the usable grid. The same condition at initialization
+raises an error. Kernel validity is tracked independently at each resolution using
+the actual timestep, drift, diffusion, spacing, padding, backend/layout, and whether
+the buffer contains a raw kernel or its FFT. Old kernel buffers are cleared before
+rebuilding, including when changing between retained FFT implementations.
+
+Links are BEAST calculation nodes, so their parameters participate in dirty propagation.
+Their cached scalars are refreshed by value, including clean restored values after rejection.
+The inherited Distribution lifecycle snapshots/restores the scalar `logP`; QuaSSE does
+not snapshot its large work arrays. The next full calculation reconciles their grid and
+kernel keys with current parameters, refreshes rates, and reconstructs all partials.
+
+Time < `tc` uses the fine grid, and time ≥ `tc` uses the coarse grid, including at the
+root. Zero-length integration segments do nothing; a branch ending at `tc` still
+transfers to the coarse grid. Flat and Observed root priors are resized and recalculated
+on the active grid, preserving the existing normalization and survival-conditioning
+formulas. `givenPriorProbsAtRoot` is retained as an input but explicitly rejected:
+a supplied array has no defined correspondence to a changing grid yet.
 
 Use `dynDt=true`. This mode divides each branch into an integer number of equal
 steps no longer than `dtMax`. The retained `dynDt=false` path does not integrate
@@ -67,6 +97,9 @@ sampling, and other unfinished QuaSSE extensions are also deferred.
 Each `calculateLogP()` currently performs a full pruning calculation from
 freshly populated tip values. Incremental BEAST node-partial caching is a later
 performance feature rather than part of the current correctness model.
+
+See [the reference documentation](validation/QuaSSEReference.md) for the local diversitree
+corrections, isolated build instructions, comparison cases, and limitations of its old test suite.
 
 ### QuaSSEProcess
 
