@@ -1,6 +1,6 @@
 package SSE;
 
-import beast.base.core.BEASTObject;
+import beast.base.inference.CalculationNode;
 import beast.base.core.Input;
 import beast.base.inference.parameter.RealParameter;
 
@@ -9,7 +9,7 @@ import beast.base.inference.parameter.RealParameter;
  * If you put a prior on the y value, it's the same as assuming y is
  * distributed according to that prior, and independent of x
  */
-public class ConstantLinkFn extends BEASTObject implements LinkFn {
+public class ConstantLinkFn extends CalculationNode implements LinkFn {
 
     final public Input<RealParameter> yValueInput = new Input<>("yV", "Constant value of dependent variable (quantitative trait).", Input.Validate.REQUIRED);
 
@@ -26,7 +26,8 @@ public class ConstantLinkFn extends BEASTObject implements LinkFn {
 
         boolean refreshedSomething = false;
 
-        if (yValueInput.get().somethingIsDirty()) {
+        // Restored parameters may be clean while this unsnapshotted scalar still holds a proposal.
+        if (yValue != yValueInput.get().getValue()) {
             yValue = yValueInput.get().getValue();
             refreshedSomething = true;
         }

@@ -1,6 +1,6 @@
 package SSE;
 
-import beast.base.core.BEASTObject;
+import beast.base.inference.CalculationNode;
 import beast.base.core.Input;
 import beast.base.inference.util.InputUtil;
 import beast.base.inference.parameter.RealParameter;
@@ -10,7 +10,7 @@ import java.util.Arrays;
 /*
  * Used to initialize D's when quantitative trait is observed
  */
-public class NormalCenteredAtObservedLinkFn extends BEASTObject implements LinkFn {
+public class NormalCenteredAtObservedLinkFn extends CalculationNode implements LinkFn {
 
     final public Input<RealParameter> quTraitsInput = new Input<>("quTraits", "Quantitative trait values observed at tips", Input.Validate.REQUIRED);
     // final public Input<RealParameter> dtInput = new Input<>("dt", "Length of time interval over which integration is carried out.", Input.Validate.REQUIRED);
@@ -37,7 +37,8 @@ public class NormalCenteredAtObservedLinkFn extends BEASTObject implements LinkF
             refreshedSomething = true;
         }
 
-        if (InputUtil.isDirty(sdNormalQuTrValueInput)) {
+        // This scalar is not snapshotted; a clean restored parameter must also refresh it.
+        if (sdNormalQuTrValue != sdNormalQuTrValueInput.get().getValue()) {
             sdNormalQuTrValue = sdNormalQuTrValueInput.get().getValue();
             refreshedSomething = true;
         }

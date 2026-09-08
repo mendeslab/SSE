@@ -1,6 +1,6 @@
 package SSE;
 
-import beast.base.core.BEASTObject;
+import beast.base.inference.CalculationNode;
 import beast.base.core.Description;
 import beast.base.core.Input;
 import beast.base.inference.parameter.RealParameter;
@@ -16,7 +16,7 @@ import beast.base.inference.parameter.RealParameter;
 @Description("Logistic link function for converting x into y, " +
         "where x is a continuous trait and y is a macroevolutionary" +
         "parameter.")
-public class LogisticFunction extends BEASTObject implements LinkFn {
+public class LogisticFunction extends CalculationNode implements LinkFn {
 
     final public Input<RealParameter> curveYBaseValueInput = new Input<>("curveYBaseValue", "Curve y base value.", Input.Validate.REQUIRED);
     final public Input<RealParameter> curveMaxYInput = new Input<>("curveMaxY", "Curve maximum y value.", Input.Validate.REQUIRED);
@@ -39,22 +39,23 @@ public class LogisticFunction extends BEASTObject implements LinkFn {
 
         boolean refreshedSomething = false;
 
-        if (curveYBaseValueInput.get().somethingIsDirty()) {
+        // Compare values: rejection restores parameters, but not these cached scalars.
+        if (y0 != curveYBaseValueInput.get().getValue()) {
             y0 = curveYBaseValueInput.get().getValue();
             refreshedSomething = true;
         }
 
-        if (curveMaxYInput.get().somethingIsDirty()) {
+        if (y1 != curveMaxYInput.get().getValue()) {
             y1 = curveMaxYInput.get().getValue();
             refreshedSomething = true;
         }
 
-        if (logisticGrowthRateInput.get().somethingIsDirty()) {
+        if (r != logisticGrowthRateInput.get().getValue()) {
             r = logisticGrowthRateInput.get().getValue();
             refreshedSomething = true;
         }
 
-        if (sigmoidMidpointInput.get().somethingIsDirty()) {
+        if (x0 != sigmoidMidpointInput.get().getValue()) {
             x0 = sigmoidMidpointInput.get().getValue();
             refreshedSomething = true;
         }

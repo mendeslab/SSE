@@ -1,6 +1,10 @@
 package test;
 
 import SSE.*;
+import beast.base.inference.State;
+import beast.base.inference.CompoundDistribution;
+import beast.base.inference.distribution.Normal;
+import beast.base.inference.distribution.Prior;
 import beast.base.inference.parameter.BooleanParameter;
 import beast.base.inference.parameter.IntegerParameter;
 import beast.base.inference.parameter.RealParameter;
@@ -1439,8 +1443,8 @@ public class QuaSSEDistributionTest {
     }
 
     /*
-     * Revisiting a parameter value must reproduce its likelihood after an intervening proposal.
-     * Ordinary one-shot likelihood checks do not cover proposal-history contamination.
+     * BEAST acceptance/rejection must preserve both link values and the cached likelihood scalar.
+     * One-shot checks and manual parameter round trips do not exercise dependency tracking.
      */
     @Test
     public void testLikelihoodParameterRoundTrip() {
@@ -1458,14 +1462,42 @@ public class QuaSSEDistributionTest {
                 "q2d", nfn3Sp,
                 "priorProbAtRootType", rootPriorType);
 
-        double initial = distribution.calculateLogP();
+        RealParameter unrelated = new RealParameter();
+        unrelated.initByName("value", "0.0");
+        Normal normal = new Normal();
+        normal.initAndValidate();
+        Prior prior = new Prior();
+        prior.initByName("x", unrelated, "distr", normal);
+        CompoundDistribution posterior = new CompoundDistribution();
+        posterior.initByName("distribution", Arrays.asList(distribution, prior));
+        State state = new State();
+        state.initByName("stateNode", Arrays.asList(deathRate, unrelated));
+        state.initialise();
+        state.setPosterior(posterior);
+        double initial = state.robustlyCalcPosterior(posterior);
+        double initialLikelihood = distribution.getCurrentLogP();
+
+        state.store(1);
         deathRate.setValue(0.06);
-        double changed = distribution.calculateLogP();
-        deathRate.setValue(0.03);
-        double restored = distribution.calculateLogP();
+        state.storeCalculationNodes();
+        state.checkCalculationNodesDirtiness();
+        double changed = posterior.calculateLogP();
+        Assert.assertTrue(distribution.isDirtyCalculation());
+        state.restore();
+        state.restoreCalculationNodes();
+        state.setEverythingDirty(false);
+        Assert.assertEquals("restored scalar", initialLikelihood, distribution.getCurrentLogP(), 0.0);
+        Assert.assertEquals("recalculated restored inputs", initialLikelihood, distribution.calculateLogP(), 1e-12);
 
         Assert.assertNotEquals(initial, changed, 1e-8);
-        Assert.assertEquals(initial, restored, 1e-12);
+        state.store(2);
+        unrelated.setValue(1.0);
+        state.storeCalculationNodes();
+        state.checkCalculationNodesDirtiness();
+        Assert.assertFalse(distribution.isDirtyCalculation());
+        Assert.assertEquals("unchanged likelihood reuse", initial - .5, posterior.calculateLogP(), 1e-12);
+        state.acceptCalculationNodes();
+        state.setEverythingDirty(false);
     }
 
     /*

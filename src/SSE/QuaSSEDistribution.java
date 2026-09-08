@@ -70,10 +70,14 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     @Override
     public void populateMacroevolParams(boolean ignoreRefresh) {
-        birthRatesLo = q2mLambda.getY(xLo, birthRatesLo, ignoreRefresh);
-        birthRatesHi = q2mLambda.getY(xHi, birthRatesHi, ignoreRefresh);
-        deathRatesLo = q2mMu.getY(xLo, deathRatesLo, ignoreRefresh);
-        deathRatesHi = q2mMu.getY(xHi, deathRatesHi, ignoreRefresh);
+        // Refresh once, then populate both rulers. Another likelihood may share the link and have
+        // already refreshed its scalars; that must not prevent refreshing this likelihood's arrays.
+        q2mLambda.refreshParams();
+        q2mMu.refreshParams();
+        birthRatesLo = q2mLambda.getY(xLo, birthRatesLo, true);
+        birthRatesHi = q2mLambda.getY(xHi, birthRatesHi, true);
+        deathRatesLo = q2mMu.getY(xLo, deathRatesLo, true);
+        deathRatesHi = q2mMu.getY(xHi, deathRatesHi, true);
     }
 
     @Override
@@ -728,9 +732,10 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         // System.out.println("logNormalizationFactors = " + Arrays.toString(logNormalizationFactors));
 
         // apply prior within
-        double myLogP = getLogPFromRelevantObjects(esDsAtRootAtRightRes, sumOfLogNormalizationFactors, birthRatesAtRightRes, dxAtRightRes, jtransforms);
+        // Distribution owns the scalar snapshot used by CompoundDistribution and BEAST rejection.
+        logP = getLogPFromRelevantObjects(esDsAtRootAtRightRes, sumOfLogNormalizationFactors, birthRatesAtRightRes, dxAtRightRes, jtransforms);
 
-        return myLogP;
+        return logP;
     }
 
 
