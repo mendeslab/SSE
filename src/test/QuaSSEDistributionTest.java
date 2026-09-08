@@ -1456,6 +1456,16 @@ public class QuaSSEDistributionTest {
         }
     }
 
+    // A supplied array has no defined moving-grid interpretation; fail explicitly rather than silently
+    // using a built-in prior. Replace this check when coordinate-aware supplied priors are implemented.
+    @Test
+    public void testSuppliedRootPriorRejected() {
+        QuaSSEDistribution distribution = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        distribution.priorProbsAtRootInput.setValue(new RealParameter(new Double[] {1.0}), distribution);
+        IllegalArgumentException error = Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
+        Assert.assertTrue(error.getMessage().contains("givenPriorProbsAtRoot"));
+    }
+
     /*
      * A full likelihood call must depend only on current inputs, not arrays mutated by an earlier
      * traversal. This becomes redundant if QuaSSE adopts independently stored node partials.

@@ -8,7 +8,6 @@ import beast.base.inference.parameter.IntegerParameter;
 import beast.base.inference.parameter.RealParameter;
 import beast.base.evolution.tree.Node;
 import beast.base.evolution.tree.Tree;
-import org.apache.commons.lang3.ArrayUtils;
 import org.jtransforms.fft.DoubleFFT_1D;
 import org.shared.array.ComplexArray;
 import org.shared.array.RealArray;
@@ -72,10 +71,11 @@ public abstract class QuaSSEProcess extends Distribution {
         rootPriorType = priorProbAtRootTypeInput.get();
 
         if (priorProbsAtRootInput.get() != null) {
-            priorProbsAtRoot = ArrayUtils.toPrimitive(priorProbsAtRootInput.get().getValues()); // unboxing only at initialization
-            providedPriorAtRoot = true;
+            throw new IllegalArgumentException("givenPriorProbsAtRoot is not supported: a supplied array "
+                    + "has no defined mapping when the QuaSSE grid changes. Use Flat or Observed.");
         }
-        // TODO: once number of D's in low-res is calculated, needs to check if this has the same length; if not, throw RuntimeException
+        if (!FLAT.equals(rootPriorType) && !OBS.equals(rootPriorType))
+            throw new IllegalArgumentException("priorProbAtRootType must be Flat or Observed.");
         // quTraits = quTraitsInput.get();
 
         nLeftNRightFlanksLo = new int[2];
