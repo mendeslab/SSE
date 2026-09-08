@@ -89,10 +89,19 @@ public abstract class QuaSSEProcess extends Distribution {
 
         hiLoRatio = highLowRatioInput.get().getValue();
         nXbinsLo = nXbinsInput.get().getValue();
+        if (nXbinsLo <= 0 || (nXbinsLo & (nXbinsLo-1)) != 0)
+            throw new IllegalArgumentException("Number of quantitative character bins must be a power of 2. It was " + nXbinsLo);
+        if (hiLoRatio < 1 || 2L * nXbinsLo * hiLoRatio > Integer.MAX_VALUE)
+            throw new IllegalArgumentException("QuaSSE hiLoRatio must be positive and FFT array sizes must fit in an int.");
         nXbinsHi = nXbinsLo * hiLoRatio;
 
         xMid = xMidInput.get().getValue();
         flankWidthScaler = flankWidthScalerInput.get().getValue();
+        if (!Double.isFinite(dtMax) || dtMax <= 0 || !Double.isFinite(dXbin) || dXbin <= 0
+                || !Double.isFinite(flankWidthScaler) || flankWidthScaler <= 0
+                || !Double.isFinite(xMid) || !Double.isFinite(tc) || tc < 0)
+            throw new IllegalArgumentException("QuaSSE requires finite positive dtMax, dX and flankWidthScaler, "
+                    + "finite xMid and finite nonnegative tc.");
         drift = driftInput.get().getValue();
         diffusion = diffusionInput.get().getValue();
         changeInXNormalMean = drift * -dtMax;
@@ -133,14 +142,13 @@ public abstract class QuaSSEProcess extends Distribution {
      * that will not contribute to... (fill this out later)
      */
     protected void prepareDimensionsInPlace() {
-        // The backward kernel has mean m = −drift·Δt and support [m − wσ, m + wσ]. These
-        // expressions cover its negative and positive extents, which differ when drift is nonzero.
-        nLeftNRightFlanksLo[0] = (int)(Math.ceil(
-                -(changeInXNormalMean - flankWidthScaler * changeInXNormalSd) / dXbin));
+        int[] padding = calculatePadding(drift, diffusion);
+        if (padding == null)
+            throw new IllegalArgumentException("Invalid QuaSSE drift/diffusion or insufficient grid for kernel support.");
+        nLeftNRightFlanksLo[0] = padding[0];
         nLeftNRightFlanksHi[0] = hiLoRatio * nLeftNRightFlanksLo[0];
 
-        nLeftNRightFlanksLo[1] = (int)(Math.ceil(
-                (changeInXNormalMean + flankWidthScaler * changeInXNormalSd) / dXbin));
+        nLeftNRightFlanksLo[1] = padding[1];
         nLeftNRightFlanksHi[1] = hiLoRatio * nLeftNRightFlanksLo[1];
 
         // nXbinsHi = hiLoRatio * nXbinsLo;
@@ -160,6 +168,35 @@ public abstract class QuaSSEProcess extends Distribution {
         // System.out.println("nUsefulXbinsLo = " + nUsefulXbinsLo);
         // System.out.println("nLeftFlankHi = " + nLeftNRightFlanksHi[0] + " nRightFlankHi = " + nLeftNRightFlanksHi[1]);
         // System.out.println("nUsefulXbinsHi = " + nUsefulXbinsHi);
+    }
+
+    // Calculate candidate support without mutating the live grid. Null denotes an invalid proposal.
+    protected int[] calculatePadding(double candidateDrift, double candidateDiffusion) {
+        if (!Double.isFinite(candidateDrift) || !Double.isFinite(candidateDiffusion) || candidateDiffusion <= 0)
+            return null;
+        // Backward support extents are ±v*t+a*sqrt(t), a=w*sqrt(diffusion). The growing side
+        // peaks at T=dtMax; the opposing side peaks at min(T,(a/(2*abs(v)))^2).
+        // Round only after maximising over all steps, then scale the coarse counts for the fine grid.
+        double a = flankWidthScaler * Math.sqrt(candidateDiffusion);
+        double speed = Math.abs(candidateDrift);
+        double peakRoot = speed == 0 ? Math.sqrt(dtMax) : Math.min(Math.sqrt(dtMax), a / (2 * speed));
+        double growing = speed * dtMax + a * Math.sqrt(dtMax);
+        double opposing = peakRoot * (a - speed * peakRoot);
+        double left = Math.ceil((candidateDrift >= 0 ? growing : opposing) / dXbin);
+        double right = Math.ceil((candidateDrift >= 0 ? opposing : growing) / dXbin);
+        // The preserved boundary strips must not overlap: useful > left+right.
+        // This also bounds integer casts, scaled counts and the fine-to-coarse map before allocation.
+        if (!Double.isFinite(left) || !Double.isFinite(right) || left < 1 || right < 1
+                || 2 * (left + right) + 1 >= nXbinsLo)
+            return null;
+        int useful = nXbinsLo - ((int) left + (int) right + 1);
+        double minLo = xMid - dXbin * Math.ceil((useful - 1.0) / 2.0);
+        double minHi = minLo - dXbin * (1.0 - 1.0 / hiLoRatio);
+        if (dXbin / hiLoRatio == 0 || !Double.isFinite(minLo) || !Double.isFinite(minHi)
+                || !Double.isFinite(minLo + (useful - 1.0) * dXbin)
+                || !Double.isFinite(minLo + (useful - 1.0 / hiLoRatio) * dXbin))
+            return null;
+        return new int[] {(int) left, (int) right};
     }
 
     /*

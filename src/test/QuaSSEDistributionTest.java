@@ -1437,6 +1437,26 @@ public class QuaSSEDistributionTest {
         return distribution;
     }
 
+    // Padding must cover short-step support, not only dtMax, and allow valid one-bin strips.
+    // Small-drift reference likelihoods cannot distinguish the interior maximum of the opposing side.
+    @Test
+    public void testAllTimestepPadding() {
+        for (double drift : new double[] {-2, 2}) {
+            QuaSSEDistribution distribution = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+            distribution.dtMaxInput.get().setValue(1.0);
+            distribution.dXBinInput.get().setValue(.1);
+            distribution.flankWidthScalerInput.get().setValue(3.0);
+            distribution.driftInput.get().setValue(drift);
+            distribution.diffusionInput.get().setValue(1.0);
+            distribution.initAndValidate();
+            Assert.assertEquals(drift > 0 ? 50 : 12, distribution.getNLeftFlanks(true));
+            Assert.assertEquals(drift > 0 ? 12 : 50, distribution.getNRightFlanks(true));
+        }
+        QuaSSEDistribution one = smallDistribution(0, .00001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        Assert.assertEquals(1, one.getNLeftFlanks(true));
+        Assert.assertTrue(Double.isFinite(one.calculateLogP()));
+    }
+
     // Root crossings must resize the prior, with time == tc consistently coarse and empty segments
     // acting as identities. Fixed-tree reference values never exercise these transitions.
     @Test

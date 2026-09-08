@@ -34,8 +34,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         super.initAndValidate(); // read in all dimension-related stuff, populates fYLo and fYHi
 
-        checkDimensions();
-
         int nNodes = tree.getNodeCount();
 
         logNormalizationFactors = new double[nNodes];
@@ -60,12 +58,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         populateTipsEsDs(nDimensionsFFT, nXbinsHi, true, false);
 
-    }
-
-    private void checkDimensions() {
-        if (!((nXbinsLo & nXbinsLo-1) == 0)) throw new RuntimeException("Number of quantitative character bins must be a power of 2. It was " + nXbinsLo + ". Exiting...");
-        if ((nXbinsLo - nLeftNRightFlanksLo[1] - (nLeftNRightFlanksLo[0] + nLeftNRightFlanksLo[1])) <= nLeftNRightFlanksLo[0]) throw new RuntimeException("Left and right flanking bins were too many, leaving no useful bins between. Exiting...");
-        if (nLeftNRightFlanksLo[0] == 0 || nLeftNRightFlanksLo[0] == 1) throw new RuntimeException("Left and right flank bins were set to 0 (invalid). Exiting...");
     }
 
     @Override
