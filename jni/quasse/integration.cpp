@@ -44,6 +44,52 @@ public:
             std::copy_n(output, length, result.data() + std::size_t(d) * length);
         }
     }
+
+    // Validate and copy current inputs for either X-only or whole-segment execution.
+    bool readInputs(JNIEnv* env, jobjectArray rows, jdoubleArray kernelArray, int left, int right) {
+        const int length = 2 * fft.size;
+        const std::int64_t flanks = std::int64_t(left) + right;
+        if (left < 0 || right < 0 || fft.size - flanks - 1 < flanks
+                || !rows || env->GetArrayLength(rows) != dimensions
+                || !kernelArray || env->GetArrayLength(kernelArray) != length) {
+            throw_java(env, "java/lang/IllegalArgumentException", "Invalid QuaSSE arrays or padding.");
+            return false;
+        }
+        for (int d = 0; d < dimensions; ++d) {
+            auto row = static_cast<jdoubleArray>(env->GetObjectArrayElement(rows, d));
+            if (env->ExceptionCheck()) return false;
+            bool valid = row && env->GetArrayLength(row) == length && !env->IsSameObject(row, kernelArray);
+            for (int previous = 0; valid && previous < d; ++previous) {
+                jobject other = env->GetObjectArrayElement(rows, previous);
+                if (env->ExceptionCheck()) return false;
+                valid = !env->IsSameObject(row, other);
+                env->DeleteLocalRef(other);
+            }
+            if (!valid) {
+                env->DeleteLocalRef(row);
+                throw_java(env, "java/lang/IllegalArgumentException", "QuaSSE requires distinct rows of 2*N doubles.");
+                return false;
+            }
+            env->GetDoubleArrayRegion(row, 0, length, original.data() + std::size_t(d) * length);
+            env->DeleteLocalRef(row);
+            if (env->ExceptionCheck()) return false;
+        }
+        env->GetDoubleArrayRegion(kernelArray, 0, length, kernel.data());
+        if (env->ExceptionCheck()) return false;
+        return true;
+    }
+
+    // Write only completed results into the caller's existing rows.
+    void writeOutput(JNIEnv* env, jobjectArray rows, const std::vector<double>& values) {
+        const int length = 2 * fft.size;
+        for (int d = 0; d < dimensions; ++d) {
+            auto row = static_cast<jdoubleArray>(env->GetObjectArrayElement(rows, d));
+            if (env->ExceptionCheck()) return;
+            env->SetDoubleArrayRegion(row, 0, length, values.data() + std::size_t(d) * length);
+            env->DeleteLocalRef(row);
+            if (env->ExceptionCheck()) return;
+        }
+    }
 };
 
 } // namespace
@@ -73,43 +119,9 @@ JNIEXPORT void JNICALL Java_SSE_QuaSSENativeIntegrator_propagateXNative(JNIEnv* 
             throw_java(env, "java/lang/IllegalStateException", "QuaSSE integrator has been closed.");
             return;
         }
-        const int length = 2 * integration->fft.size;
-        const std::int64_t flanks = std::int64_t(left) + right;
-        if (left < 0 || right < 0 || integration->fft.size - flanks - 1 < flanks
-                || !rows || env->GetArrayLength(rows) != integration->dimensions
-                || !kernel || env->GetArrayLength(kernel) != length) {
-            throw_java(env, "java/lang/IllegalArgumentException", "Invalid QuaSSE arrays or padding.");
-            return;
-        }
-        for (int d = 0; d < integration->dimensions; ++d) {
-            auto row = static_cast<jdoubleArray>(env->GetObjectArrayElement(rows, d));
-            if (env->ExceptionCheck()) return;
-            bool valid = row && env->GetArrayLength(row) == length && !env->IsSameObject(row, kernel);
-            for (int previous = 0; valid && previous < d; ++previous) {
-                jobject other = env->GetObjectArrayElement(rows, previous);
-                if (env->ExceptionCheck()) return;
-                valid = !env->IsSameObject(row, other);
-                env->DeleteLocalRef(other);
-            }
-            if (!valid) {
-                env->DeleteLocalRef(row);
-                throw_java(env, "java/lang/IllegalArgumentException", "QuaSSE requires distinct rows of 2*N doubles.");
-                return;
-            }
-            env->GetDoubleArrayRegion(row, 0, length, integration->original.data() + std::size_t(d) * length);
-            env->DeleteLocalRef(row);
-            if (env->ExceptionCheck()) return;
-        }
-        env->GetDoubleArrayRegion(kernel, 0, length, integration->kernel.data());
-        if (env->ExceptionCheck()) return;
+        if (!integration->readInputs(env, rows, kernel, left, right)) return;
         integration->propagate(left, right);
-        for (int d = 0; d < integration->dimensions; ++d) {
-            auto row = static_cast<jdoubleArray>(env->GetObjectArrayElement(rows, d));
-            if (env->ExceptionCheck()) return;
-            env->SetDoubleArrayRegion(row, 0, length, integration->result.data() + std::size_t(d) * length);
-            env->DeleteLocalRef(row);
-            if (env->ExceptionCheck()) return;
-        }
+        integration->writeOutput(env, rows, integration->result);
     } catch (...) {
         translate_exception(env);
     }
