@@ -55,6 +55,7 @@ Use dependencies from the configured BEAST installation; sources can be attached
 For a short fixed-tree QuaSSE MCMC example, see
 [the 15-species example](examples/QuaSSE_15_species_MCMC.md), including its priors,
 run commands, validation status, and numerical caveats.
+The [233-primate example](examples/QuaSSE_233_primates_MCMC.md) uses FFTW/native integration.
 
 ## Optional QuaSSE FFTW transforms (Linux)
 

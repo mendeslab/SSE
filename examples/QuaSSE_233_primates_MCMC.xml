@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beast version="2.7"
+       namespace="beast.base.core:beast.base.inference:beast.base.inference.distribution:beast.base.inference.operator:beast.base.evolution.tree:beast.base.evolution.operator:SSE">
+  <!-- Short execution/timing example, not a converged posterior analysis. See the companion README.
+       Data: diversitree/doc/data/Vos-2006.nex and Redding-2010.csv; trait = natural log of mass.
+       Illustrative priors and starting values, not a reproduction of the tutorial ML fits. -->
+  <run id="mcmc" spec="MCMC" chainLength="20">
+    <state id="state" storeEvery="10">
+      <stateNode id="lambda0" spec="parameter.RealParameter" lower="0.0">.15</stateNode>
+      <stateNode id="lambda1" spec="parameter.RealParameter" lower="0.0">.25</stateNode>
+      <stateNode id="mu" spec="parameter.RealParameter" lower="0.0">.1</stateNode>
+      <stateNode id="midpoint" spec="parameter.RealParameter">7.75</stateNode>
+      <stateNode id="steepness" spec="parameter.RealParameter" lower="0.0">1</stateNode>
+      <stateNode id="diffusion" spec="parameter.RealParameter" lower="0.0">.03</stateNode>
+    </state>
+
+    <distribution id="posterior" spec="CompoundDistribution">
+      <distribution id="prior" spec="CompoundDistribution">
+        <distribution id="lambda0Prior" spec="Prior" x="@lambda0">
+          <distr spec="Exponential" mean="0.2"/>
+        </distribution>
+        <distribution id="lambda1Prior" spec="Prior" x="@lambda1">
+          <distr spec="Exponential" mean="0.2"/>
+        </distribution>
+        <distribution id="muPrior" spec="Prior" x="@mu">
+          <distr spec="Exponential" mean="0.1"/>
+        </distribution>
+        <distribution id="midpointPrior" spec="Prior" x="@midpoint">
+          <distr spec="Normal" mean="7.75" sigma="2.0"/>
+        </distribution>
+        <distribution id="steepnessPrior" spec="Prior" x="@steepness">
+          <distr spec="LogNormalDistributionModel" M="0.0" S="1.0"
+                 meanInRealSpace="false"/>
+        </distribution>
+        <distribution id="diffusionPrior" spec="Prior" x="@diffusion">
+          <distr spec="Exponential" mean="0.05"/>
+        </distribution>
+      </distribution>
+
+      <!-- QuaSSE supplies the tree/trait likelihood, including survival conditioning.
+           The tree is fixed and deliberately absent from the MCMC state and operators. -->
+      <distribution id="likelihood" spec="QuaSSEDistribution" priorProbAtRootType="Observed"
+                    diffusion="@diffusion" fftBackend="fftw" integrationBackend="native">
+        <tree id="tree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false"
+              offset="0" singlechild="false"
+              newick="(((((Galago_matschiei:3.6449842729999999,
+                      (Euoticus_pallidus:1.4498621519999999,
+                      Euoticus_elegantulus:1.4498621519999999):2.1951221200000002):4.875712214,
+                      ((Galagoides_zanzibaricus:3.5741037339999999,
+                      Galagoides_demidoff:3.5741037339999999):3.753222182,
+                      ((Galago_alleni:5.403508585,
+                      ((Galago_senegalensis:1.4611568500000001,
+                      Galago_moholi:1.4611568500000001):0.9031863282,
+                      Galago_gallarum:2.3643431779999999):3.039165407):0.91267658220000003,
+                      (Otolemur_garnettii:4.2426441270000002,
+                      Otolemur_crassicaudatus:4.2426441270000002):2.0735410399999998):1.0111407489999999):1.1933705699999999):12.40170848,
+                      ((Perodicticus_potto:4.7036292790000003,
+                      (Arctocebus_aureus:1.8817719180000001,
+                      Arctocebus_calabarensis:1.8817719180000001):2.8218573610000002):11.63769999,
+                      (Loris_tardigradus:9.2005658530000005,
+                      (Nycticebus_pygmaeus:2.6724767659999999,
+                      Nycticebus_coucang:2.6724767659999999):6.5280890879999998):7.1407634120000001):4.5810757029999998):30.948116500000001,
+                      (Daubentonia_madagascariensis:39.482385290000003,
+                      ((((Lepilemur_mustelinus:11.19994092,
+                      (Lepilemur_septentrionalis:7.6008959379999999,
+                      (Lepilemur_ruficaudatus:5.0286271820000001,
+                      (Lepilemur_leucopus:3.00293009,
+                      ((Lepilemur_edwardsi:0.45322819419999999,
+                      Lepilemur_microdon:0.45322819419999999):0.90993482660000002,
+                      Lepilemur_dorsalis:1.3631630210000001):1.6397670689999999):2.0256970920000001):2.5722687560000002):3.5990449770000001):5.9722992550000003,
+                      ((Lemur_catta:6.2290680580000002,
+                      ((Hapalemur_aureus:5.3429089239999996,
+                      Hapalemur_simus:5.3429089239999996):0.31953653389999997,
+                      Hapalemur_griseus:5.6624454579999997):0.56662260040000001):6.830461251,
+                      (Varecia_variegata:11.89273831,
+                      ((Eulemur_rubriventer:3.0740345119999999,
+                      Eulemur_mongoz:3.0740345119999999):3.3025484939999998,
+                      (Eulemur_coronatus:3.7569103350000002,
+                      (Eulemur_macaco:3.684015058,
+                      Eulemur_fulvus:3.684015058):0.072895277719999999):2.6196726699999999):5.5161553059999999):1.1667909970000001):4.1127108610000001):4.8625675289999997,
+                      (Avahi_laniger:13.616794820000001,
+                      (Indri_indri:7.4352353359999999,
+                      (Propithecus_diadema:5.8798252050000004,
+                      (Propithecus_verreauxi:1.5414184200000001,
+                      Propithecus_tattersalli:1.5414184200000001):4.3384067850000001):1.5554101309999999):6.1815594819999999):8.4180128809999992):5.4813711180000002,
+                      (Phaner_furcifer:17.03543968,
+                      ((Allocebus_trichotis:7.0533700929999998,
+                      (Microcebus_coquereli:4.0997854780000003,
+                      (Microcebus_rufus:2.7374197069999999,
+                      Microcebus_murinus:2.7374197069999999):1.362365772):2.953584615):4.4173352899999996,
+                      (Cheirogaleus_medius:9.4004694000000004,
+                      Cheirogaleus_major:9.4004694000000004):2.0702359829999999):5.5647342919999998):10.480739140000001):11.966206469999999):12.38813618):13.221164509999999,
+                      ((((Tarsius_dianae:0.25742388329999999,
+                      Tarsius_pumilus:0.25742388329999999):15.043524809999999,
+                      Tarsius_spectrum:15.30094869):19.881527519999999,
+                      (Tarsius_syrichta:8.6835544250000005,
+                      Tarsius_bancanus:8.6835544250000005):26.49892178):27.41764581,
+                      (((((((Chiropotes_satanas:3.6884469229999999,
+                      Chiropotes_albinasus:3.6884469229999999):4.4339709699999998,
+                      (Cacajao_melanocephalus:3.7005107220000002,
+                      Cacajao_calvus:3.7005107220000002):4.421907171):3.7583275189999998,
+                      (Pithecia_pithecia:10.23381691,
+                      (Pithecia_irrorata:6.5495834630000003,
+                      (Pithecia_aequatorialis:3.7898932360000002,
+                      (Pithecia_monachus:1.755629589,
+                      Pithecia_albicans:1.755629589):2.0342636459999999):2.7596902280000002):3.6842334430000001):1.6469285069999999):9.0918573790000003,
+                      (Callicebus_torquatus:16.4714104,
+                      ((Callicebus_modestus:7.3288139320000001,
+                      ((Callicebus_oenanthe:0.65540848880000002,
+                      Callicebus_olallae:0.65540848880000002):2.430400428,
+                      Callicebus_donacophilus:3.085808916):4.2430050149999996):5.9741622650000004,
+                      (Callicebus_personatus:10.303455720000001,
+                      ((Callicebus_dubius:4.7244205719999997,
+                      (Callicebus_cupreus:1.982769904,
+                      Callicebus_caligatus:1.982769904):2.7416506690000002):3.2759423280000002,
+                      ((Callicebus_hoffmannsi:2.3505473000000001,
+                      Callicebus_brunneus:2.3505473000000001):2.976743205,
+                      (Callicebus_moloch:2.3237169309999999,
+                      Callicebus_cinerascens:2.3237169309999999):3.0035735739999998):2.6730723959999998):2.3030928199999998):2.9995204769999999):3.1684342069999998):4.5011923879999998):4.3436870650000001,
+                      (((Alouatta_palliata:0.50226286480000004,
+                      Alouatta_coibensis:0.50226286480000004):12.22768188,
+                      (Alouatta_caraya:6.9263549529999997,
+                      (Alouatta_pigra:4.5273059599999996,
+                      (Alouatta_fusca:2.947096325,
+                      ((Alouatta_seniculus:0.79314490280000005,
+                      Alouatta_sara:0.79314490280000005):0.96554218629999999,
+                      Alouatta_belzebul:1.7586870889999999):1.188409236):1.580209636):2.3990489930000001):5.8035897949999997):7.953558288,
+                      (((Ateles_paniscus:3.038404989,
+                      (Ateles_belzebuth:2.0373527,
+                      (Ateles_geoffroyi:1.215004191,
+                      Ateles_fusciceps:1.215004191):0.82234850969999995):1.0010522879999999):1.654543136,
+                      (Ateles_marginatus:2.885071027,
+                      Ateles_chamek:2.885071027):1.807877097):6.5935616479999997,
+                      (Brachyteles_arachnoides:9.0308445670000008,
+                      (Lagothrix_lagotricha:2.9219103190000002,
+                      Lagothrix_flavicauda:2.9219103190000002):6.1089342479999997):2.2556652050000001):9.3969932640000007):4.6327868209999998):4.8358897970000001,
+                      ((((Cebus_olivaceus:3.9637794940000002,
+                      Cebus_apella:3.9637794940000002):3.298610745,
+                      (Cebus_capucinus:0.14118415610000001,
+                      Cebus_albifrons:0.14118415610000001):7.1212060829999997):15.924176839999999,
+                      (Saimiri_boliviensis:8.4208661199999995,
+                      (Saimiri_vanzolinii:6.8241353780000003,
+                      (Saimiri_sciureus:3.9430094279999999,
+                      (Saimiri_ustus:1.765312829,
+                      Saimiri_oerstedii:1.765312829):2.1776965989999999):2.8811259499999999):1.5967307420000001):14.76570096):2.506309495,
+                      (((Aotus_lemurinus:3.4161911800000002,
+                      Aotus_hershkovitzi:3.4161911800000002):12.371145009999999,
+                      ((Aotus_vociferans:4.5227151020000003,
+                      Aotus_brumbacki:4.5227151020000003):7.2233811540000001,
+                      (Aotus_nancymaae:8.6689074769999994,
+                      (Aotus_miconax:6.2898665549999997,
+                      (Aotus_infulatus:4.164301987,
+                      (Aotus_nigriceps:2.6315241930000002,
+                      (Aotus_trivirgatus:1.2377946980000001,
+                      Aotus_azarai:1.2377946980000001):1.393729496):1.5327777929999999):2.1255645680000002):2.3790409220000002):3.0771887790000001):4.041239934):6.2415684130000004,
+                      ((Callimico_goeldii:18.37696755,
+                      ((Callithrix_pygmaea:3.7060089509999998,
+                      (Callithrix_humeralifera:2.079201914,
+                      Callithrix_argentata:2.079201914):1.6268070379999999):7.659029351,
+                      ((Callithrix_flaviceps:3.4333556879999998,
+                      Callithrix_aurita:3.4333556879999998):7.7668836929999996,
+                      ((Callithrix_kuhlii:0.26554275529999999,
+                      Callithrix_geoffroyi:0.26554275529999999):0.2450028896,
+                      (Callithrix_penicillata:0.25634769219999998,
+                      Callithrix_jacchus:0.25634769219999998):0.25419795270000001):10.689693739999999):0.16479892139999999):7.0119292489999996):0.61064663880000003,
+                      ((Leontopithecus_chrysomela:7.6786479700000001,
+                      (Leontopithecus_caissara:6.6252677770000004,
+                      (Leontopithecus_rosalia:3.83733791,
+                      Leontopithecus_chrysopygus:3.83733791):2.7879298669999999):1.0533801920000001):7.9676717149999998,
+                      (((Saguinus_oedipus:3.279130893,
+                      Saguinus_geoffroyi:3.279130893):4.5990716410000001,
+                      (Saguinus_midas:3.3092057769999998,
+                      Saguinus_bicolor:3.3092057769999998):4.5689967569999999):4.8044586540000003,
+                      (Saguinus_leucopus:9.8187707500000005,
+                      ((Saguinus_imperator:4.3868885400000002,
+                      (Saguinus_mystax:1.953791812,
+                      Saguinus_labiatus:1.953791812):2.4330967280000002):3.291138283,
+                      (Saguinus_inustus:5.0799228269999999,
+                      (Saguinus_nigricollis:3.038858259,
+                      (Saguinus_tripartitus:1.38319711,
+                      Saguinus_fuscicollis:1.38319711):1.6556611489999999):2.0410645679999999):2.5981039959999999):2.140743928):2.8638904369999998):2.9636584969999999):3.3412945060000001):3.041290413):3.6639719679999998):4.4593030840000001):21.07285881,
+                      (((Pongo_pygmaeus:15.84463358,
+                      (Gorilla_gorilla:6.414492353,
+                      (Homo_sapiens:5.0673952959999999,
+                      (Pan_troglodytes:1.9536908100000001,
+                      Pan_paniscus:1.9536908100000001):3.113704486):1.347097057):9.4301412320000004):3.7922426260000002,
+                      ((Hylobates_hoolock:4.0115789050000004,
+                      ((Hylobates_moloch:3.5168317020000002,
+                      (Hylobates_lar:3.100837056,
+                      Hylobates_agilis:3.100837056):0.41599464600000002):0.022174240049999999,
+                      (Hylobates_pileatus:2.0292561130000002,
+                      (Hylobates_muelleri:0.8819271649,
+                      Hylobates_klossii:0.8819271649):1.147328948):1.5097498300000001):0.47257296269999999):1.8642770259999999,
+                      (Hylobates_syndactylus:4.0189692670000001,
+                      (Hylobates_gabriellae:1.8065280480000001,
+                      (Hylobates_leucogenys:0.78824228429999998,
+                      Hylobates_concolor:0.78824228429999998):1.018285764):2.212441219):1.8568866639999999):13.76102028):12.78015491,
+                      (((((((Trachypithecus_geei:5.1224023709999997,
+                      (Trachypithecus_auratus:3.7346628470000001,
+                      (Trachypithecus_francoisi:2.896936803,
+                      (Trachypithecus_cristatus:0.79484827030000005,
+                      (Trachypithecus_pileatus:0.7521180596,
+                      (Trachypithecus_phayrei:0.69433980709999998,
+                      Trachypithecus_obscurus:0.69433980709999998):0.057778252469999999):0.042730210759999998):2.1020885329999999):0.83772604419999996):1.3877395239999999):1.686236098,
+                      Semnopithecus_entellus:6.8086384689999999):0.1210272121,
+                      (((Presbytis_potenziani:1.894279439,
+                      ((Presbytis_comata:0.2207630615,
+                      Presbytis_frontata:0.2207630615):1.3680938010000001,
+                      ((Presbytis_femoralis:0.52718227139999996,
+                      Presbytis_melalophos:0.52718227139999996):1.0235517059999999,
+                      (Presbytis_rubicunda:0.53244398110000002,
+                      Presbytis_thomasi:0.53244398110000002):1.0182899969999999):0.03812288497):0.3054225766):1.913113649,
+                      Presbytis_hosei:3.8073930890000001):2.7447101059999999,
+                      (Trachypithecus_johnii:5.1993850850000003,
+                      Trachypithecus_vetulus:5.1993850850000003):1.3527181100000001):0.3775624863):1.956935552,
+                      (Pygathrix_nemaeus:8.0014198299999997,
+                      (Pygathrix_avunculus:3.8710921530000002,
+                      (Pygathrix_roxellana:2.6096892569999999,
+                      (Pygathrix_brelichi:1.0378462150000001,
+                      Pygathrix_bieti:1.0378462150000001):1.571843042):1.261402895):4.1303276770000004):0.88518140249999999):0.0055801549930000003,
+                      (Nasalis_larvatus:3.4838643760000001,
+                      Nasalis_concolor:3.4838643760000001):5.4083170120000004):4.7145088069999996,
+                      (((Procolobus_preussi:3.4950129269999999,
+                      Procolobus_verus:3.4950129269999999):1.765829351,
+                      (Procolobus_rufomitratus:4.3132542799999998,
+                      (Procolobus_pennantii:1.7550806729999999,
+                      Procolobus_badius:1.7550806729999999):2.5581736070000001):0.94758799689999995):6.697248224,
+                      (Colobus_satanas:6.0373470539999996,
+                      (Colobus_angolensis:3.4905714450000001,
+                      (Colobus_polykomos:0.80524509529999999,
+                      Colobus_guereza:0.80524509529999999):2.68532635):2.546775609):5.9207434470000004):1.648599693):4.7300741200000003,
+                      (((((Mandrillus_sphinx:1.9658911969999999,
+                      Mandrillus_leucophaeus:1.9658911969999999):3.4762921260000001,
+                      (Cercocebus_torquatus:2.3130962159999999,
+                      (Cercocebus_agilis:0.50323833959999997,
+                      Cercocebus_galeritus:0.50323833959999997):1.8098578759999999):3.1290871070000001):1.267822239,
+                      (Lophocebus_albigena:2.228040923,
+                      (Theropithecus_gelada:1.542748547,
+                      Papio_hamadryas:1.542748547):0.68529237620000005):4.4819646400000002):2.530843414,
+                      (Macaca_sylvanus:7.491106738,
+                      ((((Macaca_tonkeana:0.13527669789999999,
+                      Macaca_maura:0.13527669789999999):2.5129872579999999,
+                      (Macaca_ochreata:1.653294976,
+                      Macaca_nigra:1.653294976):0.99496898):0.93244801060000004,
+                      (Macaca_silenus:2.244767628,
+                      Macaca_nemestrina:2.244767628):1.335944338):2.6757539499999998,
+                      ((Macaca_arctoides:2.801002741,
+                      ((Macaca_radiata:0.71612501380000004,
+                      Macaca_assamensis:0.71612501380000004):0.99201283539999996,
+                      (Macaca_thibetana:1.0553819419999999,
+                      Macaca_sinica:1.0553819419999999):0.65275590750000001):1.0928648919999999):1.631659175,
+                      (Macaca_fascicularis:2.2295959220000001,
+                      (Macaca_fuscata:0.91274798619999997,
+                      (Macaca_mulatta:0.26901070630000001,
+                      Macaca_cyclopis:0.26901070630000001):0.64373727989999996):1.316847935):2.2030659950000002):1.8238039989999999):1.234640822):1.7497422380000001):2.0137033,
+                      (Allenopithecus_nigroviridis:8.2829853730000007,
+                      (Miopithecus_talapoin:6.7496352819999998,
+                      ((Erythrocebus_patas:5.1807069920000002,
+                      Chlorocebus_aethiops:5.1807069920000002):0.54439010290000001,
+                      ((Cercopithecus_solatus:0.84144054690000003,
+                      (Cercopithecus_preussi:0.0086170849650000006,
+                      Cercopithecus_lhoesti:0.0086170849650000006):0.83282346200000001):4.0708314720000001,
+                      (Cercopithecus_hamlyni:4.2153209829999998,
+                      ((Cercopithecus_neglectus:2.5588342119999998,
+                      ((Cercopithecus_mona:0.78647923799999997,
+                      Cercopithecus_campbelli:0.78647923799999997):0.4537817958,
+                      (Cercopithecus_wolfi:0.77825384409999998,
+                      Cercopithecus_pogonias:0.77825384409999998):0.46200718959999998):1.3185731780000001):1.0744991610000001,
+                      (((((Cercopithecus_erythrotis:0.50271963019999999,
+                      Cercopithecus_sclateri:0.50271963019999999):0.52957827260000001,
+                      (Cercopithecus_cephus:0.48864929499999998,
+                      Cercopithecus_ascanius:0.48864929499999998):0.54364860770000001):0.67628079819999998,
+                      (Cercopithecus_petaurista:0.75301738169999999,
+                      Cercopithecus_erythrogaster:0.75301738169999999):0.95556131919999998):0.61438944910000004,
+                      (Cercopithecus_nictitans:0.95477515560000004,
+                      Cercopithecus_mitis:0.95477515560000004):1.3681929939999999):0.63060311660000001,
+                      (Cercopithecus_dryas:1.234458241,
+                      Cercopithecus_diana:1.234458241):1.719113026):0.67976210579999996):0.58198761030000001):0.69695103579999995):0.8128250763):1.0245381870000001):1.533350091):2.9715669029999998):7.0822120389999998):14.0802668):18.80800735):11.37508356):2.4915639519999999);"/>
+        <q2mLambda spec="LogisticFunction" curveYBaseValue="@lambda0" curveMaxY="@lambda1"
+                   sigmoidMidpoint="@midpoint" logisticGrowthRate="@steepness"/>
+        <q2mMu spec="ConstantLinkFn" yV="@mu"/>
+        <q2d spec="NormalCenteredAtObservedLinkFn">
+          <!-- Keep keys single-spaced: BEAST treats repeated spaces as empty taxon keys. -->
+          <quTraits spec="parameter.RealParameter"
+                    keys="Allenopithecus_nigroviridis Allocebus_trichotis Alouatta_belzebul Alouatta_caraya Alouatta_coibensis Alouatta_fusca Alouatta_palliata Alouatta_pigra Alouatta_sara Alouatta_seniculus Aotus_azarai Aotus_brumbacki Aotus_hershkovitzi Aotus_infulatus Aotus_lemurinus Aotus_miconax Aotus_nancymaae Aotus_nigriceps Aotus_trivirgatus Aotus_vociferans Arctocebus_aureus Arctocebus_calabarensis Ateles_belzebuth Ateles_chamek Ateles_fusciceps Ateles_geoffroyi Ateles_marginatus Ateles_paniscus Avahi_laniger Brachyteles_arachnoides Cacajao_calvus Cacajao_melanocephalus Callicebus_brunneus Callicebus_caligatus Callicebus_cinerascens Callicebus_cupreus Callicebus_donacophilus Callicebus_dubius Callicebus_hoffmannsi Callicebus_modestus Callicebus_moloch Callicebus_oenanthe Callicebus_olallae Callicebus_personatus Callicebus_torquatus Callimico_goeldii Callithrix_argentata Callithrix_aurita Callithrix_flaviceps Callithrix_geoffroyi Callithrix_humeralifera Callithrix_jacchus Callithrix_kuhlii Callithrix_penicillata Callithrix_pygmaea Cebus_albifrons Cebus_apella Cebus_capucinus Cebus_olivaceus Cercocebus_agilis Cercocebus_galeritus Cercocebus_torquatus Cercopithecus_ascanius Cercopithecus_campbelli Cercopithecus_cephus Cercopithecus_diana Cercopithecus_dryas Cercopithecus_erythrogaster Cercopithecus_erythrotis Cercopithecus_hamlyni Cercopithecus_lhoesti Cercopithecus_mitis Cercopithecus_mona Cercopithecus_neglectus Cercopithecus_nictitans Cercopithecus_petaurista Cercopithecus_pogonias Cercopithecus_preussi Cercopithecus_sclateri Cercopithecus_solatus Cercopithecus_wolfi Cheirogaleus_major Cheirogaleus_medius Chiropotes_albinasus Chiropotes_satanas Chlorocebus_aethiops Colobus_angolensis Colobus_guereza Colobus_polykomos Colobus_satanas Daubentonia_madagascariensis Erythrocebus_patas Eulemur_coronatus Eulemur_fulvus Eulemur_macaco Eulemur_mongoz Eulemur_rubriventer Euoticus_elegantulus Euoticus_pallidus Galago_alleni Galago_gallarum Galago_matschiei Galago_moholi Galago_senegalensis Galagoides_demidoff Galagoides_zanzibaricus Gorilla_gorilla Hapalemur_aureus Hapalemur_griseus Hapalemur_simus Homo_sapiens Hylobates_agilis Hylobates_concolor Hylobates_gabriellae Hylobates_hoolock Hylobates_klossii Hylobates_lar Hylobates_leucogenys Hylobates_moloch Hylobates_muelleri Hylobates_pileatus Hylobates_syndactylus Indri_indri Lagothrix_flavicauda Lagothrix_lagotricha Lemur_catta Leontopithecus_caissara Leontopithecus_chrysomela Leontopithecus_chrysopygus Leontopithecus_rosalia Lepilemur_dorsalis Lepilemur_edwardsi Lepilemur_leucopus Lepilemur_microdon Lepilemur_mustelinus Lepilemur_ruficaudatus Lepilemur_septentrionalis Lophocebus_albigena Loris_tardigradus Macaca_arctoides Macaca_assamensis Macaca_cyclopis Macaca_fascicularis Macaca_fuscata Macaca_maura Macaca_mulatta Macaca_nemestrina Macaca_nigra Macaca_ochreata Macaca_radiata Macaca_silenus Macaca_sinica Macaca_sylvanus Macaca_thibetana Macaca_tonkeana Mandrillus_leucophaeus Mandrillus_sphinx Microcebus_coquereli Microcebus_murinus Microcebus_rufus Miopithecus_talapoin Nasalis_concolor Nasalis_larvatus Nycticebus_coucang Nycticebus_pygmaeus Otolemur_crassicaudatus Otolemur_garnettii Pan_paniscus Pan_troglodytes Papio_hamadryas Perodicticus_potto Phaner_furcifer Pithecia_aequatorialis Pithecia_albicans Pithecia_irrorata Pithecia_monachus Pithecia_pithecia Pongo_pygmaeus Presbytis_comata Presbytis_femoralis Presbytis_frontata Presbytis_hosei Presbytis_melalophos Presbytis_potenziani Presbytis_rubicunda Presbytis_thomasi Procolobus_badius Procolobus_pennantii Procolobus_preussi Procolobus_rufomitratus Procolobus_verus Propithecus_diadema Propithecus_tattersalli Propithecus_verreauxi Pygathrix_avunculus Pygathrix_bieti Pygathrix_brelichi Pygathrix_nemaeus Pygathrix_roxellana Saguinus_bicolor Saguinus_fuscicollis Saguinus_geoffroyi Saguinus_imperator Saguinus_inustus Saguinus_labiatus Saguinus_leucopus Saguinus_midas Saguinus_mystax Saguinus_nigricollis Saguinus_oedipus Saguinus_tripartitus Saimiri_boliviensis Saimiri_oerstedii Saimiri_sciureus Saimiri_ustus Saimiri_vanzolinii Semnopithecus_entellus Tarsius_bancanus Tarsius_dianae Tarsius_pumilus Tarsius_spectrum Tarsius_syrichta Theropithecus_gelada Trachypithecus_auratus Trachypithecus_cristatus Trachypithecus_francoisi Trachypithecus_geei Trachypithecus_johnii Trachypithecus_obscurus Trachypithecus_phayrei Trachypithecus_pileatus Trachypithecus_vetulus Varecia_variegata"
+                    value="8.4658998970286863 4.3681812278518288 8.7290735504517372 8.628734566149145
+                           8.7640532693477624 8.5544889761599343 8.7917900243193632 8.8818363050041462
+                           8.7963389328457318 8.7671733966840062 7.1276936993473985 6.4019171967271857
+                           6.6846117276679271 7.122866658599083 6.7810576259361799 6.6846117276679271
+                           6.678342114654332 6.9660241871061128 6.815639990074331 6.7719355558396019
+                           5.4595855141441589 5.5529595849216173 8.8128434335171946 8.8720665134083418
+                           9.1127275431091821 8.9372184508557311 8.7387354613634738 9.0722270698465479
+                           6.9275579062783166 9.2686092801001578 8.1373958300566507 8.0519780789022999
+                           6.7475865268293154 6.8997231072848724 6.8997231072848724 7.0210839642891401
+                           6.80128303447162 6.8997231072848724 6.9754139274559517 6.8997231072848724
+                           6.8721281013389861 6.8997231072848724 6.8997231072848724 7.2370590261247374
+                           7.1066061377273027 6.3243589623813108 5.9107966440405271 5.9610053396232736
+                           5.9269260259704106 5.8348107370626048 5.9269260259704106 5.6733232671714928
+                           5.9269260259704106 5.8289456176102075 4.8283137373023015 7.8320141805054693
+                           7.9229859587111955 8.0096953577429222 7.9373746961632952 8.8706630044060208
+                           8.8650291866877655 8.8942588250027033 8.1718820061278201 8.1997389606307856
+                           8.1432267503674449 8.382518288089635 7.9302062066846828 8.1432267503674449
+                           8.0864102753237823 8.4381499840757836 8.5792285823356895 8.5251613610654147
+                           8.2890370982784827 8.5792285823356895 8.567886305731756 8.0833286087863758
+                           8.1831180793947453 8.5448083584492114 8.0294328405812436 8.567886305731756
+                           8.0894824743607536 6.1047932324149849 5.2832037287379885 7.9373746961632952
+                           7.9963172317967457 8.3015216549407285 9.1038681274656668 9.2103403719761836
+                           9.0606795974217764 9.1215091582695678 7.9193561906606167 8.9884460400624047
+                           7.4383835300443071 7.779048644925556 7.8160138391590275 7.4787348255678747
+                           7.620705086838262 5.6903594543240601 5.6276211136906369 5.521460917862246
+                           5.3659760150218512 5.2678581590633282 5.3752784076841653 5.5947113796018391
+                           4.2061840439776361 4.9972122737641147 11.643953727376633 7.3588308983423536
+                           6.8627579130514009 7.620705086838262 10.980195005816189 8.675904882571059
+                           8.7687298172316659 9.0478214424784085 8.8098628053790566 8.6741969402259027
+                           8.6358647211337356 8.8983656069553572 8.6776099128221418 8.6877794919917708
+                           8.6305218767232414 9.2965180682172353 9.0653145999259248 9.0203897880177362
+                           8.7435316336269668 7.8785341961403619 6.4052284580308418 6.3526293963195668
+                           6.4861607889440887 6.3851943989977258 6.2324480165505225 6.7117403950561796
+                           6.3969296552161463 6.8638033914529544 6.508769136971682 6.6372580312844569
+                           6.6385677891665207 8.9038152117229217 5.5174528964647074 9.1484649682580947
+                           9.0548554691357879 8.6586927536899374 8.4316353030545912 9.2202907028293506
+                           8.8942588250027033 8.7718354097898175 8.9708133414114481 8.9065289175945175
+                           7.9193561906606167 8.5171931914162382 8.6995147482101913 8.4467707271196915
+                           9.3501023143513411 9.2686092801001578 9.2202907028293506 9.5609972435893518
+                           9.7291341653913506 5.7930136083841441 4.1987045775463434 3.8815637979434374
+                           7.1308988302963465 8.9793536432009464 9.417354541360508 6.8783264682913252
+                           5.8406416573733981 7.1308988302963465 6.70196036600254 10.468801361586188
+                           10.71663752549077 9.7350689009111644 6.9847163201182658 6.0161571596983539
+                           7.77485576666552 7.9373746961632952 7.7493224646603558 7.6544432264701125
+                           7.4205789054108005 10.860920227741458 9.0395520509959013 8.7978506489310533
+                           8.8536654280374503 8.7258320565275653 8.7483049123796235 8.7749313874949468
+                           8.7733845967766477 8.7656145499147158 8.8083691531222748 9.1226014576681766
+                           9.0949295204648557 8.9959087612639941 8.2890370982784827 8.794824928014517
+                           8.1718820061278201 8.2024824465765374 9.1642964334747763 9.1182250830683778
+                           9.3056505517805075 9.417354541360508 9.5104449644265205 6.1420374055873559
+                           5.9763509092979339 6.2005091740426899 6.0161571596983539 6.6883547139467616
+                           6.2344107257183712 6.1246833908942051 6.2934192788464811 6.3261494731550991
+                           6.1092475827643655 6.1398845522262553 5.9532433342877846 6.6908422774185636
+                           6.5708829623395841 6.620073206530356 6.7912214627261855 6.6644090203504076
+                           9.4414520929395689 4.7361984483944957 4.7095302013123339 4.808111029984782
+                           5.1119877883565437 4.7535901911063645 9.6803440012219184 9.1819408974544849
+                           8.8720665134083418 9.008224187854049 9.0312137060787467 9.2686092801001578
+                           8.8706630044060208 8.9489756078417759 9.3236690572831851 8.9695418854232525
+                           8.261009786023827"/>
+          <sdNormalQuTrValue spec="parameter.RealParameter" value="0.02"/>
+        </q2d>
+
+        <!-- Fixed controls match diversitree defaults for these data. Padding can still change
+             with diffusion. dynDt=true subdivides branches; it is not error-adaptive stepping. -->
+        <drift spec="parameter.RealParameter" value="0.0"/>
+        <dtMax spec="parameter.RealParameter" value="0.065091685983699993"/>
+        <dynDt spec="parameter.BooleanParameter" value="true"/>
+        <tc spec="parameter.RealParameter" value="6.5091685983699987"/>
+        <nX spec="parameter.IntegerParameter" value="1024"/>
+        <dX spec="parameter.RealParameter" value="0.037902294577310529"/>
+        <xMid spec="parameter.RealParameter" value="7.7627587626600354"/>
+        <flankWidthScaler spec="parameter.RealParameter" value="5.0"/>
+        <hiLoRatio spec="parameter.IntegerParameter" value="4"/>
+      </distribution>
+    </distribution>
+
+    <!-- Endpoint ordering is unrestricted: positive steepness allows either increasing or
+         decreasing speciation through lambda1 - lambda0. -->
+    <operator id="lambda0Scaler" spec="ScaleOperator" parameter="@lambda0" scaleFactor="0.75" weight="1"/>
+    <operator id="lambda1Scaler" spec="ScaleOperator" parameter="@lambda1" scaleFactor="0.75" weight="1"/>
+    <operator id="muScaler" spec="ScaleOperator" parameter="@mu" scaleFactor="0.75" weight="1"/>
+    <operator id="midpointWalk" spec="RealRandomWalkOperator" parameter="@midpoint" windowSize="0.5" weight="1"/>
+    <operator id="steepnessScaler" spec="ScaleOperator" parameter="@steepness" scaleFactor="0.75" weight="1"/>
+    <operator id="diffusionScaler" spec="ScaleOperator" parameter="@diffusion" scaleFactor="0.75" weight="1"/>
+
+    <logger id="trace" fileName="QuaSSE_233_primates.log" logEvery="1" model="@posterior">
+      <log idref="posterior"/>
+      <log idref="likelihood"/>
+      <log idref="prior"/>
+      <log idref="lambda0Prior"/>
+      <log idref="lambda1Prior"/>
+      <log idref="muPrior"/>
+      <log idref="midpointPrior"/>
+      <log idref="steepnessPrior"/>
+      <log idref="diffusionPrior"/>
+      <log idref="lambda0"/>
+      <log idref="lambda1"/>
+      <log idref="mu"/>
+      <log idref="midpoint"/>
+      <log idref="steepness"/>
+      <log idref="diffusion"/>
+    </logger>
+    <logger id="screen" logEvery="10">
+      <log idref="posterior"/>
+      <log idref="likelihood"/>
+      <log idref="prior"/>
+    </logger>
+  </run>
+</beast>
