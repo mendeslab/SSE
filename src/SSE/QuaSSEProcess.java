@@ -11,13 +11,12 @@ import beast.base.evolution.tree.Tree;
 import org.jtransforms.fft.DoubleFFT_1D;
 import org.shared.array.ComplexArray;
 import org.shared.array.RealArray;
-import org.shared.fft.JavaFftService;
 
 import java.util.Arrays;
 
 @Description("Specifies a quantitative trait(s) state-dependent speciation and" +
         "extinction birth-death process.")
-public abstract class QuaSSEProcess extends Distribution {
+public abstract class QuaSSEProcess extends Distribution implements AutoCloseable {
 
     final public Input<Tree> treeInput = new Input<>("tree", "Tree object containing tree.", Input.Validate.REQUIRED);
     final public Input<RealParameter> dtMaxInput = new Input<>("dtMax", "Length of max time interval over which integration is carried out.", Input.Validate.REQUIRED);
@@ -49,7 +48,6 @@ public abstract class QuaSSEProcess extends Distribution {
     protected double dtMax, tc;
     protected double dXbin, flankWidthScaler, xMinLo, xMinHi, xMid;
     protected int nXbinsLo, nUsefulXbinsLo, nXbinsHi, nUsefulXbinsHi, hiLoRatio;
-    protected int[] nXbinsLoSST, nXbinsHiSST; // for SST JavaFftService, same as nXbinsLo and nXbinsHi
     protected int[] nUsefulXbins, nLeftNRightFlanksHi, nLeftNRightFlanksLo;
     protected double[] xLo, xHi; // x rulers
     protected int[] hiLoIdxs4Transfer;
@@ -68,12 +66,12 @@ public abstract class QuaSSEProcess extends Distribution {
     private final double[] kernelDt = new double[2], kernelDrift = new double[2];
     private final double[] kernelDiffusion = new double[2], kernelDx = new double[2];
     private final int[] kernelLeft = new int[2], kernelRight = new int[2];
-    // using SST library
-    JavaFftService jffts;
+    protected ComplexFFT fftLo, fftHi;
 
     @Override
     public void initAndValidate() {
 
+        close();
         tree = treeInput.get();
         rootPriorType = priorProbAtRootTypeInput.get();
 
@@ -139,13 +137,19 @@ public abstract class QuaSSEProcess extends Distribution {
         fYHi = new double[nXbinsHi * 2]; // just real
         fftFYLo = new double[nXbinsLo * 2]; // just real
         fftFYHi = new double[nXbinsHi * 2]; // just real
-        nXbinsLoSST = new int[] { nXbinsLo };
-        nXbinsHiSST = new int[] { nXbinsHi };
-        jffts = new JavaFftService();
+        fftLo = new SstFFT(nXbinsLo);
+        fftHi = new SstFFT(nXbinsHi);
         Arrays.fill(kernelValid, false);
 
         // populatefY(dtMax, true, true, true, false); // force populate fY, and do FFT (coarse)
         // populatefY(dtMax, true, true, false, false); // force populate fY, and do FFT (fine)
+    }
+
+    // Release both resolutions on explicit closure or before reinitializing the distribution.
+    @Override
+    public void close() {
+        if (fftLo != null) fftLo.close();
+        if (fftHi != null) fftHi.close();
     }
 
     // Apply caller-validated coarse padding to both resolutions and update their useful bin counts.
@@ -279,7 +283,7 @@ public abstract class QuaSSEProcess extends Distribution {
         } else {
             SSEUtils.makeNormalKernelInPlaceSSTJavaFftService(raw, changeInXNormalMean, changeInXNormalSd,
                     size, padding[0], padding[1], dx);
-            if (doFFT) jffts.fft(lowRes ? nXbinsLoSST : nXbinsHiSST, raw, spectrum);
+            if (doFFT) (lowRes ? fftLo : fftHi).forward(raw, spectrum);
         }
         kernelDt[resolution] = aDt;
         kernelDrift[resolution] = currentDrift;

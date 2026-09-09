@@ -600,10 +600,12 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         // grab dt and nDimensions from state
         if (lowRes) {
-            SSEUtils.propagateEandDinXQuaLikeSSTJavaFftService(esDsAtNode, fftBufferEsDsAtNode, fftFYLo, scratchAtNode, nXbinsLo, nLeftNRightFlanksLo[0], nLeftNRightFlanksLo[1], nDimensionsE, nDimensionsD, jffts);
+            SSEUtils.propagateEandDinXQuaSSE(esDsAtNode, fftBufferEsDsAtNode, fftFYLo, scratchAtNode,
+                    nXbinsLo, nLeftNRightFlanksLo[0], nLeftNRightFlanksLo[1], nDimensionsE, nDimensionsD, fftLo);
         }
         else {
-            SSEUtils.propagateEandDinXQuaLikeSSTJavaFftService(esDsAtNode, fftBufferEsDsAtNode, fftFYHi, scratchAtNode, nXbinsHi, nLeftNRightFlanksHi[0], nLeftNRightFlanksHi[1], nDimensionsE, nDimensionsD, jffts);
+            SSEUtils.propagateEandDinXQuaSSE(esDsAtNode, fftBufferEsDsAtNode, fftFYHi, scratchAtNode,
+                    nXbinsHi, nLeftNRightFlanksHi[0], nLeftNRightFlanksHi[1], nDimensionsE, nDimensionsD, fftHi);
         }
     }
 

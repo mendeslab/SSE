@@ -320,6 +320,15 @@ public class SSEUtils {
     }
 
     public static void propagateEandDinXQuaLikeSSTJavaFftService(double[][] esDsAtNode, double[][] fftEsDsAtNode, double[] fftFY, double[][] scratchAtNode, int nXbins, int nLeftFlankBins, int nRightFlankBins, int nDimensionsE, int nDimensionsD, JavaFftService ffts) {
+        // Compatibility entry point for service-based callers; remove when they use ComplexFFT.
+        propagateEandDinXQuaSSE(esDsAtNode, fftEsDsAtNode, fftFY, scratchAtNode, nXbins,
+                nLeftFlankBins, nRightFlankBins, nDimensionsE, nDimensionsD, new SstFFT(nXbins, ffts));
+    }
+
+    // Apply the existing complex-array convolution, clipping and boundary restoration with either FFT.
+    public static void propagateEandDinXQuaSSE(double[][] esDsAtNode, double[][] fftEsDsAtNode,
+            double[] fftFY, double[][] scratchAtNode, int nXbins, int nLeftFlankBins,
+            int nRightFlankBins, int nDimensionsE, int nDimensionsD, ComplexFFT fft) {
         // Convolution reads input[i-offset]: preserve nRightFlankBins on the left and
         // nLeftFlankBins on the right. Keep this backend's existing E/D restoration policy.
         int nPad = nLeftFlankBins + nRightFlankBins + 1;
@@ -336,8 +345,7 @@ public class SSEUtils {
         // System.out.println("esDsAtNode = " + Arrays.toString(esDsAtNode[1]));
         // System.out.println("scratchAtNode = " + Arrays.toString(scratchAtNode[1]));
 
-        int[] nDims = new int[] { nXbins };
-        SSEUtils.convolveInPlaceSSTJavaFftService(esDsAtNode, fftEsDsAtNode, fftFY, nDimensionsE, nDimensionsD, nDims, ffts);
+        SSEUtils.convolveInPlace(esDsAtNode, fftEsDsAtNode, fftFY, nDimensionsE, nDimensionsD, fft);
 
         // number of real elements we will grab and move to the head of the array
         int nItems2Copy = nXbins - nLeftFlankBins - nRightFlankBins;
@@ -484,13 +492,21 @@ public class SSEUtils {
      * of the JavaFftService class
      */
     public static void convolveInPlaceSSTJavaFftService(double[][] esDsAtNode, double[][] fftEsDsAtNode, double[] fftFY, int nDimensionsE, int nDimensionsD, int[] nXbins, JavaFftService ffts) {
+        // Compatibility entry point for service-based callers; remove when they use ComplexFFT.
+        convolveInPlace(esDsAtNode, fftEsDsAtNode, fftFY, nDimensionsE, nDimensionsD,
+                new SstFFT(nXbins, ffts));
+    }
+
+    // Convolve E/D with the supplied spectrum using the unchanged complex product and inverse scaling.
+    public static void convolveInPlace(double[][] esDsAtNode, double[][] fftEsDsAtNode, double[] fftFY,
+            int nDimensionsE, int nDimensionsD, ComplexFFT fft) {
         // int normalizingInverseFFTFactor = esDsAtNode[0].length;
 
         // doing E's and D's
         for (int ithDim = 0; ithDim < (nDimensionsE + nDimensionsD); ithDim++) {
 
             // fft-ing
-            ffts.fft(nXbins, esDsAtNode[ithDim], fftEsDsAtNode[ithDim]); // fftEsDsAtNode: real complex real complex...
+            fft.forward(esDsAtNode[ithDim], fftEsDsAtNode[ithDim]); // real complex real complex...
             // kylieJNI.fft(nRE, input_array_REdoubles_with_twice_nRE, output_array_REcomplex_with_twice_nRE)
 
             // convolving
@@ -504,7 +520,7 @@ public class SSEUtils {
             }
 
             // ifft-ing
-            ffts.ifft(nXbins, fftEsDsAtNode[ithDim], esDsAtNode[ithDim]);
+            fft.inverse(fftEsDsAtNode[ithDim], esDsAtNode[ithDim]);
             // kylieJNI.ifft(nRE, input_array_REcomplex_with_twice_nRE, output_array_REdoubles_with_twice_nRE)
         }
     }
