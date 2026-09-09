@@ -1,6 +1,5 @@
 <project default="compile" basedir=".">
 
-  <!-- CONFIGURATION: Source, JUnit test code and jar library locations. -->
   <property name="src" location="src"/>
   <property name="test" location="test"/>
   <property name="lib" location="lib"/>
@@ -16,9 +15,7 @@
   <property name="junit.jar" location="${junit.download}"/>
   <property name="test.services" location="build/test-services"/>
   <property name="classpath" value=""/>
-  <!--*******************************************************************-->
 
-  <!-- Directories necessary for all BEAST 2 packages -->
   <property name="examples" location="examples"/>
 
   <!-- These select class/test/package outputs. Launch arguments and test support default to build/.
@@ -48,85 +45,24 @@
   <!-- Check only targets that need BEAST; help, clean and JUnit downloads remain independent. -->
   <target name="check-beast-home">
     <fail message="Set BEAST_HOME to a BEAST installation containing bin/ and lib/.">
-      <condition><or>
-        <not><isset property="env.BEAST_HOME"/></not>
-        <equals arg1="${env.BEAST_HOME}" arg2=""/>
-        <not><available file="${env.BEAST_HOME}" type="dir"/></not>
-      </or></condition>
+      <condition>
+        <or>
+          <not><isset property="env.BEAST_HOME"/></not>
+          <equals arg1="${env.BEAST_HOME}" arg2=""/>
+          <not><available file="${env.BEAST_HOME}" type="dir"/></not>
+        </or>
+      </condition>
     </fail>
   </target>
 
-  <target name="show-config" depends="check-beast-home" description="Show BEAST dependency paths">
-    <echo>BEAST_HOME: ${env.BEAST_HOME}
-Base jar: ${beast.jar}
-Launcher: ${launcher.jar}
-App jar: ${beast.app.jar}
-Base metadata: ${beast.version}
-App metadata: ${beast.app.version}
-JUnit: ${junit.jar}</echo>
-  </target>
-
-  <target name="prepare-base-services" depends="check-beast-home">
-    <!-- Empty lib directories let BEAST's JUnit service discovery find the parent version.xml.
-         This adapts installed metadata filenames to JUnit discovery, not package installation. -->
-    <mkdir dir="${test.services}/BEAST.base/lib"/>
-    <mkdir dir="${test.services}/biogeo/lib"/>
-    <copy file="${beast.version}" tofile="${test.services}/BEAST.base/version.xml" overwrite="true"/>
-    <copy file="version.xml" tofile="${test.services}/biogeo/version.xml" overwrite="true"/>
-  </target>
-
-  <target name="fetch-test-deps" description="Explicitly download and verify the test-only JUnit jar">
-    <mkdir dir="build/test-libs"/>
-    <get src="https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-console-standalone/1.8.2/junit-platform-console-standalone-1.8.2.jar"
-         dest="${junit.download}" skipexisting="true"/>
-    <checksum file="${junit.download}" algorithm="SHA-256" property="junit.sha256"/>
-    <fail message="JUnit checksum mismatch. Remove the downloaded file and retry fetch-test-deps.">
-      <condition><not><equals arg1="${junit.sha256}"
-        arg2="dc498f234228f81c818becfb6b7f71f73df2b0e995f93f25c05fced0c77e6356"/></not></condition>
-    </fail>
-  </target>
-
-  <!-- Share resolved paths between the command-line launcher and IDE instructions.
-       Absolute, quoted arguments allow launching from another directory, including spaces. -->
-  <target name="prepare-launch" depends="check-beast-home" description="Write standard Java launcher arguments without compiling">
-    <pathconvert property="launch.classpath">
-      <path>
-        <pathelement location="${build}"/>
-        <path refid="compile.classpath"/>
-        <pathelement location="${launcher.jar}"/>
-        <pathelement location="${beast.app.jar}"/>
-      </path>
-    </pathconvert>
-    <property name="launch.base.version" location="${beast.version}"/>
-    <property name="launch.app.version" location="${beast.app.version}"/>
-    <echo file="build/beast.args">-cp
-"${launch.classpath}"
-beast.pkgmgmt.launcher.BeastLauncher
--version_file
-"${launch.base.version}"
--version_file
-"${launch.app.version}"
--version_file
-"${basedir}/version.xml"
-</echo>
-  </target>
-
-  <target name="prepare-run" depends="compile,prepare-launch"/>
-
-  <target name="show-ide" depends="prepare-launch" description="Show IDE classpath and program arguments">
-    <loadfile property="launch.arguments" srcfile="build/beast.args"/>
-    <echo>${launch.arguments}
-In the IDE, replace the SSE build classpath entry with the IDE's output directory.
-Use your run directory as the working directory; append the XML path to the program arguments.</echo>
-  </target>
-
-  <!-- Prepare for compilation -->
   <target name="init" depends="check-beast-home">
 
     <mkdir dir="${build}"/>
 
     <fail message="BEAST.base.jar not found: ${beast.jar}. Check BEAST_HOME.">
-      <condition><not><available file="${beast.jar}"/></not></condition>
+      <condition>
+        <not><available file="${beast.jar}"/></not>
+      </condition>
     </fail>
   </target>
 
@@ -138,23 +74,32 @@ Use your run directory as the working directory; append the XML path to the prog
     </javac>
   </target>
 
-  
-  <!-- Prepare for unit test compilation -->
+  <target name="prepare-base-services" depends="check-beast-home">
+    <!-- Empty lib directories let BEAST's JUnit service discovery find the parent version.xml.
+         This adapts installed metadata filenames to JUnit discovery, not package installation. -->
+    <mkdir dir="${test.services}/BEAST.base/lib"/>
+    <mkdir dir="${test.services}/biogeo/lib"/>
+    <copy file="${beast.version}" tofile="${test.services}/BEAST.base/version.xml" overwrite="true"/>
+    <copy file="version.xml" tofile="${test.services}/biogeo/version.xml" overwrite="true"/>
+  </target>
+
   <target name="init-test" depends="init,prepare-base-services">
     <mkdir dir="${build-test}"/>
     <mkdir dir="${test-reports}"/>
 
     <fail message="BEAST launcher.jar not found: ${launcher.jar}. Check BEAST_HOME.">
-      <condition><not><available file="${launcher.jar}"/></not></condition>
+      <condition>
+        <not><available file="${launcher.jar}"/></not>
+      </condition>
     </fail>
 
     <fail message="JUnit not found: ${junit.jar}. Run ant fetch-test-deps or set -Djunit.jar.">
-      <condition><not><available file="${junit.jar}"/></not></condition>
+      <condition>
+        <not><available file="${junit.jar}"/></not>
+      </condition>
     </fail>
   </target>
 
-
-  <!-- Compile unit tests -->
   <target name="compile-test" depends="init-test,compile">
     <javac release="${javaVersion}" srcdir="${src}" destdir="${build-test}" includeantruntime="false"
            includes="test/**/*.java,drivers/**/*.java,validation/**/*.java">
@@ -165,8 +110,6 @@ Use your run directory as the working directory; append the XML path to the prog
     </javac>
   </target>
 
-
-  <!-- Run unit tests -->
   <target name="test" depends="compile-test">
     <java classname="org.junit.platform.console.ConsoleLauncher" fork="true" failonerror="true"
           dir="${basedir}" maxmemory="1g">
@@ -198,15 +141,26 @@ Use your run directory as the working directory; append the XML path to the prog
 
   <target name="test-all" depends="test-mosse,test"/>
 
+  <target name="fetch-test-deps" description="Explicitly download and verify the test-only JUnit jar">
+    <mkdir dir="build/test-libs"/>
+    <get src="https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-console-standalone/1.8.2/junit-platform-console-standalone-1.8.2.jar"
+         dest="${junit.download}" skipexisting="true"/>
+    <checksum file="${junit.download}" algorithm="SHA-256" property="junit.sha256"/>
+    <fail message="JUnit checksum mismatch. Remove the downloaded file and retry fetch-test-deps.">
+      <condition>
+        <not>
+          <equals arg1="${junit.sha256}"
+                  arg2="dc498f234228f81c818becfb6b7f71f73df2b0e995f93f25c05fced0c77e6356"/>
+        </not>
+      </condition>
+    </fail>
+  </target>
 
-  <!-- Create BEAST 2 package -->
   <target name="build" depends="compile">
-    <!-- Read package name and version from xml file -->
     <xmlproperty file="version.xml" prefix="fromVersionFile" />
     <property name="projName" value="${fromVersionFile.package(name)}" />
     <property name="projVersion" value="${fromVersionFile.package(version)}" />
     <property name="fullName" value="${projName}.v${projVersion}"/>
-
 
     <jar jarfile="${pack}/${fullName}.src.jar" basedir="${src}" />
 
@@ -234,13 +188,9 @@ Use your run directory as the working directory; append the XML path to the prog
 
     <delete dir="${pack}"/>
 
-    <echo/>
-    <echo/>
-    <echo>** Package ${dist}/${fullName}.zip created successfuly! **</echo>
+    <echo>Created ${dist}/${fullName}.zip</echo>
   </target>
 
-
-  <!-- Revert to pristine state. -->
   <target name="clean">
     <delete dir="${build}" />
     <delete dir="${dist}" />
@@ -248,5 +198,48 @@ Use your run directory as the working directory; append the XML path to the prog
     <delete dir="${test-reports}" />
   </target>
 
+  <!-- Share resolved paths between the command-line launcher and IDE instructions.
+       Absolute, quoted arguments allow launching from another directory, including spaces. -->
+  <target name="prepare-launch" depends="check-beast-home" description="Write standard Java launcher arguments without compiling">
+    <pathconvert property="launch.classpath">
+      <path>
+        <pathelement location="${build}"/>
+        <path refid="compile.classpath"/>
+        <pathelement location="${launcher.jar}"/>
+        <pathelement location="${beast.app.jar}"/>
+      </path>
+    </pathconvert>
+    <property name="launch.base.version" location="${beast.version}"/>
+    <property name="launch.app.version" location="${beast.app.version}"/>
+    <echo file="build/beast.args">-cp
+"${launch.classpath}"
+beast.pkgmgmt.launcher.BeastLauncher
+-version_file
+"${launch.base.version}"
+-version_file
+"${launch.app.version}"
+-version_file
+"${basedir}/version.xml"
+</echo>
+  </target>
+
+  <target name="prepare-run" depends="compile,prepare-launch"/>
+
+  <target name="show-config" depends="check-beast-home" description="Show BEAST dependency paths">
+    <echo>BEAST_HOME: ${env.BEAST_HOME}
+Base jar: ${beast.jar}
+Launcher: ${launcher.jar}
+App jar: ${beast.app.jar}
+Base metadata: ${beast.version}
+App metadata: ${beast.app.version}
+JUnit: ${junit.jar}</echo>
+  </target>
+
+  <target name="show-ide" depends="prepare-launch" description="Show IDE classpath and program arguments">
+    <loadfile property="launch.arguments" srcfile="build/beast.args"/>
+    <echo>${launch.arguments}
+In the IDE, replace the SSE build classpath entry with the IDE's output directory.
+Use your run directory as the working directory; append the XML path to the program arguments.</echo>
+  </target>
 
 </project>
