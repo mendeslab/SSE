@@ -8,8 +8,8 @@ import java.util.Random;
 import static org.junit.Assert.*;
 
 public class QuaSSENativeIntegratorTest {
-    // Model likelihoods can hide incorrect intermediate values and segment-to-segment reuse.
-    // Compare full arrays and one-step calls while both Java and native integration are supported.
+    // Model likelihoods can hide stale segment values: change dt with rates held fixed on one owner.
+    // Compare full arrays and one-step calls; revisit Java equivalence when the algorithms diverge.
     @Test
     public void matchesJavaSegments() {
         Random random = new Random(128);
@@ -24,31 +24,36 @@ public class QuaSSENativeIntegratorTest {
                     kernel[2] = .2;
                     kernel[2 * size - 2] = .1;
                     fft.forward(kernel, spectrum);
-                    double[][] expected = new double[3][2 * size];
-                    double[][] actual = new double[3][], singleSteps = new double[3][];
+                    double[][] initial = new double[3][2 * size];
                     for (int i = 0; i < useful; ++i) {
                         birth[i] = .15 + .1 * random.nextDouble();
                         death[i] = .01 + .05 * random.nextDouble();
                     }
                     for (int d = 0; d < 3; ++d) {
                         for (int i = 0; i < 2 * size; ++i)
-                            expected[d][i] = random.nextDouble() - (d == 0 ? 0 : .2);
-                        actual[d] = expected[d].clone();
-                        singleSteps[d] = expected[d].clone();
+                            initial[d][i] = random.nextDouble() - (d == 0 ? 0 : .2);
                     }
                     double[] savedBirth = birth.clone(), savedDeath = death.clone(), savedKernel = spectrum.clone();
-                    double[][] scratch = new double[3][2 * size], transformed = new double[3][2 * size];
-                    nativeT.integrateSegment(actual, birth, death, spectrum, .005, steps, left, right);
-                    for (int step = 0; step < steps; ++step) {
-                        SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(
-                                expected, scratch, birth, death, .005, useful, 2);
-                        SSEUtils.propagateEandDinXQuaSSE(expected, transformed, spectrum, scratch,
-                                size, left, right, 1, 2, fft);
-                        nativeT.integrateSegment(singleSteps, birth, death, spectrum, .005, 1, left, right);
-                    }
-                    for (int d = 0; d < 3; ++d) {
-                        assertArrayEquals(expected[d], actual[d], steps == 0 ? 0 : 1e-12);
-                        assertArrayEquals(singleSteps[d], actual[d], 0);
+                    for (double dt : new double[]{.005, .02}) {
+                        double[][] expected = new double[3][], actual = new double[3][], singleSteps = new double[3][];
+                        for (int d = 0; d < 3; ++d) {
+                            expected[d] = initial[d].clone();
+                            actual[d] = initial[d].clone();
+                            singleSteps[d] = initial[d].clone();
+                        }
+                        double[][] scratch = new double[3][2 * size], transformed = new double[3][2 * size];
+                        nativeT.integrateSegment(actual, birth, death, spectrum, dt, steps, left, right);
+                        for (int step = 0; step < steps; ++step) {
+                            SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(
+                                    expected, scratch, birth, death, dt, useful, 2);
+                            SSEUtils.propagateEandDinXQuaSSE(expected, transformed, spectrum, scratch,
+                                    size, left, right, 1, 2, fft);
+                            nativeT.integrateSegment(singleSteps, birth, death, spectrum, dt, 1, left, right);
+                        }
+                        for (int d = 0; d < 3; ++d) {
+                            assertArrayEquals(expected[d], actual[d], steps == 0 ? 0 : 1e-12);
+                            assertArrayEquals(singleSteps[d], actual[d], 0);
+                        }
                     }
                     assertArrayEquals(savedBirth, birth, 0);
                     assertArrayEquals(savedDeath, death, 0);

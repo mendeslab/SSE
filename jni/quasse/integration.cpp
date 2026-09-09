@@ -15,21 +15,20 @@ public:
     ComplexFFT fft;
     const int dimensions;
     std::vector<double> original, result, kernel;
-    std::vector<double> birth, death, dFactors;
+    std::vector<double> birth, death, dFactors, expDtNetRates;
 
     // Caller holds preparation_mutex, including destruction if an allocation fails.
     Integration(int size, int dims) : fft(size), dimensions(dims),
         original(std::size_t(2) * size * dims), result(original.size()), kernel(2 * size),
-        birth(size), death(size), dFactors(size) {}
+        birth(size), death(size), dFactors(size), expDtNetRates(size) {}
 
     // Literal Java T update: real useful bins only, E first then all D rows.
     // Both E and the saved D factor use OLD E. Preserve singular cases and expression order;
     // in particular, negative D is cleared without multiplying, while NaN follows the else branch.
-    void propagateT(double dt, int useful) {
+    void propagateT(int useful) {
         for (int i = 0; i < useful; ++i) {
             const double lambda = birth[i], mu = death[i];
-            const double netDivRate = lambda - mu;
-            const double z = std::exp(dt * netDivRate);
+            const double z = expDtNetRates[i];
             const double e = original[2 * i];
             double tmp1 = mu - lambda * e;
             const double tmp2 = z * (e - 1);
@@ -49,9 +48,14 @@ public:
     // Each X restores POST-T boundaries. Swapping makes its result the next step's input,
     // without Java transfers or a full-array copy. Final values always reside in original.
     void integrate(double dt, int steps, int left, int right) {
+        if (steps == 0) return;
         const int useful = fft.size - left - right - 1;
+        // Rates and dt stay fixed within this segment; E-dependent factors still change each step.
+        // Refresh every segment, including when only dt changed since the previous call.
+        for (int i = 0; i < useful; ++i)
+            expDtNetRates[i] = std::exp(dt * (birth[i] - death[i]));
         for (int step = 0; step < steps; ++step) {
-            propagateT(dt, useful);
+            propagateT(useful);
             propagate(left, right);
             original.swap(result);
         }
