@@ -1,5 +1,5 @@
 # Independent of the retained MoSSE native build. All outputs stay under SSE/build/.
-# Produces libsse_quasse.so for FFTs and X propagation; Ant's optional native target invokes it.
+# Produces libsse_quasse.so for FFTs and integration; Ant's optional native target invokes it.
 CXX = g++-16
 JAVA_HOME ?= $(shell dirname $(shell dirname $(shell readlink -f $(shell command -v javac))))
 BUILD_DIR ?= ../../build/gcc-16-debug-O

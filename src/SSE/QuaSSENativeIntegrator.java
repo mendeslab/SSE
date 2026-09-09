@@ -4,10 +4,9 @@ import java.lang.ref.Cleaner;
 import java.lang.ref.Reference;
 
 /**
- * Native QuaSSE X propagation, with independently owned arrays and FFTW transforms.
- * Each call copies current E/D and kernel inputs; no model state is cached between calls.
- * Per-step copying is temporary; whole-segment integration can later transfer inputs once.
- * T propagation remains in Java. Close explicitly; Cleaner releases abandoned instances.
+ * Native QuaSSE calculations, with independently owned arrays and FFTW transforms.
+ * Segment calls copy current E/D, rates and kernel once, then repeat T/X in native storage.
+ * No model state is cached between calls. Close explicitly; Cleaner releases abandoned instances.
  */
 public final class QuaSSENativeIntegrator implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
@@ -54,6 +53,18 @@ public final class QuaSSENativeIntegrator implements AutoCloseable {
         cleanable.clean();
     }
 
+    /** Repeat T then X; row zero is E and remaining rows are D. Rates have N-left-right-1 entries.
+     * Inputs other than E/D are unchanged. Zero steps are the identity, with no normalization.
+     */
+    public void integrateSegment(double[][] esDs, double[] birthRates, double[] deathRates,
+            double[] kernelSpectrum, double dt, int steps, int leftPadding, int rightPadding) {
+        try {
+            state.integrateSegment(esDs, birthRates, deathRates, kernelSpectrum, dt, steps, leftPadding, rightPadding);
+        } finally {
+            Reference.reachabilityFence(this);
+        }
+    }
+
     // No reference to the owner; the same lock protects execution and explicit/GC cleanup.
     private static final class NativeState implements Runnable {
         private long handle;
@@ -62,6 +73,13 @@ public final class QuaSSENativeIntegrator implements AutoCloseable {
         synchronized void propagateX(double[][] esDs, double[] kernel, int left, int right) {
             if (handle == 0) throw new IllegalStateException("QuaSSE integrator has been closed.");
             propagateXNative(handle, esDs, kernel, left, right);
+        }
+
+        // Hold the ownership lock for the whole segment, excluding explicit and automatic cleanup.
+        synchronized void integrateSegment(double[][] esDs, double[] birth, double[] death,
+                double[] kernel, double dt, int steps, int left, int right) {
+            if (handle == 0) throw new IllegalStateException("QuaSSE integrator has been closed.");
+            integrateSegmentNative(handle, esDs, birth, death, kernel, dt, steps, left, right);
         }
 
         // Repeated cleanup is harmless, including close followed by garbage collection.
@@ -77,4 +95,6 @@ public final class QuaSSENativeIntegrator implements AutoCloseable {
     private static native void propagateXNative(long handle, double[][] esDs, double[] kernel,
                                                 int leftPadding, int rightPadding);
     private static native void destroy(long handle);
+    private static native void integrateSegmentNative(long handle, double[][] esDs, double[] birth,
+            double[] death, double[] kernel, double dt, int steps, int leftPadding, int rightPadding);
 }

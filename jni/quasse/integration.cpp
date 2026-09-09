@@ -1,7 +1,8 @@
-// Native X propagation only. Java retains T, time stepping, grids, and normalization.
+// Native T/X calculations. Java chooses time steps and handles grids and normalization.
 #include "SSE_QuaSSENativeIntegrator.h"
 #include "native_support.h"
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 using namespace quasse_native;
@@ -14,10 +15,47 @@ public:
     ComplexFFT fft;
     const int dimensions;
     std::vector<double> original, result, kernel;
+    std::vector<double> birth, death, dFactors;
 
     // Caller holds preparation_mutex, including destruction if an allocation fails.
     Integration(int size, int dims) : fft(size), dimensions(dims),
-        original(std::size_t(2) * size * dims), result(original.size()), kernel(2 * size) {}
+        original(std::size_t(2) * size * dims), result(original.size()), kernel(2 * size),
+        birth(size), death(size), dFactors(size) {}
+
+    // Literal Java T update: real useful bins only, E first then all D rows.
+    // Both E and the saved D factor use OLD E. Preserve singular cases and expression order;
+    // in particular, negative D is cleared without multiplying, while NaN follows the else branch.
+    void propagateT(double dt, int useful) {
+        for (int i = 0; i < useful; ++i) {
+            const double lambda = birth[i], mu = death[i];
+            const double netDivRate = lambda - mu;
+            const double z = std::exp(dt * netDivRate);
+            const double e = original[2 * i];
+            double tmp1 = mu - lambda * e;
+            const double tmp2 = z * (e - 1);
+            original[2 * i] = (tmp1 + tmp2 * mu) / (tmp1 + tmp2 * lambda);
+            tmp1 = (lambda - mu) / (z * lambda - mu + (1 - z) * lambda * e);
+            dFactors[i] = z * tmp1 * tmp1;
+        }
+        for (int d = 1; d < dimensions; ++d) {
+            auto* values = original.data() + std::size_t(d) * 2 * fft.size;
+            for (int i = 0; i < useful; ++i) {
+                if (values[2 * i] < 0) values[2 * i] = 0;
+                else values[2 * i] *= dFactors[i];
+            }
+        }
+    }
+
+    // Each X restores POST-T boundaries. Swapping makes its result the next step's input,
+    // without Java transfers or a full-array copy. Final values always reside in original.
+    void integrate(double dt, int steps, int left, int right) {
+        const int useful = fft.size - left - right - 1;
+        for (int step = 0; step < steps; ++step) {
+            propagateT(dt, useful);
+            propagate(left, right);
+            original.swap(result);
+        }
+    }
 
     // Match SSEUtils: forward, complex product, normalized inverse, real clipping, real restoration.
     // Convolution reads input[i-offset], so left/right kernel extents restore opposite boundaries.
@@ -122,6 +160,35 @@ JNIEXPORT void JNICALL Java_SSE_QuaSSENativeIntegrator_propagateXNative(JNIEnv* 
         if (!integration->readInputs(env, rows, kernel, left, right)) return;
         integration->propagate(left, right);
         integration->writeOutput(env, rows, integration->result);
+    } catch (...) {
+        translate_exception(env);
+    }
+}
+
+// Copy rates once per segment; no JNI calls or allocation occur in the repeated T/X loop.
+JNIEXPORT void JNICALL Java_SSE_QuaSSENativeIntegrator_integrateSegmentNative(JNIEnv* env, jclass, jlong handle,
+        jobjectArray rows, jdoubleArray birth, jdoubleArray death, jdoubleArray kernel,
+        jdouble dt, jint steps, jint left, jint right) {
+    try {
+        auto* integration = reinterpret_cast<Integration*>(static_cast<std::intptr_t>(handle));
+        if (!integration) {
+            throw_java(env, "java/lang/IllegalStateException", "QuaSSE integrator has been closed.");
+            return;
+        }
+        if (!integration->readInputs(env, rows, kernel, left, right)) return;
+        const int useful = integration->fft.size - left - right - 1;
+        if (steps < 0 || integration->dimensions < 2 || !birth || !death
+                || env->GetArrayLength(birth) != useful || env->GetArrayLength(death) != useful) {
+            throw_java(env, "java/lang/IllegalArgumentException", "Segment requires E/D, useful-bin rates and nonnegative steps.");
+            return;
+        }
+        if (steps == 0) return;
+        env->GetDoubleArrayRegion(birth, 0, useful, integration->birth.data());
+        if (env->ExceptionCheck()) return;
+        env->GetDoubleArrayRegion(death, 0, useful, integration->death.data());
+        if (env->ExceptionCheck()) return;
+        integration->integrate(dt, steps, left, right);
+        integration->writeOutput(env, rows, integration->original);
     } catch (...) {
         translate_exception(env);
     }
