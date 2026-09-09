@@ -16,6 +16,7 @@ out/*
 /test2-*.csv
 /beast.log
 /state.backup.xml
+/build.properties
 
 plots/*
 data/*

@@ -1,0 +1,105 @@
+<project name="beast-config">
+  <!-- Select a root before loading local defaults, so an explicit source root beats BEAST_HOME. -->
+  <property environment="env"/>
+  <property file="build.properties" prefix="local"/>
+  <fail message="Specify only one of -Dbeast.home (installation) and -Dbeast.dir (source checkout).">
+    <condition><and><isset property="beast.home"/><isset property="beast.dir"/></and></condition>
+  </fail>
+  <fail message="build.properties must select only one of beast.home and beast.dir.">
+    <condition><and>
+      <not><isset property="beast.home"/></not><not><isset property="beast.dir"/></not>
+      <isset property="local.beast.home"/><isset property="local.beast.dir"/>
+    </and></condition>
+  </fail>
+  <condition property="beast.selection" value="command line: beast.home"><isset property="beast.home"/></condition>
+  <condition property="beast.mode" value="installed"><isset property="beast.home"/></condition>
+  <condition property="beast.root" value="${beast.home}"><isset property="beast.home"/></condition>
+  <condition property="beast.selection" value="command line: beast.dir"><isset property="beast.dir"/></condition>
+  <condition property="beast.mode" value="source"><isset property="beast.dir"/></condition>
+  <condition property="beast.root" value="${beast.dir}"><isset property="beast.dir"/></condition>
+  <condition property="beast.selection" value="build.properties: beast.home"><isset property="local.beast.home"/></condition>
+  <condition property="beast.mode" value="installed"><isset property="local.beast.home"/></condition>
+  <condition property="beast.root" value="${local.beast.home}"><isset property="local.beast.home"/></condition>
+  <condition property="beast.selection" value="build.properties: beast.dir"><isset property="local.beast.dir"/></condition>
+  <condition property="beast.mode" value="source"><isset property="local.beast.dir"/></condition>
+  <condition property="beast.root" value="${local.beast.dir}"><isset property="local.beast.dir"/></condition>
+  <condition property="beast.selection" value="environment: BEAST_HOME">
+    <and><isset property="env.BEAST_HOME"/><not><equals arg1="${env.BEAST_HOME}" arg2=""/></not></and>
+  </condition>
+  <condition property="beast.mode" value="installed">
+    <and><isset property="env.BEAST_HOME"/><not><equals arg1="${env.BEAST_HOME}" arg2=""/></not></and>
+  </condition>
+  <condition property="beast.root" value="${env.BEAST_HOME}">
+    <and><isset property="env.BEAST_HOME"/><not><equals arg1="${env.BEAST_HOME}" arg2=""/></not></and>
+  </condition>
+  <property name="beast.selection" value="default: sibling source checkouts"/>
+  <property name="beast.mode" value="source"/>
+  <property name="beast.root" value="../beast2"/>
+  <property name="beast.root.absolute" location="${beast.root}"/>
+  <property file="build.properties"/>
+  <property name="beastfx.dir" location="../BeastFX"/>
+  <condition property="beast.jar" value="${beast.root.absolute}/lib/packages/BEAST.base.jar"
+             else="${beast.root.absolute}/build/dist/BEAST.base.jar">
+    <equals arg1="${beast.mode}" arg2="installed"/>
+  </condition>
+  <condition property="launcher.jar" value="${beast.root.absolute}/lib/launcher.jar"
+             else="${beast.root.absolute}/build/dist/launcher.jar">
+    <equals arg1="${beast.mode}" arg2="installed"/>
+  </condition>
+  <condition property="beast.app.jar" value="${beast.root.absolute}/lib/packages/BEAST.app.jar"
+             else="${beastfx.dir}/build/dist/BEAST.app.jar">
+    <equals arg1="${beast.mode}" arg2="installed"/>
+  </condition>
+  <condition property="beast.version" value="${beast.root.absolute}/lib/packages/BEAST.base.version.xml"
+             else="${beast.root.absolute}/version.xml">
+    <equals arg1="${beast.mode}" arg2="installed"/>
+  </condition>
+  <condition property="beast.app.version" value="${beast.root.absolute}/lib/packages/BEAST.app.version.xml"
+             else="${beastfx.dir}/version.xml">
+    <equals arg1="${beast.mode}" arg2="installed"/>
+  </condition>
+  <property name="junit.download" location="build/test-libs/junit-platform-console-standalone-1.8.2.jar"/>
+  <condition property="junit.jar" value="${junit.download}"
+             else="${beast.root.absolute}/lib/junit/junit-platform-console-standalone-1.8.2.jar">
+    <equals arg1="${beast.mode}" arg2="installed"/>
+  </condition>
+  <property name="test.services" location="build/test-services"/>
+
+  <target name="show-config" description="Show BEAST selection, paths, and package versions">
+    <echo>BEAST selection: ${beast.selection}
+Mode: ${beast.mode}
+Base jar: ${beast.jar}
+Launcher: ${launcher.jar}
+App jar: ${beast.app.jar}
+Base metadata: ${beast.version}
+App metadata: ${beast.app.version}
+JUnit: ${junit.jar}
+Set BEAST_HOME to an installation containing bin/ and lib/, or use -Dbeast.dir for sources.</echo>
+    <xmlproperty file="${beast.version}" prefix="base.info"/>
+    <xmlproperty file="${beast.app.version}" prefix="app.info"/>
+    <echo>BEAST.base: ${base.info.package(version)}; BEAST.app: ${app.info.package(version)}</echo>
+  </target>
+
+  <target name="prepare-base-services">
+    <fail message="BEAST.base metadata not found: ${beast.version}. Check BEAST_HOME or beast.dir.">
+      <condition><not><available file="${beast.version}"/></not></condition>
+    </fail>
+    <!-- Empty lib directories let BEAST's JUnit service discovery find the parent version.xml.
+         This adapts installed metadata filenames to JUnit discovery, not package installation. -->
+    <mkdir dir="${test.services}/BEAST.base/lib"/>
+    <mkdir dir="${test.services}/biogeo/lib"/>
+    <copy file="${beast.version}" tofile="${test.services}/BEAST.base/version.xml" overwrite="true"/>
+    <copy file="version.xml" tofile="${test.services}/biogeo/version.xml" overwrite="true"/>
+  </target>
+
+  <target name="fetch-test-deps" description="Explicitly download and verify the test-only JUnit jar">
+    <mkdir dir="build/test-libs"/>
+    <get src="https://repo.maven.apache.org/maven2/org/junit/platform/junit-platform-console-standalone/1.8.2/junit-platform-console-standalone-1.8.2.jar"
+         dest="${junit.download}" skipexisting="true"/>
+    <checksum file="${junit.download}" algorithm="SHA-256" property="junit.sha256"/>
+    <fail message="JUnit checksum mismatch. Remove the downloaded file and retry fetch-test-deps.">
+      <condition><not><equals arg1="${junit.sha256}"
+        arg2="dc498f234228f81c818becfb6b7f71f73df2b0e995f93f25c05fced0c77e6356"/></not></condition>
+    </fail>
+  </target>
+</project>

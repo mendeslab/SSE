@@ -6,11 +6,7 @@
   <property name="lib" location="lib"/>
 
   <property name="javaVersion" value="17"/>
-  <property name="beast.dir" location="../beast2"/>
-  <property name="beast.jar" location="${beast.dir}/build/dist/BEAST.base.jar"/>
-  <property name="launcher.jar" location="${beast.dir}/build/dist/launcher.jar"/>
-  <property name="junit.jar"
-            location="${beast.dir}/lib/junit/junit-platform-console-standalone-1.8.2.jar"/>
+  <import file="beast-config.xml"/>
   <property name="classpath" value=""/>
   <!--*******************************************************************-->
 
@@ -38,8 +34,8 @@
     <pathelement location="${build-test}"/>
     <pathelement location="${launcher.jar}"/>
     <pathelement location="${junit.jar}"/>
-    <!-- This source directory locates BEAST's version.xml without exposing BEAST's compiled tests. -->
-    <pathelement location="${beast.dir}/src"/>
+    <pathelement location="${test.services}/BEAST.base/lib"/>
+    <pathelement location="${test.services}/biogeo/lib"/>
   </path>
 
   <!-- Prepare for compilation -->
@@ -63,7 +59,7 @@
     <available file="${beast.jar}" property="beastAvailable"/>
     <fail unless="beastAvailable">
       ** BEAST.base.jar was not found at ${beast.jar}. **
-      Build the sibling BEAST 2 checkout first, or pass -Dbeast.dir=/path/to/beast2.
+      Set BEAST_HOME to an installation (bin/ and lib/), or use -Dbeast.dir=/path/to/beast2.
     </fail>
   </target>
 
@@ -77,20 +73,20 @@
 
   
   <!-- Prepare for unit test compilation -->
-  <target name="init-test" depends="init">
+  <target name="init-test" depends="init,prepare-base-services">
     <mkdir dir="${build-test}"/>
     <mkdir dir="${test-reports}"/>
 
     <available file="${launcher.jar}" property="launcherAvailable"/>
     <fail unless="launcherAvailable">
       ** BEAST launcher.jar was not found at ${launcher.jar}. **
-      Build the sibling BEAST 2 checkout first, or pass -Dbeast.dir=/path/to/beast2.
+      Set BEAST_HOME to an installation (bin/ and lib/), or use -Dbeast.dir=/path/to/beast2.
     </fail>
 
     <available file="${junit.jar}" property="junitAvailable"/>
     <fail unless="junitAvailable">
       ** JUnit was not found at ${junit.jar}. **
-      The BEAST 2 checkout must contain its JUnit Platform standalone jar.
+      Run ant fetch-test-deps in installed mode, or supply -Djunit.jar=/path/to/junit.jar.
     </fail>
   </target>
 
