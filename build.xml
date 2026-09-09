@@ -150,7 +150,9 @@
     <copy todir="${pack}/lib">
       <fileset dir="${lib}" includes="*.jar" />
     </copy>
-    <jar jarfile="${pack}/lib/${fullName}.jar" basedir="${build}" />
+    <!-- build also holds launch settings and diagnostics; ship only production classes. -->
+    <jar jarfile="${pack}/lib/${fullName}.jar" basedir="${build}"
+         includes="SSE/**/*.class,loggers/**/*.class,operators/**/*.class,mosse/**/*.class" />
 
     <copy file="README.md" tofile="${pack}/README" />
     <copy file="COPYING.md" todir="${pack}" />
