@@ -34,30 +34,34 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         super.initAndValidate(); // read in all dimension-related stuff, populates fYLo and fYHi
 
-        int nNodes = tree.getNodeCount();
+        try {
+            int nNodes = tree.getNodeCount();
 
-        logNormalizationFactors = new double[nNodes];
+            logNormalizationFactors = new double[nNodes];
 
-        q2mLambda = q2mLambdaInput.get();
-        birthRatesLo = new double[nUsefulXbinsLo];
-        birthRatesHi = new double[nUsefulXbinsHi];
+            q2mLambda = q2mLambdaInput.get();
+            birthRatesLo = new double[nUsefulXbinsLo];
+            birthRatesHi = new double[nUsefulXbinsHi];
 
-        q2mMu = q2mMuInput.get();
-        deathRatesLo = new double[nUsefulXbinsLo];
-        deathRatesHi = new double[nUsefulXbinsHi];
+            q2mMu = q2mMuInput.get();
+            deathRatesLo = new double[nUsefulXbinsLo];
+            deathRatesHi = new double[nUsefulXbinsHi];
 
-        q2d = q2dInput.get();
+            q2d = q2dInput.get();
 
-        scratchLo = new double[nNodes][nDimensions][2 * nXbinsLo]; // for real and complex part after FFT using JTransforms
-        scratchHi = new double[nNodes][nDimensions][2 * nXbinsHi]; // for real and complex part after FFT using JTransforms
+            scratchLo = new double[nNodes][nDimensions][2 * nXbinsLo]; // for real and complex part after FFT using JTransforms
+            scratchHi = new double[nNodes][nDimensions][2 * nXbinsHi]; // for real and complex part after FFT using JTransforms
 
-        populateMacroevolParams();
+            populateMacroevolParams();
 
-        int nDimensionsFFT = nDimensions;
-        initializeEsDs(nNodes, nDimensionsFFT, nXbinsLo, nXbinsHi);
+            int nDimensionsFFT = nDimensions;
+            initializeEsDs(nNodes, nDimensionsFFT, nXbinsLo, nXbinsHi);
 
-        populateTipsEsDs(nDimensionsFFT, nXbinsHi, true, false);
-
+            populateTipsEsDs(nDimensionsFFT, nXbinsHi, true, false);
+        } catch (RuntimeException | Error failure) {
+            close();
+            throw failure;
+        }
     }
 
     @Override

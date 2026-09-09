@@ -23,6 +23,7 @@
   <property name="build" location="build"/>
   <property name="build-test" location="build-test"/>
   <property name="test-reports" location="test-reports"/>
+  <property name="native.build" location="build/gcc-16-debug-O"/>
   <property name="dist" location="dist"/>
   <property name="pack" location="${dist}/package"/>
 
@@ -118,6 +119,28 @@
       <arg value="--details=summary"/>
       <arg value="--reports-dir=${test-reports}"/>
       <arg value="--select-package=test"/>
+    </java>
+  </target>
+
+  <!-- Optional QuaSSE native build; ordinary compile/test do not require a C++ toolchain or FFTW. -->
+  <target name="native" description="Build the optional C++20 QuaSSE FFTW library">
+    <exec executable="make" dir="jni/quasse" failonerror="true">
+      <env key="BUILD_DIR" path="${native.build}"/>
+    </exec>
+  </target>
+
+  <target name="test-native" depends="native,compile-test" description="Require FFTW and run QuaSSE comparisons">
+    <java classname="org.junit.platform.console.ConsoleLauncher" fork="true" failonerror="true"
+          dir="${basedir}" maxmemory="1g">
+      <classpath refid="test.classpath"/>
+      <jvmarg value="-Xcheck:jni"/>
+      <jvmarg value="-Djava.library.path=${native.build}"/>
+      <sysproperty key="test.quasse.fft" value="fftw"/>
+      <arg value="--disable-banner"/>
+      <arg value="--details=summary"/>
+      <arg value="--reports-dir=${test-reports}/native"/>
+      <arg value="--select-class=test.ComplexFFTTest"/>
+      <arg value="--select-class=test.QuaSSEDistributionTest"/>
     </java>
   </target>
 

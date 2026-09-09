@@ -1,0 +1,126 @@
+#include "SSE_FftwFFT.h"
+
+#include <fftw3.h>
+#include <cstdint>
+#include <limits>
+#include <memory>
+#include <mutex>
+#include <stdexcept>
+
+namespace {
+
+// FFTW only guarantees concurrent execution, not preparation/destruction. This lock covers
+// all preparation/destruction in this module, including Java Cleaner calls. No global cleanup.
+std::mutex preparation_mutex;
+
+class ComplexFFT {
+public:
+    const int size;
+    std::unique_ptr<fftw_complex, decltype(&fftw_free)> input{nullptr, fftw_free};
+    std::unique_ptr<fftw_complex, decltype(&fftw_free)> output{nullptr, fftw_free};
+    fftw_plan forward = nullptr;
+    fftw_plan inverse = nullptr;
+
+    // Caller holds preparation_mutex. Arrays and partially prepared transforms are released on failure.
+    explicit ComplexFFT(int n) : size(n) {
+        input.reset(fftw_alloc_complex(size));
+        output.reset(fftw_alloc_complex(size));
+        if (!input || !output) throw std::bad_alloc();
+        forward = fftw_plan_dft_1d(size, input.get(), output.get(), FFTW_FORWARD, FFTW_ESTIMATE);
+        inverse = fftw_plan_dft_1d(size, input.get(), output.get(), FFTW_BACKWARD, FFTW_ESTIMATE);
+        if (!forward || !inverse) {
+            if (forward) fftw_destroy_plan(forward);
+            if (inverse) fftw_destroy_plan(inverse);
+            throw std::runtime_error("FFTW could not prepare the requested transforms.");
+        }
+    }
+
+    // Caller holds preparation_mutex; member-owned arrays are freed after the transforms.
+    ~ComplexFFT() {
+        fftw_destroy_plan(forward);
+        fftw_destroy_plan(inverse);
+    }
+
+    ComplexFFT(const ComplexFFT&) = delete;
+    ComplexFFT& operator=(const ComplexFFT&) = delete;
+
+    // FFTW forward is unscaled; divide every component of its unscaled inverse by N to match SST.
+    void transform(bool backwards) {
+        fftw_execute(backwards ? inverse : forward);
+        if (backwards) {
+            auto* values = reinterpret_cast<double*>(output.get());
+            for (int i = 0; i < 2 * size; ++i) values[i] /= size;
+        }
+    }
+};
+
+// Preserve pending JNI exceptions, including allocation failures while finding the exception class.
+void throw_java(JNIEnv* env, const char* type, const char* message) {
+    if (env->ExceptionCheck()) return;
+    jclass exception = env->FindClass(type);
+    if (exception) env->ThrowNew(exception, message);
+}
+
+// Translate a caught C++ exception at the JNI boundary, never unwinding through JVM frames.
+void translate_exception(JNIEnv* env) {
+    try {
+        throw;
+    } catch (const std::bad_alloc&) {
+        throw_java(env, "java/lang/OutOfMemoryError", "Cannot allocate QuaSSE FFTW resources.");
+    } catch (const std::exception& error) {
+        throw_java(env, "java/lang/IllegalStateException", error.what());
+    } catch (...) {
+        throw_java(env, "java/lang/IllegalStateException", "Unexpected QuaSSE FFTW failure.");
+    }
+}
+
+} // namespace
+
+// Only Java's private native methods exchange these pointers, and its cleanup-state lock owns lifetime.
+JNIEXPORT jlong JNICALL Java_SSE_FftwFFT_create(JNIEnv* env, jclass, jint size) {
+    if (size <= 0 || size > std::numeric_limits<jint>::max() / 2
+            || static_cast<std::size_t>(size) > std::numeric_limits<std::size_t>::max() / sizeof(fftw_complex)) {
+        throw_java(env, "java/lang/IllegalArgumentException", "FFT size must be positive and 2*N must fit in an int.");
+        return 0;
+    }
+    try {
+        std::lock_guard lock(preparation_mutex);
+        return static_cast<jlong>(reinterpret_cast<std::intptr_t>(new ComplexFFT(size)));
+    } catch (...) {
+        translate_exception(env);
+        return 0;
+    }
+}
+
+// Validate before copying; reuse native arrays and write directly into the caller's existing output.
+JNIEXPORT void JNICALL Java_SSE_FftwFFT_execute(JNIEnv* env, jclass, jlong handle,
+                                               jdoubleArray input, jdoubleArray output, jboolean inverse) {
+    try {
+        auto* fft = reinterpret_cast<ComplexFFT*>(static_cast<std::intptr_t>(handle));
+        if (!fft) {
+            throw_java(env, "java/lang/IllegalStateException", "FFT has been closed.");
+            return;
+        }
+        if (!input || !output || env->GetArrayLength(input) != 2 * fft->size
+                || env->GetArrayLength(output) != 2 * fft->size || env->IsSameObject(input, output)) {
+            throw_java(env, "java/lang/IllegalArgumentException", "FFT requires distinct arrays of 2*N doubles.");
+            return;
+        }
+        env->GetDoubleArrayRegion(input, 0, 2 * fft->size, reinterpret_cast<double*>(fft->input.get()));
+        if (env->ExceptionCheck()) return;
+        fft->transform(inverse);
+        env->SetDoubleArrayRegion(output, 0, 2 * fft->size, reinterpret_cast<double*>(fft->output.get()));
+    } catch (...) {
+        translate_exception(env);
+    }
+}
+
+// Java serializes this with execution; the native lock also excludes other instances' preparation.
+JNIEXPORT void JNICALL Java_SSE_FftwFFT_destroy(JNIEnv* env, jclass, jlong handle) {
+    try {
+        std::lock_guard lock(preparation_mutex);
+        delete reinterpret_cast<ComplexFFT*>(static_cast<std::intptr_t>(handle));
+    } catch (...) {
+        translate_exception(env);
+    }
+}

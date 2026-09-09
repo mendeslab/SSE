@@ -55,3 +55,24 @@ Use dependencies from the configured BEAST installation; sources can be attached
 For a short fixed-tree QuaSSE MCMC example, see
 [the 15-species example](examples/QuaSSE_15_species_MCMC.md), including its priors,
 run commands, validation status, and numerical caveats.
+
+## Optional QuaSSE FFTW transforms (Linux)
+
+Requires GCC 16 with C++20 support, FFTW development files, `pkg-config`, and JDK headers
+(`JAVA_HOME` if not using the `javac` on PATH). MoSSE's native library is separate.
+
+```sh
+ant test-native
+export LD_LIBRARY_PATH="$PWD/build/gcc-16-debug-O${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+```
+
+Set `fftBackend="fftw"` on the XML's `QuaSSEDistribution`, then run with `beast-sse` as usual.
+The default is `sst`; selecting FFTW requires the library and never falls back silently.
+For an IDE run, set `-Djava.library.path=/path/to/SSE/build/gcc-16-debug-O` in JVM options.
+On newer JDKs, add `--enable-native-access=ALL-UNNAMED` to JVM options (or `JAVA_TOOL_OPTIONS`).
+Only transforms move into C++; integration and the numerical method are unchanged.
+
+For release timings, build with
+`make -C jni/quasse BUILD_DIR=../../build/gcc-16 CXXFLAGS='-O3 -g'`
+and use `build/gcc-16` as the library directory. `ant native` builds only the debug library;
+`ant test-native -Dnative.build=build/gcc-16` tests the release library once built.

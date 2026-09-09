@@ -12,11 +12,13 @@ import beast.base.evolution.tree.Node;
 import beast.base.evolution.tree.Tree;
 import beast.base.evolution.tree.TreeParser;
 import org.junit.Assert;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 import static SSE.SSEUtils.everyOtherToHeadInPlace;
@@ -41,6 +43,23 @@ import static SSE.SSEUtils.everyOtherToHeadInPlace;
  * negative value under another. These differences add up!
  */
 public class QuaSSEDistributionTest {
+
+    private final List<QuaSSEDistribution> opened = new ArrayList<>();
+
+    // Run the same reference and MCMC-lifecycle checks on either FFT, without duplicating their data.
+    private QuaSSEDistribution newDistribution() {
+        QuaSSEDistribution distribution = new QuaSSEDistribution();
+        distribution.fftBackendInput.setValue(System.getProperty("test.quasse.fft", "sst"), distribution);
+        opened.add(distribution);
+        return distribution;
+    }
+
+    // Release native resources even when an assertion or model initialization fails.
+    @After
+    public void closeDistributions() {
+        for (QuaSSEDistribution distribution : opened) distribution.close();
+        opened.clear();
+    }
 
     final static Double EPSILON = 1e-6;
 
@@ -216,7 +235,7 @@ public class QuaSSEDistributionTest {
      */
     @Before
     public void setupQuaSSELiks() {
-        q1024 = new QuaSSEDistribution();
+        q1024 = newDistribution();
         q1024.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
                 "tc", tc100Rp,
                 "nX", nXbins1024Ip, "dX", dxBin00005Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
@@ -226,7 +245,7 @@ public class QuaSSEDistributionTest {
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
 
-        q32Dt001 = new QuaSSEDistribution();
+        q32Dt001 = newDistribution();
         q32Dt001.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
                 "tc", tc100Rp,
                 "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
@@ -236,7 +255,7 @@ public class QuaSSEDistributionTest {
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
 
-        q32Dt002 = new QuaSSEDistribution();
+        q32Dt002 = newDistribution();
         q32Dt002.initByName("dtMax", dt002Rp, "dynDt", dynDtbpTrue,
                 "tc", tc100Rp,
                 "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
@@ -246,7 +265,7 @@ public class QuaSSEDistributionTest {
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
 
-        q32Dt0005 = new QuaSSEDistribution();
+        q32Dt0005 = newDistribution();
         q32Dt0005.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
                 "tc", tc0005Rp,
                 "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
@@ -256,7 +275,7 @@ public class QuaSSEDistributionTest {
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
 
-        q32BifTree0025HeightDt0005 = new QuaSSEDistribution();
+        q32BifTree0025HeightDt0005 = newDistribution();
         q32BifTree0025HeightDt0005.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
                 "tc", tc0005Rp,
                 "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
@@ -266,7 +285,7 @@ public class QuaSSEDistributionTest {
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
 
-        q32ThreeSpTreeDt0005 = new QuaSSEDistribution();
+        q32ThreeSpTreeDt0005 = newDistribution();
         q32ThreeSpTreeDt0005.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
                 "tc", tc0005Rp,
                 "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
@@ -276,7 +295,7 @@ public class QuaSSEDistributionTest {
                 "q2d", nfn3Sp,
                 "priorProbAtRootType", rootPriorType);
 
-        q32FifteenSp = new QuaSSEDistribution();
+        q32FifteenSp = newDistribution();
         q32FifteenSp.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
                 "tc", tcFifteenSpRp,
                 "nX", nXbins1024Ip, "dX", dxBinFifteenSpRp, "xMid", xMidFifteenSpRp, "flankWidthScaler", flankWidthScaler5Rp, "hiLoRatio", hiLoRatioIp,
@@ -364,7 +383,7 @@ public class QuaSSEDistributionTest {
      */
     @Test
     public void testTraitDependentExtinctionRates() {
-        QuaSSEDistribution distribution = new QuaSSEDistribution();
+        QuaSSEDistribution distribution = newDistribution();
         distribution.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
                 "tc", tc100Rp,
                 "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
@@ -387,7 +406,7 @@ public class QuaSSEDistributionTest {
     public void testNonzeroDriftPaddingAndKernelDirection() {
         RealParameter positiveDrift = new RealParameter(new Double[] { 1.0 });
         RealParameter negativeDrift = new RealParameter(new Double[] { -1.0 });
-        QuaSSEDistribution positive = new QuaSSEDistribution();
+        QuaSSEDistribution positive = newDistribution();
         positive.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
                 "tc", tc100Rp,
                 "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
@@ -397,7 +416,7 @@ public class QuaSSEDistributionTest {
                 "tree", bifTreeHeight001,
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
-        QuaSSEDistribution negative = new QuaSSEDistribution();
+        QuaSSEDistribution negative = newDistribution();
         negative.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
                 "tc", tc100Rp,
                 "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
@@ -1445,6 +1464,34 @@ public class QuaSSEDistributionTest {
         }
     }
 
+    // References constrain final likelihoods, not every E/D entry or resized native resources.
+    // This comparison protects FFT replacement; remove it if only one implementation remains.
+    @Test
+    public void testFftImplementationsAndReinitialization() {
+        QuaSSEDistribution selected = smallDistribution(0, .001, .005, "(sp1:0.02,sp2:0.02);", "Observed");
+        QuaSSEDistribution sst = smallDistribution(0, .001, .005, "(sp1:0.02,sp2:0.02);", "Observed");
+        sst.fftBackendInput.setValue("sst", sst);
+        sst.initAndValidate();
+        for (double drift : new double[] {0, 1, -1}) {
+            selected.driftInput.get().setValue(drift);
+            sst.driftInput.get().setValue(drift);
+            Assert.assertEquals(sst.calculateLogP(), selected.calculateLogP(), 1e-10);
+            for (boolean low : new boolean[] {true, false}) {
+                double[][][] expected = sst.getEsDs(low), actual = selected.getEsDs(low);
+                for (int node = 0; node < expected.length; node++)
+                    for (int dim = 0; dim < expected[node].length; dim++)
+                        Assert.assertArrayEquals(expected[node][dim], actual[node][dim], 1e-10);
+            }
+        }
+        // Reinitialization changes transform lengths, unlike parameter-dependent padding changes.
+        for (QuaSSEDistribution distribution : new QuaSSEDistribution[] {sst, selected}) {
+            distribution.nXbinsInput.get().setValue(256);
+            distribution.highLowRatioInput.get().setValue(3);
+            distribution.initAndValidate();
+        }
+        Assert.assertEquals(sst.calculateLogP(), selected.calculateLogP(), 1e-10);
+    }
+
     // Build the small reference model with independent inputs, so comparisons cannot share caches.
     private QuaSSEDistribution smallDistribution(double drift, double diffusion, double tc,
                                                  String newick, String prior) {
@@ -1467,7 +1514,7 @@ public class QuaSSEDistributionTest {
         tipLink.initByName("quTraits", traits,
                 "sdNormalQuTrValue", new RealParameter(new Double[] { 0.05 }));
 
-        QuaSSEDistribution distribution = new QuaSSEDistribution();
+        QuaSSEDistribution distribution = newDistribution();
         distribution.initByName(
                 "dtMax", new RealParameter(new Double[] { 0.005 }),
                 "dynDt", new BooleanParameter(new Boolean[] { true }),
@@ -1694,7 +1741,7 @@ public class QuaSSEDistributionTest {
         RealParameter deathRate = new RealParameter(new Double[] { 0.03 });
         ConstantLinkFn deathLink = new ConstantLinkFn();
         deathLink.initByName("yV", deathRate);
-        QuaSSEDistribution distribution = new QuaSSEDistribution();
+        QuaSSEDistribution distribution = newDistribution();
         distribution.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
                 "tc", tc0005Rp,
                 "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
@@ -1766,7 +1813,7 @@ public class QuaSSEDistributionTest {
     @Test(expected = RuntimeException.class)
     public void testPowerOf2() {
 
-        QuaSSEDistribution q48Dt001 = new QuaSSEDistribution();
+        QuaSSEDistribution q48Dt001 = newDistribution();
         q48Dt001.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
                 "tc", tc100Rp,
                 "nX", nXbins48Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,

@@ -31,6 +31,8 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
     final public Input<IntegerParameter> highLowRatioInput = new Input<>("hiLoRatio", "Scale nX by this when at high resolution.", Input.Validate.REQUIRED);
     final public Input<String> priorProbAtRootTypeInput = new Input<>("priorProbAtRootType", "Type of root prior probabilities for D's.", Input.Validate.REQUIRED);
     final public Input<RealParameter> priorProbsAtRootInput = new Input<>("givenPriorProbsAtRoot", "Root prior probabilities for D's at high resolution.", Input.Validate.XOR, priorProbAtRootTypeInput);
+    final public Input<String> fftBackendInput = new Input<>("fftBackend",
+            "Fourier transform implementation: sst (Java, default) or fftw (requires native library).", "sst");
 
     protected Tree tree;
     protected RealParameter quTraits;
@@ -72,6 +74,9 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
     public void initAndValidate() {
 
         close();
+        String backend = fftBackendInput.get();
+        if (!"sst".equals(backend) && !"fftw".equals(backend))
+            throw new IllegalArgumentException("fftBackend must be sst or fftw.");
         tree = treeInput.get();
         rootPriorType = priorProbAtRootTypeInput.get();
 
@@ -137,8 +142,13 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
         fYHi = new double[nXbinsHi * 2]; // just real
         fftFYLo = new double[nXbinsLo * 2]; // just real
         fftFYHi = new double[nXbinsHi * 2]; // just real
-        fftLo = new SstFFT(nXbinsLo);
-        fftHi = new SstFFT(nXbinsHi);
+        try {
+            fftLo = "fftw".equals(backend) ? new FftwFFT(nXbinsLo) : new SstFFT(nXbinsLo);
+            fftHi = "fftw".equals(backend) ? new FftwFFT(nXbinsHi) : new SstFFT(nXbinsHi);
+        } catch (RuntimeException | Error failure) {
+            close();
+            throw failure;
+        }
         Arrays.fill(kernelValid, false);
 
         // populatefY(dtMax, true, true, true, false); // force populate fY, and do FFT (coarse)
