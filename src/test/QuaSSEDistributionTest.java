@@ -47,7 +47,7 @@ public class QuaSSEDistributionTest {
     private final List<QuaSSEDistribution> opened = new ArrayList<>();
 
     // Run the same reference and MCMC-lifecycle checks on either FFT, without duplicating their data.
-    // The native target sets test.quasse.fft; reference values and tolerances are shared unchanged.
+    // The native target selects FFT/integration implementations; reference tolerances stay unchanged.
     private QuaSSEDistribution newDistribution() {
         QuaSSEDistribution distribution = new QuaSSEDistribution();
         distribution.fftBackendInput.setValue(System.getProperty("test.quasse.fft", "sst"), distribution);
@@ -1467,7 +1467,7 @@ public class QuaSSEDistributionTest {
     }
 
     // References constrain final likelihoods, not every E/D entry or resized native resources.
-    // Compare FFTs, or native X against Java X with FFTW; obsolete with only one implementation.
+    // Compare FFTs, or native integration against Java with FFTW; obsolete with one implementation.
     @Test
     public void testFftImplementationsAndReinitialization() {
         QuaSSEDistribution selected = smallDistribution(0, .001, .005, "(sp1:0.02,sp2:0.02);", "Observed");
@@ -1494,7 +1494,7 @@ public class QuaSSEDistributionTest {
             distribution.initAndValidate();
         }
         Assert.assertEquals(reference.calculateLogP(), selected.calculateLogP(), 1e-10);
-        // Switching back releases native X storage instead of retaining closed resources.
+        // Switching back releases native storage instead of retaining closed resources.
         selected.integrationBackendInput.setValue("java", selected);
         selected.initAndValidate();
         Assert.assertEquals(reference.calculateLogP(), selected.calculateLogP(), 1e-10);
@@ -1687,6 +1687,38 @@ public class QuaSSEDistributionTest {
         QuaSSEDistribution one = smallDistribution(0, .00001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
         Assert.assertEquals(1, one.getNLeftFlanks(true));
         Assert.assertTrue(Double.isFinite(one.calculateLogP()));
+    }
+
+    // Preserve fixed-dt truncation and normalization even when a nonempty segment takes no steps.
+    // Full likelihood references use dynamic dt; replace this check when fixed-dt behavior is repaired.
+    @Test
+    public void testFixedStepSegments() {
+        for (boolean low : new boolean[]{true, false}) {
+            for (double length : new double[]{0, .002, .012}) {
+                QuaSSEDistribution selected = smallDistribution(0, .001, .005,
+                        "(sp1:0.02,sp2:0.02);", "Observed");
+                QuaSSEDistribution reference = smallDistribution(0, .001, .005,
+                        "(sp1:0.02,sp2:0.02);", "Observed");
+                reference.integrationBackendInput.setValue("java", reference);
+                reference.initAndValidate();
+                double[][] expected = reference.getEsDs(low)[0], actual = selected.getEsDs(low)[0];
+                // Make normalization observable independently of the initial tip density's integral.
+                for (int i = 0; i < expected[1].length; i += 2) {
+                    expected[1][i] *= 3;
+                    actual[1][i] *= 3;
+                }
+                if (length != 0) {
+                    reference.populatefY(.005, false, true, low, false);
+                    for (int step = 0; step < Math.floor(length / .005); ++step)
+                        reference.doIntegrateInPlace(0, .005, low);
+                    reference.normalizeDs(0, low, false);
+                }
+                selected.integrateLength(0, actual, selected.getScratchAtNode(0, low),
+                        length, false, .005, low, false, false);
+                for (int d = 0; d < expected.length; ++d)
+                    Assert.assertArrayEquals(expected[d], actual[d], 1e-10);
+            }
+        }
     }
 
     // Root crossings must resize the prior, with time == tc consistently coarse and empty segments

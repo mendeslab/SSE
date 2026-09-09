@@ -11,7 +11,7 @@ import java.util.Random;
 public class QuaSSEDistribution extends QuaSSEProcess {
 
     public final Input<String> integrationBackendInput = new Input<>("integrationBackend",
-            "X propagation implementation: java or native (requires fftBackend=fftw). T remains Java.", "java");
+            "Integration implementation: java or native T/X segments (requires fftBackend=fftw).", "java");
     private QuaSSENativeIntegrator nativeLo, nativeHi;
 
     final public Input<LinkFn> q2mLambdaInput = new Input<>("q2mLambda", "Function converting quantitative trait into lambda parameter.", Input.Validate.REQUIRED);
@@ -45,7 +45,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                 throw new IllegalArgumentException("integrationBackend must be java or native.");
             if ("native".equals(integration)) {
                 if (!"fftw".equals(fftBackendInput.get()))
-                    throw new IllegalArgumentException("Native X propagation requires fftBackend=fftw.");
+                    throw new IllegalArgumentException("Native integration requires fftBackend=fftw.");
                 nativeLo = new QuaSSENativeIntegrator(nXbinsLo, nDimensionsE + nDimensionsD);
                 nativeHi = new QuaSSENativeIntegrator(nXbinsHi, nDimensionsE + nDimensionsD);
             }
@@ -350,9 +350,15 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         // remove next two later
         populatefY(dt, forceRecalcKernel, true, lowRes, false);
 
-        // integrating!
-        for (int i=0; i<nIntervals; i++) {
-            doIntegrateInPlace(nodeIdx, dt, lowRes);
+        if ((lowRes ? nativeLo : nativeHi) != null && Double.isFinite(nIntervals)
+                && nIntervals >= 0 && nIntervals <= Integer.MAX_VALUE && nIntervals == Math.rint(nIntervals)) {
+            integrateNativeSegment(nodeIdx, dt, (int) nIntervals, lowRes);
+        } else {
+            // Compatibility path: preserve the old loop outside JNI's int range, including its
+            // existing overflow limitation. Remove when step-count behavior is addressed separately.
+            for (int i=0; i<nIntervals; i++) {
+                doIntegrateInPlace(nodeIdx, dt, lowRes);
+            }
         }
 
         // normalization that happens in make.pde.quasse.fftR
@@ -541,8 +547,22 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         else { throw new RuntimeException("ERROR: You specified an invalid prior probability distribution for the root. Exiting..."); }
     }
 
+    // Select current grid-dependent inputs once; the native owner caches storage, not model state.
+    private void integrateNativeSegment(int nodeIdx, double dt, int steps, boolean lowRes) {
+        QuaSSENativeIntegrator integrator = lowRes ? nativeLo : nativeHi;
+        int[] flanks = lowRes ? nLeftNRightFlanksLo : nLeftNRightFlanksHi;
+        integrator.integrateSegment((lowRes ? esDsLo : esDsHi)[nodeIdx],
+                lowRes ? birthRatesLo : birthRatesHi, lowRes ? deathRatesLo : deathRatesHi,
+                lowRes ? fftFYLo : fftFYHi, dt, steps, flanks[0], flanks[1]);
+    }
+
     @Override
     public void doIntegrateInPlace(int nodeIdx, double aDt, boolean lowRes) {
+
+        if ((lowRes ? nativeLo : nativeHi) != null) {
+            integrateNativeSegment(nodeIdx, aDt, 1, lowRes);
+            return;
+        }
 
         double[][] esDsAtNode, fftBufferEsDsAtNode;
         double[][] scratchAtNode;

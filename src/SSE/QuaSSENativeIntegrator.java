@@ -54,6 +54,7 @@ public final class QuaSSENativeIntegrator implements AutoCloseable {
     }
 
     /** Repeat T then X; row zero is E and remaining rows are D. Rates have N-left-right-1 entries.
+     * Requires at least one D row and nonnegative steps; E/D storage follows propagateX's contract.
      * Inputs other than E/D are unchanged. Zero steps are the identity, with no normalization.
      */
     public void integrateSegment(double[][] esDs, double[] birthRates, double[] deathRates,

@@ -72,9 +72,10 @@ For an IDE run, set `-Djava.library.path=/path/to/SSE/build/gcc-16-debug-O` in J
 On newer JDKs, add `--enable-native-access=ALL-UNNAMED` to JVM options (or `JAVA_TOOL_OPTIONS`).
 By default only transforms move into C++; the numerical method is unchanged.
 
-To also run X propagation in C++, set `integrationBackend="native"` alongside
+To run repeated T/X steps in C++, set `integrationBackend="native"` alongside
 `fftBackend="fftw"` on the QuaSSE distribution. The default is `integrationBackend="java"`;
-T propagation, time stepping, and normalization remain in Java in both modes.
+Java still selects time steps and handles grids, tree operations, and normalization.
+Rebuild with `ant native` after updating the JNI interface.
 
 For release timings, build with
 `make -C jni/quasse BUILD_DIR=../../build/gcc-16 CXXFLAGS='-O3 -g'`

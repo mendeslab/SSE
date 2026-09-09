@@ -145,7 +145,7 @@
       <arg value="--select-class=quasse.QuaSSENativeIntegratorTest"/>
       <arg value="--select-class=test.QuaSSEDistributionTest"/>
     </java>
-    <!-- Repeat model references and rejection/reinitialization checks with native X selected. -->
+    <!-- Repeat model references and rejection/reinitialization checks with native segments. -->
     <java classname="org.junit.platform.console.ConsoleLauncher" fork="true" failonerror="true"
           dir="${basedir}" maxmemory="1g">
       <classpath refid="test.classpath"/>
@@ -155,7 +155,7 @@
       <sysproperty key="test.quasse.integration" value="native"/>
       <arg value="--disable-banner"/>
       <arg value="--details=summary"/>
-      <arg value="--reports-dir=${test-reports}/native-x"/>
+      <arg value="--reports-dir=${test-reports}/native-integration"/>
       <arg value="--select-class=test.QuaSSEDistributionTest"/>
     </java>
   </target>
