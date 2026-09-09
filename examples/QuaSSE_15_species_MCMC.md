@@ -37,20 +37,18 @@ height/10, and dtMax=tree height/1000. Controls remain fixed, but padding can ch
 
 ## Run without an IDE
 
-Build the sibling BEAST repositories as described in the main README, then run these commands from
-the SSE checkout. Set `sse_dir` to the absolute path to this checkout if it differs:
+Configure BEAST as described in the main README, then run these commands from the SSE checkout:
 
 ```sh
-ant compile
-sse_dir=/home/bredelings/Devel/LSU/SSE
+sse_dir="$PWD"
 mkdir -p "$sse_dir/build/quasse-runs/seed127"
 cd "$sse_dir/build/quasse-runs/seed127"
-java -cp "$sse_dir/build:$sse_dir/../beast2/build/dist/launcher.jar:$sse_dir/../beast2/build/dist/BEAST.base.jar:$sse_dir/../BeastFX/build/dist/BEAST.app.jar:$sse_dir/lib/*" \
-  beastfx.app.beast.BeastMCMC -seed 127 "$sse_dir/examples/QuaSSE_15_species_MCMC.xml"
+"$sse_dir/beast-sse" -seed 127 "$sse_dir/examples/QuaSSE_15_species_MCMC.xml"
 ```
 
-For an independent run, use a new directory, such as `seed128`, and `-seed 128`. The absolute build
-path lets BEAST discover this checkout's package services. Do not include the historical `SSE.jar`.
+For an independent run, use a new directory, such as `seed128`, and `-seed 128`.
+Historical runs below used direct `BeastMCMC` startup, whose random initialization differs.
+The standard-launcher seed-127 check matched samples 0–20 of the historical seed-128 run exactly.
 Overwrite is deliberately not enabled. The working directory receives `QuaSSE_15_species.log` and
 `QuaSSE_15_species_MCMC.xml.state`; keep separate directories to avoid output/state collisions.
 
@@ -71,8 +69,7 @@ rejected proposals overall. If coverage is incomplete, resume in the same output
 the same XML (chainLength=20) and a new explicit seed, for example:
 
 ```sh
-java -cp "$sse_dir/build:$sse_dir/../beast2/build/dist/launcher.jar:$sse_dir/../beast2/build/dist/BEAST.base.jar:$sse_dir/../BeastFX/build/dist/BEAST.app.jar:$sse_dir/lib/*" \
-  beastfx.app.beast.BeastMCMC -resume -seed 129 "$sse_dir/examples/QuaSSE_15_species_MCMC.xml"
+"$sse_dir/beast-sse" -resume -seed 129 "$sse_dir/examples/QuaSSE_15_species_MCMC.xml"
 ```
 
 This restores the parameter checkpoint and appends another batch to the trace. Record the seeds
