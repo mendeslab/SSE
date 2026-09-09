@@ -12,6 +12,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+/**
+ * Checks transform conventions and resource lifetime independently of likelihood calculations.
+ * ant test uses SST; ant test-native sets test.quasse.fft=fftw and requires the native library.
+ */
 public class ComplexFFTTest {
     // Select native execution only in the explicit target; absence must fail, never skip or fall back.
     private ComplexFFT create(int size) {

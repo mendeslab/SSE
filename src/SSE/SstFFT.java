@@ -2,13 +2,18 @@ package SSE;
 
 import org.shared.fft.JavaFftService;
 
-/** SST adapter for the complex arrays already used by QuaSSE. */
+/**
+ * Default Java implementation, also retained for comparison with FFTW.
+ * Delegates to JavaFftService; keeping this object does not make SST reuse its
+ * internal scratch arrays or transform preparation between calls.
+ */
 public final class SstFFT implements ComplexFFT {
     private final int[] dimensions;
     private final int size;
     private final JavaFftService service;
     private boolean closed;
 
+    /** Create a one-dimensional transform of positive size N, with 2*N fitting in an int. */
     public SstFFT(int size) {
         this(size, new JavaFftService());
     }
@@ -51,6 +56,7 @@ public final class SstFFT implements ComplexFFT {
         ComplexFFT.checkArrays(input, output, size);
     }
 
+    /** Mark closed for the shared contract; this implementation owns no native resources. */
     @Override
     public void close() {
         closed = true;

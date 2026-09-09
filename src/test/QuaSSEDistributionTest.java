@@ -47,6 +47,7 @@ public class QuaSSEDistributionTest {
     private final List<QuaSSEDistribution> opened = new ArrayList<>();
 
     // Run the same reference and MCMC-lifecycle checks on either FFT, without duplicating their data.
+    // The native target sets test.quasse.fft; reference values and tolerances are shared unchanged.
     private QuaSSEDistribution newDistribution() {
         QuaSSEDistribution distribution = new QuaSSEDistribution();
         distribution.fftBackendInput.setValue(System.getProperty("test.quasse.fft", "sst"), distribution);

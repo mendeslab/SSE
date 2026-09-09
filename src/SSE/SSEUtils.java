@@ -325,7 +325,8 @@ public class SSEUtils {
                 nLeftFlankBins, nRightFlankBins, nDimensionsE, nDimensionsD, new SstFFT(nXbins, ffts));
     }
 
-    // Apply the existing complex-array convolution, clipping and boundary restoration with either FFT.
+    // E/D and spectra alternate real/imaginary entries. Only transforms are delegated;
+    // convolution, clipping and boundary restoration stay in Java for both implementations.
     public static void propagateEandDinXQuaSSE(double[][] esDsAtNode, double[][] fftEsDsAtNode,
             double[] fftFY, double[][] scratchAtNode, int nXbins, int nLeftFlankBins,
             int nRightFlankBins, int nDimensionsE, int nDimensionsD, ComplexFFT fft) {
@@ -488,8 +489,7 @@ public class SSEUtils {
     }
 
     /*
-     * This convolution in place is done by directly calling methods
-     * of the JavaFftService class
+     * Retain JavaFftService callers while sharing the implementation-independent convolution below.
      */
     public static void convolveInPlaceSSTJavaFftService(double[][] esDsAtNode, double[][] fftEsDsAtNode, double[] fftFY, int nDimensionsE, int nDimensionsD, int[] nXbins, JavaFftService ffts) {
         // Compatibility entry point for service-based callers; remove when they use ComplexFFT.
@@ -497,7 +497,8 @@ public class SSEUtils {
                 new SstFFT(nXbins, ffts));
     }
 
-    // Convolve E/D with the supplied spectrum using the unchanged complex product and inverse scaling.
+    // Transform each E/D array, multiply by the supplied kernel spectrum, then invert.
+    // Arrays alternate real/imaginary entries; inverse() supplies 1/N, so do not scale again here.
     public static void convolveInPlace(double[][] esDsAtNode, double[][] fftEsDsAtNode, double[] fftFY,
             int nDimensionsE, int nDimensionsD, ComplexFFT fft) {
         // int normalizingInverseFFTFactor = esDsAtNode[0].length;

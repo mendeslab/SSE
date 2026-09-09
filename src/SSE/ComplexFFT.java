@@ -1,10 +1,18 @@
 package SSE;
 
-/** Fixed-size, interleaved complex transforms; forward is unscaled, inverse divides by N. */
+/**
+ * Lets QuaSSE switch FFT implementations without duplicating integration code.
+ * N complex values occupy 2*N doubles: [real0, imaginary0, real1, imaginary1, ...].
+ * Both operations preserve input and write into a distinct, caller-supplied output array.
+ * Null, aliased or incorrectly sized arrays cause IllegalArgumentException;
+ * transforms after close() cause IllegalStateException.
+ */
 public interface ComplexFFT extends AutoCloseable {
-    // Input and output must be distinct arrays of 2*N doubles; input is preserved.
+    /** Forward transform with negative exponential sign and no scaling. */
     void forward(double[] input, double[] output);
+    /** Inverse transform with positive exponential sign, divided by N. */
     void inverse(double[] input, double[] output);
+    /** Release owned resources. Repeated calls are harmless. */
     @Override
     void close();
 

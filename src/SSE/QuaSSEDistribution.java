@@ -34,6 +34,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         super.initAndValidate(); // read in all dimension-related stuff, populates fYLo and fYHi
 
+        // The parent has allocated FFT resources; release them if the remaining initialization fails.
         try {
             int nNodes = tree.getNodeCount();
 
@@ -602,7 +603,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         // System.out.println("esDsAtNode[1] = " + Arrays.toString(esDsAtNode[1]));
         // System.out.println("scratch[1] = " + Arrays.toString(scratch[1]));
 
-        // grab dt and nDimensions from state
+        // Use the same resolution's prepared transform for E/D as for its Gaussian kernel.
         if (lowRes) {
             SSEUtils.propagateEandDinXQuaSSE(esDsAtNode, fftBufferEsDsAtNode, fftFYLo, scratchAtNode,
                     nXbinsLo, nLeftNRightFlanksLo[0], nLeftNRightFlanksLo[1], nDimensionsE, nDimensionsD, fftLo);

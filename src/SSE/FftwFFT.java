@@ -3,9 +3,15 @@ package SSE;
 import java.lang.ref.Cleaner;
 import java.lang.ref.Reference;
 
-/** Reuses FFTW arrays and prepared transforms; no model or likelihood state lives in C++. */
+/**
+ * Calls jni/quasse/fft.cpp using reusable native arrays and prepared FFTW transforms.
+ * Each call copies Java input into native storage and the result back into Java output.
+ * No model state is cached. Explicit close releases resources; Cleaner is a safety net
+ * for abandoned objects. Calls on one instance are serialized with cleanup.
+ */
 public final class FftwFFT implements ComplexFFT {
     private static final Cleaner CLEANER = Cleaner.create();
+    // Loading is deferred until this class is initialized; failure never selects SST silently.
     static {
         try {
             System.loadLibrary("sse_quasse");
@@ -21,10 +27,11 @@ public final class FftwFFT implements ComplexFFT {
     private final NativeState state;
     private final Cleaner.Cleanable cleanable;
 
-    // Register cleanup only after successful creation, releasing native resources if registration fails.
+    /** Create transforms for positive size N, with 2*N fitting in an int; reject invalid sizes. */
     public FftwFFT(int size) {
         state = new NativeState();
         state.handle = create(size);
+        // If cleanup registration fails, release the resources already created.
         try {
             cleanable = CLEANER.register(this, state);
         } catch (RuntimeException | Error failure) {
@@ -53,6 +60,7 @@ public final class FftwFFT implements ComplexFFT {
         }
     }
 
+    /** Release resources once, coordinating with transforms on this instance. */
     @Override
     public void close() {
         cleanable.clean();
@@ -60,6 +68,7 @@ public final class FftwFFT implements ComplexFFT {
 
     // This object never references the Java owner. Its lock serializes use and explicit/GC cleanup.
     private static final class NativeState implements Runnable {
+        // Private C++ pointer encoded as a long; zero means no live resources.
         private long handle;
 
         // Check and use the pointer under the same lock that protects destruction.
@@ -77,7 +86,10 @@ public final class FftwFFT implements ComplexFFT {
         }
     }
 
+    // Allocate arrays and prepare both directions; return their owning C++ object's pointer.
     private static native long create(int size);
+    // Validate/copy arrays, execute, and copy back; inverse includes division by N.
     private static native void execute(long handle, double[] input, double[] output, boolean inverse);
+    // Destroy that object; NativeState prevents concurrent use or repeated destruction.
     private static native void destroy(long handle);
 }

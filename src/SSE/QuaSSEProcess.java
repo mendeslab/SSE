@@ -68,12 +68,15 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
     private final double[] kernelDt = new double[2], kernelDrift = new double[2];
     private final double[] kernelDiffusion = new double[2], kernelDx = new double[2];
     private final int[] kernelLeft = new int[2], kernelRight = new int[2];
+    // One per resolution, shared by kernel and E/D transforms. Padding/parameter refresh reuses
+    // them; reinitialization recreates them and invalidates kernels. Native scratch needs no snapshot.
     protected ComplexFFT fftLo, fftHi;
 
     @Override
     public void initAndValidate() {
 
         close();
+        // Select once per initialization, not dynamically during likelihood evaluation.
         String backend = fftBackendInput.get();
         if (!"sst".equals(backend) && !"fftw".equals(backend))
             throw new IllegalArgumentException("fftBackend must be sst or fftw.");

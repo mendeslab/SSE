@@ -125,10 +125,12 @@
   <!-- Optional QuaSSE native build; ordinary compile/test do not require a C++ toolchain or FFTW. -->
   <target name="native" description="Build the optional C++20 QuaSSE FFTW library">
     <exec executable="make" dir="jni/quasse" failonerror="true">
+      <!-- Resolve relative overrides at the project root, not Make's working directory. -->
       <env key="BUILD_DIR" path="${native.build}"/>
     </exec>
   </target>
 
+  <!-- Reuse QuaSSE references with FFTW required; the property below selects tests, not application defaults. -->
   <target name="test-native" depends="native,compile-test" description="Require FFTW and run QuaSSE comparisons">
     <java classname="org.junit.platform.console.ConsoleLauncher" fork="true" failonerror="true"
           dir="${basedir}" maxmemory="1g">
