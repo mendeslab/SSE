@@ -1,0 +1,18 @@
+#!/bin/sh
+# Incrementally compile with Ant, then invoke BEAST's standard launcher in the caller's directory.
+set -eu
+if [ "${1-}" = --help ] || [ "$#" -eq 0 ]; then
+    echo 'Usage: beast-sse [BEAST options] analysis.xml'
+    echo 'Set BEAST_HOME to a BEAST 2.7 installation containing bin/ and lib/.'
+    echo 'Alternatively configure build.properties; see build.properties.example.'
+    echo 'ant show-config displays dependency paths; ant show-ide displays IDE settings.'
+    echo 'BEAST arguments are passed unchanged; normal package discovery applies.'
+    exit 0
+fi
+sse_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ant -q -f "$sse_dir/build.xml" prepare-run
+if [ -n "${JAVA_HOME-}" ]; then
+    exec "$JAVA_HOME/bin/java" "@$sse_dir/build/beast.args" "$@"
+else
+    exec java "@$sse_dir/build/beast.args" "$@"
+fi

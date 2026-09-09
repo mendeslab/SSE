@@ -102,4 +102,46 @@ Set BEAST_HOME to an installation containing bin/ and lib/, or use -Dbeast.dir f
         arg2="dc498f234228f81c818becfb6b7f71f73df2b0e995f93f25c05fced0c77e6356"/></not></condition>
     </fail>
   </target>
+
+  <!-- Share resolved paths between the command-line launcher and IDE instructions.
+       Absolute, quoted arguments allow launching from another directory, including spaces. -->
+  <target name="prepare-launch" description="Write standard Java launcher arguments without compiling">
+    <fail message="Missing BEAST launch dependency; inspect ant show-config.">
+      <condition><not><and>
+        <available file="${launcher.jar}"/><available file="${beast.jar}"/>
+        <available file="${beast.app.jar}"/><available file="${beast.version}"/>
+        <available file="${beast.app.version}"/>
+      </and></not></condition>
+    </fail>
+    <pathconvert property="launch.classpath">
+      <path>
+        <pathelement location="${build}"/>
+        <path refid="compile.classpath"/>
+        <pathelement location="${launcher.jar}"/>
+        <pathelement location="${beast.app.jar}"/>
+      </path>
+    </pathconvert>
+    <property name="launch.base.version" location="${beast.version}"/>
+    <property name="launch.app.version" location="${beast.app.version}"/>
+    <mkdir dir="build"/>
+    <echo file="build/beast.args">-cp
+"${launch.classpath}"
+beast.pkgmgmt.launcher.BeastLauncher
+-version_file
+"${launch.base.version}"
+-version_file
+"${launch.app.version}"
+-version_file
+"${basedir}/version.xml"
+</echo>
+  </target>
+
+  <target name="prepare-run" depends="compile,prepare-launch"/>
+
+  <target name="show-ide" depends="prepare-launch" description="Show IDE classpath and program arguments">
+    <loadfile property="launch.arguments" srcfile="build/beast.args"/>
+    <echo>${launch.arguments}
+In the IDE, replace the SSE build classpath entry with the IDE's output directory.
+Use your run directory as the working directory; append the XML path to the program arguments.</echo>
+  </target>
 </project>
