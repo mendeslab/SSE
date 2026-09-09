@@ -21,7 +21,8 @@
   <!-- Directories necessary for all BEAST 2 packages -->
   <property name="examples" location="examples"/>
 
-  <!-- Names of temporary build/test directories -->
+  <!-- These select class/test/package outputs. Launch arguments and test support default to build/.
+       With overridden outputs, clean removes only those outputs, not all support files. -->
   <property name="build" location="build"/>
   <property name="build-test" location="build-test"/>
   <property name="test-reports" location="test-reports"/>
@@ -55,24 +56,17 @@
     </fail>
   </target>
 
-  <target name="show-config" depends="check-beast-home" description="Show BEAST paths and package versions">
+  <target name="show-config" depends="check-beast-home" description="Show BEAST dependency paths">
     <echo>BEAST_HOME: ${env.BEAST_HOME}
 Base jar: ${beast.jar}
 Launcher: ${launcher.jar}
 App jar: ${beast.app.jar}
 Base metadata: ${beast.version}
 App metadata: ${beast.app.version}
-JUnit: ${junit.jar}
-Set BEAST_HOME to an installation containing bin/ and lib/.</echo>
-    <xmlproperty file="${beast.version}" prefix="base.info"/>
-    <xmlproperty file="${beast.app.version}" prefix="app.info"/>
-    <echo>BEAST.base: ${base.info.package(version)}; BEAST.app: ${app.info.package(version)}</echo>
+JUnit: ${junit.jar}</echo>
   </target>
 
   <target name="prepare-base-services" depends="check-beast-home">
-    <fail message="BEAST.base metadata not found: ${beast.version}. Check BEAST_HOME.">
-      <condition><not><available file="${beast.version}"/></not></condition>
-    </fail>
     <!-- Empty lib directories let BEAST's JUnit service discovery find the parent version.xml.
          This adapts installed metadata filenames to JUnit discovery, not package installation. -->
     <mkdir dir="${test.services}/BEAST.base/lib"/>
@@ -95,13 +89,6 @@ Set BEAST_HOME to an installation containing bin/ and lib/.</echo>
   <!-- Share resolved paths between the command-line launcher and IDE instructions.
        Absolute, quoted arguments allow launching from another directory, including spaces. -->
   <target name="prepare-launch" depends="check-beast-home" description="Write standard Java launcher arguments without compiling">
-    <fail message="Missing BEAST launch dependency; inspect ant show-config.">
-      <condition><not><and>
-        <available file="${launcher.jar}"/><available file="${beast.jar}"/>
-        <available file="${beast.app.jar}"/><available file="${beast.version}"/>
-        <available file="${beast.app.version}"/>
-      </and></not></condition>
-    </fail>
     <pathconvert property="launch.classpath">
       <path>
         <pathelement location="${build}"/>
@@ -112,7 +99,6 @@ Set BEAST_HOME to an installation containing bin/ and lib/.</echo>
     </pathconvert>
     <property name="launch.base.version" location="${beast.version}"/>
     <property name="launch.app.version" location="${beast.app.version}"/>
-    <mkdir dir="build"/>
     <echo file="build/beast.args">-cp
 "${launch.classpath}"
 beast.pkgmgmt.launcher.BeastLauncher
@@ -137,22 +123,10 @@ Use your run directory as the working directory; append the XML path to the prog
   <!-- Prepare for compilation -->
   <target name="init" depends="check-beast-home">
 
-    <available file="version.xml" property="versionAvailable"/>
-    <fail unless="versionAvailable">
-      ** Required file version.xml does not exist. **
-    </fail>
-
-    <!-- Read package name and version from xml file -->
-    <xmlproperty file="version.xml" prefix="fromVersionFile" />
-    <property name="projName" value="${fromVersionFile.package(name)}" />
-    <property name="projVersion" value="${fromVersionFile.package(version)}" />
-
     <mkdir dir="${build}"/>
 
-    <available file="${beast.jar}" property="beastAvailable"/>
-    <fail unless="beastAvailable">
-      ** BEAST.base.jar was not found at ${beast.jar}. **
-      Check BEAST_HOME (the installation containing bin/ and lib/).
+    <fail message="BEAST.base.jar not found: ${beast.jar}. Check BEAST_HOME.">
+      <condition><not><available file="${beast.jar}"/></not></condition>
     </fail>
   </target>
 
@@ -170,16 +144,12 @@ Use your run directory as the working directory; append the XML path to the prog
     <mkdir dir="${build-test}"/>
     <mkdir dir="${test-reports}"/>
 
-    <available file="${launcher.jar}" property="launcherAvailable"/>
-    <fail unless="launcherAvailable">
-      ** BEAST launcher.jar was not found at ${launcher.jar}. **
-      Check BEAST_HOME (the installation containing bin/ and lib/).
+    <fail message="BEAST launcher.jar not found: ${launcher.jar}. Check BEAST_HOME.">
+      <condition><not><available file="${launcher.jar}"/></not></condition>
     </fail>
 
-    <available file="${junit.jar}" property="junitAvailable"/>
-    <fail unless="junitAvailable">
-      ** JUnit was not found at ${junit.jar}. **
-      Run ant fetch-test-deps, or supply -Djunit.jar=/path/to/junit.jar.
+    <fail message="JUnit not found: ${junit.jar}. Run ant fetch-test-deps or set -Djunit.jar.">
+      <condition><not><available file="${junit.jar}"/></not></condition>
     </fail>
   </target>
 
@@ -231,15 +201,15 @@ Use your run directory as the working directory; append the XML path to the prog
 
   <!-- Create BEAST 2 package -->
   <target name="build" depends="compile">
+    <!-- Read package name and version from xml file -->
+    <xmlproperty file="version.xml" prefix="fromVersionFile" />
+    <property name="projName" value="${fromVersionFile.package(name)}" />
+    <property name="projVersion" value="${fromVersionFile.package(version)}" />
     <property name="fullName" value="${projName}.v${projVersion}"/>
 
-    <mkdir dir="${pack}"/>
-    <mkdir dir="${pack}/examples"/>
-    <mkdir dir="${pack}/lib"/>
 
     <jar jarfile="${pack}/${fullName}.src.jar" basedir="${src}" />
 
-    <mkdir dir="${lib}" />
     <copy todir="${pack}/lib">
       <fileset dir="${lib}" includes="*.jar" />
     </copy>
