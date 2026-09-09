@@ -10,6 +10,10 @@ import java.util.Random;
 
 public class QuaSSEDistribution extends QuaSSEProcess {
 
+    public final Input<String> integrationBackendInput = new Input<>("integrationBackend",
+            "X propagation implementation: java or native (requires fftBackend=fftw). T remains Java.", "java");
+    private QuaSSENativeIntegrator nativeLo, nativeHi;
+
     final public Input<LinkFn> q2mLambdaInput = new Input<>("q2mLambda", "Function converting quantitative trait into lambda parameter.", Input.Validate.REQUIRED);
     final public Input<LinkFn> q2mMuInput = new Input<>("q2mMu", "Function converting quantitative trait into mu parameter.", Input.Validate.REQUIRED);
     final public Input<LinkFn> q2dInput = new Input<>("q2d", "Function converting quantitative trait into initial D values.", Input.Validate.REQUIRED);
@@ -36,6 +40,15 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         // The parent has allocated FFT resources; release them if the remaining initialization fails.
         try {
+            String integration = integrationBackendInput.get();
+            if (!"java".equals(integration) && !"native".equals(integration))
+                throw new IllegalArgumentException("integrationBackend must be java or native.");
+            if ("native".equals(integration)) {
+                if (!"fftw".equals(fftBackendInput.get()))
+                    throw new IllegalArgumentException("Native X propagation requires fftBackend=fftw.");
+                nativeLo = new QuaSSENativeIntegrator(nXbinsLo, nDimensionsE + nDimensionsD);
+                nativeHi = new QuaSSENativeIntegrator(nXbinsHi, nDimensionsE + nDimensionsD);
+            }
             int nNodes = tree.getNodeCount();
 
             logNormalizationFactors = new double[nNodes];
@@ -63,6 +76,15 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             close();
             throw failure;
         }
+    }
+
+    // Also called by parent initialization: release old resolution-specific resources before resizing.
+    @Override
+    public void close() {
+        if (nativeLo != null) nativeLo.close();
+        if (nativeHi != null) nativeHi.close();
+        nativeLo = nativeHi = null;
+        super.close();
     }
 
     @Override
@@ -598,6 +620,13 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     @Override
     public void propagateXInPlace(double[][] esDsAtNode, double[][] fftBufferEsDsAtNode, double[][] scratchAtNode, boolean lowRes) {
+
+        QuaSSENativeIntegrator nativeX = lowRes ? nativeLo : nativeHi;
+        if (nativeX != null) {
+            int[] flanks = lowRes ? nLeftNRightFlanksLo : nLeftNRightFlanksHi;
+            nativeX.propagateX(esDsAtNode, lowRes ? fftFYLo : fftFYHi, flanks[0], flanks[1]);
+            return;
+        }
 
         // debugging
         // System.out.println("esDsAtNode[1] = " + Arrays.toString(esDsAtNode[1]));

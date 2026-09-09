@@ -51,6 +51,7 @@ public class QuaSSEDistributionTest {
     private QuaSSEDistribution newDistribution() {
         QuaSSEDistribution distribution = new QuaSSEDistribution();
         distribution.fftBackendInput.setValue(System.getProperty("test.quasse.fft", "sst"), distribution);
+        distribution.integrationBackendInput.setValue(System.getProperty("test.quasse.integration", "java"), distribution);
         opened.add(distribution);
         return distribution;
     }
@@ -1466,31 +1467,42 @@ public class QuaSSEDistributionTest {
     }
 
     // References constrain final likelihoods, not every E/D entry or resized native resources.
-    // This comparison protects FFT replacement; remove it if only one implementation remains.
+    // Compare FFTs, or native X against Java X with FFTW; obsolete with only one implementation.
     @Test
     public void testFftImplementationsAndReinitialization() {
         QuaSSEDistribution selected = smallDistribution(0, .001, .005, "(sp1:0.02,sp2:0.02);", "Observed");
-        QuaSSEDistribution sst = smallDistribution(0, .001, .005, "(sp1:0.02,sp2:0.02);", "Observed");
-        sst.fftBackendInput.setValue("sst", sst);
-        sst.initAndValidate();
+        QuaSSEDistribution reference = smallDistribution(0, .001, .005, "(sp1:0.02,sp2:0.02);", "Observed");
+        reference.integrationBackendInput.setValue("java", reference);
+        String referenceFFT = "native".equals(System.getProperty("test.quasse.integration")) ? "fftw" : "sst";
+        reference.fftBackendInput.setValue(referenceFFT, reference);
+        reference.initAndValidate();
         for (double drift : new double[] {0, 1, -1}) {
             selected.driftInput.get().setValue(drift);
-            sst.driftInput.get().setValue(drift);
-            Assert.assertEquals(sst.calculateLogP(), selected.calculateLogP(), 1e-10);
+            reference.driftInput.get().setValue(drift);
+            Assert.assertEquals(reference.calculateLogP(), selected.calculateLogP(), 1e-10);
             for (boolean low : new boolean[] {true, false}) {
-                double[][][] expected = sst.getEsDs(low), actual = selected.getEsDs(low);
+                double[][][] expected = reference.getEsDs(low), actual = selected.getEsDs(low);
                 for (int node = 0; node < expected.length; node++)
                     for (int dim = 0; dim < expected[node].length; dim++)
                         Assert.assertArrayEquals(expected[node][dim], actual[node][dim], 1e-10);
             }
         }
         // Reinitialization changes transform lengths, unlike parameter-dependent padding changes.
-        for (QuaSSEDistribution distribution : new QuaSSEDistribution[] {sst, selected}) {
+        for (QuaSSEDistribution distribution : new QuaSSEDistribution[] {reference, selected}) {
             distribution.nXbinsInput.get().setValue(256);
             distribution.highLowRatioInput.get().setValue(3);
             distribution.initAndValidate();
         }
-        Assert.assertEquals(sst.calculateLogP(), selected.calculateLogP(), 1e-10);
+        Assert.assertEquals(reference.calculateLogP(), selected.calculateLogP(), 1e-10);
+        // Switching back releases native X storage instead of retaining closed resources.
+        selected.integrationBackendInput.setValue("java", selected);
+        selected.initAndValidate();
+        Assert.assertEquals(reference.calculateLogP(), selected.calculateLogP(), 1e-10);
+        selected.integrationBackendInput.setValue("invalid", selected);
+        Assert.assertThrows(IllegalArgumentException.class, selected::initAndValidate);
+        selected.integrationBackendInput.setValue("native", selected);
+        selected.fftBackendInput.setValue("sst", selected);
+        Assert.assertThrows(IllegalArgumentException.class, selected::initAndValidate);
     }
 
     // Build the small reference model with independent inputs, so comparisons cannot share caches.

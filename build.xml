@@ -145,6 +145,19 @@
       <arg value="--select-class=quasse.QuaSSENativeIntegratorTest"/>
       <arg value="--select-class=test.QuaSSEDistributionTest"/>
     </java>
+    <!-- Repeat model references and rejection/reinitialization checks with native X selected. -->
+    <java classname="org.junit.platform.console.ConsoleLauncher" fork="true" failonerror="true"
+          dir="${basedir}" maxmemory="1g">
+      <classpath refid="test.classpath"/>
+      <jvmarg value="-Xcheck:jni"/>
+      <jvmarg value="-Djava.library.path=${native.build}"/>
+      <sysproperty key="test.quasse.fft" value="fftw"/>
+      <sysproperty key="test.quasse.integration" value="native"/>
+      <arg value="--disable-banner"/>
+      <arg value="--details=summary"/>
+      <arg value="--reports-dir=${test-reports}/native-x"/>
+      <arg value="--select-class=test.QuaSSEDistributionTest"/>
+    </java>
   </target>
 
   <!-- MoSSE tests require the separately built FFTW JNI library. -->

@@ -6,6 +6,7 @@ import java.lang.ref.Reference;
 /**
  * Native QuaSSE X propagation, with independently owned arrays and FFTW transforms.
  * Each call copies current E/D and kernel inputs; no model state is cached between calls.
+ * Per-step copying is temporary; whole-segment integration can later transfer inputs once.
  * T propagation remains in Java. Close explicitly; Cleaner releases abandoned instances.
  */
 public final class QuaSSENativeIntegrator implements AutoCloseable {

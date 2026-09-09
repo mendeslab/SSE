@@ -70,7 +70,11 @@ Set `fftBackend="fftw"` on the XML's `QuaSSEDistribution`, then run with `beast-
 The default is `sst`; selecting FFTW requires the library and never falls back silently.
 For an IDE run, set `-Djava.library.path=/path/to/SSE/build/gcc-16-debug-O` in JVM options.
 On newer JDKs, add `--enable-native-access=ALL-UNNAMED` to JVM options (or `JAVA_TOOL_OPTIONS`).
-Only transforms move into C++; integration and the numerical method are unchanged.
+By default only transforms move into C++; the numerical method is unchanged.
+
+To also run X propagation in C++, set `integrationBackend="native"` alongside
+`fftBackend="fftw"` on the QuaSSE distribution. The default is `integrationBackend="java"`;
+T propagation, time stepping, and normalization remain in Java in both modes.
 
 For release timings, build with
 `make -C jni/quasse BUILD_DIR=../../build/gcc-16 CXXFLAGS='-O3 -g'`
