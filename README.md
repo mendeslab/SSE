@@ -7,31 +7,23 @@ We are finalizing the implementation of a stochastic character mapper as in Frey
 
 ## Command-line build with BEAST 2.7
 
-Use JDK 17 or newer, and build the sibling `beast2` and `BeastFX` repositories
-first. Then compile SSE and the retained MoSSE Java sources directly into
-`build` without creating an SSE jar:
+Use JDK 17 or newer and Ant. Point `BEAST_HOME` at a BEAST 2.7.8 installation
+containing `bin/` and `lib/`, then run directly from source (no SSE jar needed):
 
 ```sh
-ant compile
+export BEAST_HOME=/path/to/beast
+./beast-sse -seed 127 examples/BiSSE_fixed_tree_SDSEP.xml
 ```
 
-If the BEAST source tree is elsewhere, pass it explicitly:
+`beast-sse` compiles incrementally and invokes BEAST's standard launcher with normal
+package discovery. It preserves your working directory and passes BEAST options unchanged.
+Use `JAVA_HOME` to select Java and `JAVA_TOOL_OPTIONS` for JVM memory/profiling options.
 
-```sh
-ant -Dbeast.dir=/path/to/beast2 compile
-```
+Alternatively, build the sibling `beast2` and `BeastFX` projects first. Root selection is:
+explicit `-Dbeast.home` / `-Dbeast.dir`, then untracked `build.properties`, then `BEAST_HOME`,
+then sibling sources. See `build.properties.example`; `ant show-config` prints resolved paths.
 
-Run an example with the compiled class directory on the Java class path:
-
-```sh
-java -cp '/path/to/SSE/build:../beast2/build/dist/launcher.jar:'\
-'../beast2/build/dist/BEAST.base.jar:'\
-'../BeastFX/build/dist/BEAST.app.jar:lib/*' \
-  beastfx.app.beast.BeastMCMC -overwrite examples/BiSSE_fixed_tree_SDSEP.xml
-```
-
-The absolute path to `build` lets BEAST locate this checkout's `version.xml`
-and load its services. To compile and run the portable SSE and QuaSSE tests:
+To compile without running, use `ant compile`. To run the portable tests:
 
 ```sh
 ant test
@@ -41,8 +33,23 @@ The two CLaSSE sampling studies are skipped unless their untracked validation
 data are present under `data/`. MoSSE uses a separate native test target; see
 `NOTES.md` for its FFTW build requirements and current limitations.
 
-The optional `ant build` target creates a package archive under `dist` without
-bundling BEAST itself. It is not required when running from the source checkout.
+In installed mode, first run `ant fetch-test-deps` to obtain JUnit, or set `junit.jar`.
 
 Do not add the historical `SSE.jar` to this class path: it bundles BEAST 2.6
 classes that conflict with BEAST 2.7.
+If an installed SSE conflicts with development classes, uninstall it or update its package files.
+
+## Install a package
+
+`ant build` creates `dist/biogeo.v0.0.1.zip` without bundling BEAST. For a local Linux install,
+unzip it into `~/.beast/2.7/biogeo/` (remove an older installation first), then use BEAUti's
+`File > Clear class path`. Run analyses with `"$BEAST_HOME/bin/beast" analysis.xml`.
+See BEAST's [manual installation instructions](https://www.beast2.org/managing-packages/index.html).
+
+## IDE development
+
+Use `beast.pkgmgmt.launcher.BeastLauncher` as the run configuration's main class.
+`ant show-ide` prints the classpath and `-version_file` program arguments without compiling;
+replace the SSE `build` entry with your IDE's compiled output, and append the XML path.
+Set the working directory to your run directory. Let IntelliJ/Eclipse compile SSE for debugging.
+Dependencies may come from the configured installation or BEAST/BeastFX source projects.
