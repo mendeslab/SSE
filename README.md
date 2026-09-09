@@ -19,9 +19,7 @@ export BEAST_HOME=/path/to/beast
 package discovery. It preserves your working directory and passes BEAST options unchanged.
 Use `JAVA_HOME` to select Java and `JAVA_TOOL_OPTIONS` for JVM memory/profiling options.
 
-Alternatively, build the sibling `beast2` and `BeastFX` projects first. Root selection is:
-explicit `-Dbeast.home` / `-Dbeast.dir`, then untracked `build.properties`, then `BEAST_HOME`,
-then sibling sources. See `build.properties.example`; `ant show-config` prints resolved paths.
+`BEAST_HOME` is required; `ant show-config` prints resolved dependency paths.
 
 To compile without running, use `ant compile`. To run the portable tests:
 
@@ -33,7 +31,7 @@ The two CLaSSE sampling studies are skipped unless their untracked validation
 data are present under `data/`. MoSSE uses a separate native test target; see
 `NOTES.md` for its FFTW build requirements and current limitations.
 
-In installed mode, first run `ant fetch-test-deps` to obtain JUnit, or set `junit.jar`.
+First run `ant fetch-test-deps` to obtain JUnit, or set `junit.jar`.
 
 Do not add the historical `SSE.jar` to this class path: it bundles BEAST 2.6
 classes that conflict with BEAST 2.7.
@@ -52,4 +50,4 @@ Use `beast.pkgmgmt.launcher.BeastLauncher` as the run configuration's main class
 `ant show-ide` prints the classpath and `-version_file` program arguments without compiling;
 replace the SSE `build` entry with your IDE's compiled output, and append the XML path.
 Set the working directory to your run directory. Let IntelliJ/Eclipse compile SSE for debugging.
-Dependencies may come from the configured installation or BEAST/BeastFX source projects.
+Use dependencies from the configured BEAST installation; sources can be attached in the IDE.

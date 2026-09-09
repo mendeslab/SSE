@@ -39,7 +39,7 @@
   </path>
 
   <!-- Prepare for compilation -->
-  <target name="init">
+  <target name="init" depends="check-beast-home">
 
     <available file="version.xml" property="versionAvailable"/>
     <fail unless="versionAvailable">
@@ -59,7 +59,7 @@
     <available file="${beast.jar}" property="beastAvailable"/>
     <fail unless="beastAvailable">
       ** BEAST.base.jar was not found at ${beast.jar}. **
-      Set BEAST_HOME to an installation (bin/ and lib/), or use -Dbeast.dir=/path/to/beast2.
+      Check BEAST_HOME (the installation containing bin/ and lib/).
     </fail>
   </target>
 
@@ -80,13 +80,13 @@
     <available file="${launcher.jar}" property="launcherAvailable"/>
     <fail unless="launcherAvailable">
       ** BEAST launcher.jar was not found at ${launcher.jar}. **
-      Set BEAST_HOME to an installation (bin/ and lib/), or use -Dbeast.dir=/path/to/beast2.
+      Check BEAST_HOME (the installation containing bin/ and lib/).
     </fail>
 
     <available file="${junit.jar}" property="junitAvailable"/>
     <fail unless="junitAvailable">
       ** JUnit was not found at ${junit.jar}. **
-      Run ant fetch-test-deps in installed mode, or supply -Djunit.jar=/path/to/junit.jar.
+      Run ant fetch-test-deps, or supply -Djunit.jar=/path/to/junit.jar.
     </fail>
   </target>
 
