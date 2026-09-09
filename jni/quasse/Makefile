@@ -17,6 +17,6 @@ $(BUILD_DIR)/include/SSE_fft_FftwFFT.h: ../../src/SSE/fft/ComplexFFT.java ../../
 	$(JAVA_HOME)/bin/javac --release 17 -h $(BUILD_DIR)/include -d $(BUILD_DIR)/classes $^
 
 # Link only QuaSSE's C++ code and FFTW; no MoSSE or GSL dependency.
-$(BUILD_DIR)/libsse_quasse.so: fft.cpp $(BUILD_DIR)/include/SSE_fft_FftwFFT.h Makefile
+$(BUILD_DIR)/libsse_quasse.so: fft.cpp native_support.h $(BUILD_DIR)/include/SSE_fft_FftwFFT.h Makefile
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -std=c++20 -Wall -Wextra -Werror -fPIC -pthread -shared \
 		$(LDFLAGS) -o $@ $< $(LDLIBS)
