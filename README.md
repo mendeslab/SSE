@@ -7,11 +7,11 @@ We are finalizing the implementation of a stochastic character mapper as in Frey
 
 ## Command-line build with BEAST 2.7
 
-Use JDK 17 or newer and Ant. Point `BEAST_HOME` at a BEAST 2.7.8 installation
+Use JDK 17 or newer and Ant. Point `BEAST2_HOME` at a BEAST 2.7.8 installation
 containing `bin/` and `lib/`, then run directly from source (no SSE jar needed):
 
 ```sh
-export BEAST_HOME=/path/to/beast
+export BEAST2_HOME=/path/to/beast
 ./beast-sse -seed 127 examples/BiSSE_fixed_tree_SDSEP.xml
 ```
 
@@ -19,7 +19,7 @@ export BEAST_HOME=/path/to/beast
 package discovery. It preserves your working directory and passes BEAST options unchanged.
 Use `JAVA_HOME` to select Java and `JAVA_TOOL_OPTIONS` for JVM memory/profiling options.
 
-`BEAST_HOME` is required; `ant show-config` prints resolved dependency paths.
+`BEAST2_HOME` is required; `ant show-config` prints resolved dependency paths.
 
 To compile without running, use `ant compile`. To run the portable tests:
 
@@ -41,7 +41,7 @@ If an installed SSE conflicts with development classes, uninstall it or update i
 
 `ant build` creates `dist/biogeo.v0.0.1.zip` without bundling BEAST. For a local Linux install,
 unzip it into `~/.beast/2.7/biogeo/` (remove an older installation first), then use BEAUti's
-`File > Clear class path`. Run analyses with `"$BEAST_HOME/bin/beast" analysis.xml`.
+`File > Clear class path`. Run analyses with `"$BEAST2_HOME/bin/beast" analysis.xml`.
 See BEAST's [manual installation instructions](https://www.beast2.org/managing-packages/index.html).
 
 ## IDE development

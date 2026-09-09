@@ -6,11 +6,11 @@
 
   <property name="javaVersion" value="17"/>
   <property environment="env"/>
-  <property name="beast.jar" location="${env.BEAST_HOME}/lib/packages/BEAST.base.jar"/>
-  <property name="launcher.jar" location="${env.BEAST_HOME}/lib/launcher.jar"/>
-  <property name="beast.app.jar" location="${env.BEAST_HOME}/lib/packages/BEAST.app.jar"/>
-  <property name="beast.version" location="${env.BEAST_HOME}/lib/packages/BEAST.base.version.xml"/>
-  <property name="beast.app.version" location="${env.BEAST_HOME}/lib/packages/BEAST.app.version.xml"/>
+  <property name="beast.jar" location="${env.BEAST2_HOME}/lib/packages/BEAST.base.jar"/>
+  <property name="launcher.jar" location="${env.BEAST2_HOME}/lib/launcher.jar"/>
+  <property name="beast.app.jar" location="${env.BEAST2_HOME}/lib/packages/BEAST.app.jar"/>
+  <property name="beast.version" location="${env.BEAST2_HOME}/lib/packages/BEAST.base.version.xml"/>
+  <property name="beast.app.version" location="${env.BEAST2_HOME}/lib/packages/BEAST.app.version.xml"/>
   <property name="junit.download" location="build/test-libs/junit-platform-console-standalone-1.8.2.jar"/>
   <property name="junit.jar" location="${junit.download}"/>
   <property name="test.services" location="build/test-services"/>
@@ -44,12 +44,12 @@
 
   <!-- Check only targets that need BEAST; help, clean and JUnit downloads remain independent. -->
   <target name="check-beast-home">
-    <fail message="Set BEAST_HOME to a BEAST installation containing bin/ and lib/.">
+    <fail message="Set BEAST2_HOME to a BEAST installation containing bin/ and lib/.">
       <condition>
         <or>
-          <not><isset property="env.BEAST_HOME"/></not>
-          <equals arg1="${env.BEAST_HOME}" arg2=""/>
-          <not><available file="${env.BEAST_HOME}" type="dir"/></not>
+          <not><isset property="env.BEAST2_HOME"/></not>
+          <equals arg1="${env.BEAST2_HOME}" arg2=""/>
+          <not><available file="${env.BEAST2_HOME}" type="dir"/></not>
         </or>
       </condition>
     </fail>
@@ -59,7 +59,7 @@
 
     <mkdir dir="${build}"/>
 
-    <fail message="BEAST.base.jar not found: ${beast.jar}. Check BEAST_HOME.">
+    <fail message="BEAST.base.jar not found: ${beast.jar}. Check BEAST2_HOME.">
       <condition>
         <not><available file="${beast.jar}"/></not>
       </condition>
@@ -87,7 +87,7 @@
     <mkdir dir="${build-test}"/>
     <mkdir dir="${test-reports}"/>
 
-    <fail message="BEAST launcher.jar not found: ${launcher.jar}. Check BEAST_HOME.">
+    <fail message="BEAST launcher.jar not found: ${launcher.jar}. Check BEAST2_HOME.">
       <condition>
         <not><available file="${launcher.jar}"/></not>
       </condition>
@@ -226,7 +226,7 @@ beast.pkgmgmt.launcher.BeastLauncher
   <target name="prepare-run" depends="compile,prepare-launch"/>
 
   <target name="show-config" depends="check-beast-home" description="Show BEAST dependency paths">
-    <echo>BEAST_HOME: ${env.BEAST_HOME}
+    <echo>BEAST2_HOME: ${env.BEAST2_HOME}
 Base jar: ${beast.jar}
 Launcher: ${launcher.jar}
 App jar: ${beast.app.jar}
