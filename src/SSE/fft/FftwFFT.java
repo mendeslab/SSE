@@ -1,4 +1,4 @@
-package SSE;
+package SSE.fft;
 
 import java.lang.ref.Cleaner;
 import java.lang.ref.Reference;

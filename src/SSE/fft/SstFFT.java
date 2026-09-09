@@ -1,4 +1,4 @@
-package SSE;
+package SSE.fft;
 
 import org.shared.fft.JavaFftService;
 
@@ -20,12 +20,12 @@ public final class SstFFT implements ComplexFFT {
     }
 
     // Retain service-based SSEUtils callers while the active solver uses ComplexFFT directly.
-    SstFFT(int size, JavaFftService service) {
+    public SstFFT(int size, JavaFftService service) {
         this(new int[] {size}, service);
     }
 
     // Preserve the older utility's multidimensional SST argument without changing active QuaSSE layout.
-    SstFFT(int[] dimensions, JavaFftService service) {
+    public SstFFT(int[] dimensions, JavaFftService service) {
         int count = 1;
         for (int length : dimensions) {
             if (length <= 0 || count > Integer.MAX_VALUE / 2 / length)

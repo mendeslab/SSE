@@ -1,5 +1,8 @@
 package SSE;
 
+import SSE.fft.ComplexFFT;
+import SSE.fft.SstFFT;
+
 /*
  * diversitree's (src/quasse-eqs-fftC.c) variables explained:
  *

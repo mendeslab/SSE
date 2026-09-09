@@ -1,4 +1,4 @@
-package SSE;
+package SSE.fft;
 
 /**
  * Lets QuaSSE switch FFT implementations without duplicating integration code.

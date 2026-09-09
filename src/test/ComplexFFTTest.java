@@ -1,8 +1,8 @@
 package test;
 
-import SSE.ComplexFFT;
-import SSE.FftwFFT;
-import SSE.SstFFT;
+import SSE.fft.ComplexFFT;
+import SSE.fft.FftwFFT;
+import SSE.fft.SstFFT;
 import org.junit.Assert;
 import org.junit.Test;
 
