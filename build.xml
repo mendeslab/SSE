@@ -142,6 +142,7 @@
       <arg value="--details=summary"/>
       <arg value="--reports-dir=${test-reports}/native"/>
       <arg value="--select-class=test.ComplexFFTTest"/>
+      <arg value="--select-class=quasse.QuaSSENativeIntegratorTest"/>
       <arg value="--select-class=test.QuaSSEDistributionTest"/>
     </java>
   </target>

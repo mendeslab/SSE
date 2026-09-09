@@ -1,5 +1,5 @@
 # Independent of the retained MoSSE native build. All outputs stay under SSE/build/.
-# Produces libsse_quasse.so for SSE.fft.FftwFFT; Ant's optional native target invokes this file.
+# Produces libsse_quasse.so for FFTs and X propagation; Ant's optional native target invokes it.
 CXX = g++-16
 JAVA_HOME ?= $(shell dirname $(shell dirname $(shell readlink -f $(shell command -v javac))))
 BUILD_DIR ?= ../../build/gcc-16-debug-O
@@ -17,6 +17,11 @@ $(BUILD_DIR)/include/SSE_fft_FftwFFT.h: ../../src/SSE/fft/ComplexFFT.java ../../
 	$(JAVA_HOME)/bin/javac --release 17 -h $(BUILD_DIR)/include -d $(BUILD_DIR)/classes $^
 
 # Link only QuaSSE's C++ code and FFTW; no MoSSE or GSL dependency.
-$(BUILD_DIR)/libsse_quasse.so: fft.cpp native_support.h $(BUILD_DIR)/include/SSE_fft_FftwFFT.h Makefile
+$(BUILD_DIR)/include/SSE_QuaSSENativeIntegrator.h: ../../src/SSE/QuaSSENativeIntegrator.java
+	mkdir -p $(BUILD_DIR)/include $(BUILD_DIR)/classes
+	$(JAVA_HOME)/bin/javac --release 17 -h $(BUILD_DIR)/include -d $(BUILD_DIR)/classes $<
+
+$(BUILD_DIR)/libsse_quasse.so: fft.cpp integration.cpp native_support.h \
+        $(BUILD_DIR)/include/SSE_fft_FftwFFT.h $(BUILD_DIR)/include/SSE_QuaSSENativeIntegrator.h Makefile
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -std=c++20 -Wall -Wextra -Werror -fPIC -pthread -shared \
-		$(LDFLAGS) -o $@ $< $(LDLIBS)
+		$(LDFLAGS) -o $@ fft.cpp integration.cpp $(LDLIBS)
