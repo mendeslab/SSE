@@ -3,6 +3,7 @@ package SSE;
 import org.shared.fft.JavaFftService;
 
 /**
+ * Uses the Shared Scientific Toolbox (SST), bundled in lib/sst.jar.
  * Default Java implementation, also retained for comparison with FFTW.
  * Delegates to JavaFftService; keeping this object does not make SST reuse its
  * internal scratch arrays or transform preparation between calls.
