@@ -60,6 +60,16 @@ logs every iteration, prints every 10, and checkpoints every 10. A 20-step run h
 For Java integration with FFTW, set `integrationBackend="java"` in a copy. For the portable SST
 backend also set `fftBackend="sst"`. Native-library availability never silently changes the backend.
 
+### Prior-initialized pilot
+
+Use `QuaSSE_233_primates_MCMC_2000.xml` in the command above for 2,000 iterations with all six
+inferred parameters drawn from their existing priors. XML parameter values are placeholders;
+tree, observations, observation SD and zero drift remain fixed. Different `-seed` values give
+different starts; use separate run directories. The trace is `QuaSSE_233_primates_MCMC_2000.log`.
+An invalid initial posterior stops the run rather than silently retrying another draw.
+BEAST's `-resume` restores the checkpoint instead of drawing new starting values. This is a pilot,
+not a guarantee of convergence; priors, operators and numerical settings match the short example.
+
 ## Validation
 
 All embedded taxon/value pairs and the exported tree were checked against the source files.
