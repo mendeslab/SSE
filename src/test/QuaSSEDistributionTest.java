@@ -1694,8 +1694,8 @@ public class QuaSSEDistributionTest {
         return distribution;
     }
 
-    // Generated and explicit grids must agree and remain visible to BEAST notifications. Existing
-    // references use explicit controls; this also checks frozen defaults and reinitialization.
+    // Single-parameter proposals must notify the generated grid without forcing everything dirty.
+    // Full-recalculation references cannot check that path; also retain default/reinitialization checks.
     @Test
     public void testGridDefaultsAndNotifications() {
         QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
@@ -1722,14 +1722,49 @@ public class QuaSSEDistributionTest {
         double first = copy[0];
         copy[0] = 100;
         Assert.assertEquals(first, grid.copyX(true)[0], 0.0);
+        RealParameter lambda = ((ConstantLinkFn) distribution.q2mLambdaInput.get()).yValueInput.get();
+        RealParameter[] parameters = {grid.driftInput.get(), grid.diffusionInput.get(), lambda};
+        State state = new State();
+        state.initByName("stateNode", Arrays.asList(parameters));
+        state.initialise();
+        state.setPosterior(distribution);
+        double accepted = state.robustlyCalcPosterior(distribution);
         int revision = grid.getRevision();
-        grid.driftInput.get().setValue(.000001);
-        evaluate(distribution);
-        Assert.assertEquals(revision, grid.getRevision());
-        Assert.assertEquals(.000001, grid.getDrift(), 0.0); // Notification occurred even without a layout change.
-        grid.diffusionInput.get().setValue(.1);
-        evaluate(distribution);
-        Assert.assertTrue(grid.getRevision() > revision);
+        double[] proposals = {.000001, .1, .16};
+        for (int i = 0; i < parameters.length; ++i) {
+            state.store(i);
+            parameters[i].setValue(proposals[i]);
+            state.storeCalculationNodes();
+            state.checkCalculationNodesDirtiness();
+            double proposed = distribution.calculateLogP();
+            if (i == 0) {
+                Assert.assertEquals(revision, grid.getRevision());
+                Assert.assertEquals(proposals[i], grid.getDrift(), 0.0);
+            } else if (i == 1) {
+                Assert.assertTrue(grid.getRevision() > revision);
+            }
+            QuaSSEDistribution reference = smallDistribution(parameters[0].getValue(), parameters[1].getValue(),
+                    grid.getTc(), "(sp1:0.09,sp2:0.09);", "Observed");
+            // Match the frozen controls, not defaults re-derived from a proposed state.
+            reference.gridInput.get().initByName("nX", grid.getBins(true), "dX", grid.getDx(),
+                    "xMid", grid.getMidpoint(), "dtMax", grid.getDtMax(), "tc", grid.getTc(),
+                    "hiLoRatio", grid.getRatio(), "flankWidthScaler", grid.flankWidthScalerInput.get());
+            ((ConstantLinkFn) reference.q2mLambdaInput.get()).yValueInput.get().setValue(lambda.getValue());
+            reference.initAndValidate();
+            Assert.assertEquals(evaluate(reference), proposed, 1e-12);
+            Assert.assertArrayEquals(reference.gridInput.get().copyX(true), grid.copyX(true), 0.0);
+            Assert.assertArrayEquals(reference.gridInput.get().copyX(false), grid.copyX(false), 0.0);
+            if (i == 1) {
+                state.restore();
+                state.restoreCalculationNodes();
+                Assert.assertEquals(accepted, distribution.getCurrentLogP(), 0.0);
+                // The next proposal changes only lambda: the rejected grid must still be refreshed.
+            } else {
+                state.acceptCalculationNodes();
+                accepted = proposed;
+            }
+            state.setEverythingDirty(false);
+        }
         grid.treeInput.get().getRoot().setHeight(.12);
         grid.traitsInput.get().setValue(1, .2);
         evaluate(distribution);
