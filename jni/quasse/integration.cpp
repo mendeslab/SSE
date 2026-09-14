@@ -82,8 +82,9 @@ public:
             // Validated flanks do not overlap: restore edges, clip only the interior, then zero padding.
             // Kernel extents restore opposite edges; imaginary entries remain untouched in every range.
             for (int i = 0; i < right; ++i) output[2 * i] = source[2 * i];
+            // Keep x first to preserve NaNs and negative zero; unconditional stores allow vectorization.
             for (int i = right; i < useful - left; ++i)
-                if (output[2 * i] < 0) output[2 * i] = 0;
+                output[2 * i] = std::max(output[2 * i], 0.0);
             for (int i = useful - left; i < useful; ++i) output[2 * i] = source[2 * i];
             for (int i = useful; i < fft.size; ++i) output[2 * i] = 0;
             std::copy_n(output, length, result.data() + std::size_t(d) * length);
