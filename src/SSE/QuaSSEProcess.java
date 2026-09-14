@@ -206,19 +206,6 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
      */
     protected abstract void initializeEsDs(int nNodes, int nDimensionsFFT, int nXbinsLo, int nXbinsHi);
 
-    protected void populateIndicesHiLo(int[] toArray, int ratioFromTo, int careAboutNTo, boolean jtransforms) {
-        int multipl = 2; // SST's JavaFftService expects Es and Ds to be interdigitated
-        if (jtransforms) multipl = 1;
-
-        int nElementsCopied = 0;
-        int i = ratioFromTo - 1; // offset because of indexing
-        while (nElementsCopied < careAboutNTo) {
-            toArray[nElementsCopied] = i * multipl;
-            i += ratioFromTo;
-            nElementsCopied++;
-        }
-    }
-
     /*
      *
      */
