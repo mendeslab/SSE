@@ -18,6 +18,7 @@
     <provider classname="SSE.MasqueradeBall"/>
     <provider classname="SSE.MoSSEDistribution"/>
     <provider classname="SSE.NormalCenteredAtObservedLinkFn"/>
+    <provider classname="SSE.PriorInitialiser"/>
     <provider classname="SSE.QuaSSEDistribution"/>
     <provider classname="SSE.QuaSSEGrid"/>
     <provider classname="SSE.StateDependentSpeciationExtinctionProcess"/>
