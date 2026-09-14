@@ -63,15 +63,16 @@ public class QuaSSENativeIntegratorTest {
         }
     }
 
-    // Full likelihoods do not expose imaginary entries, clipping, or repeated-input ownership.
-    // These comparisons remain needed while Java and native X are independently implemented.
+    // Full likelihoods can hide range-end errors: include absent flanks and a one-bin interior.
+    // Compare all components and repeated inputs; revisit when native X's numerical contract changes.
     @Test
     public void matchesJavaX() {
         Random random = new Random(127);
         for (int size : new int[]{32, 128}) {
             try (FftwFFT fft = new FftwFFT(size);
                  QuaSSENativeIntegrator nativeX = new QuaSSENativeIntegrator(size, 3)) {
-                for (int repeat = 0; repeat < 6; ++repeat) {
+                for (int[] flanks : new int[][]{{0, 0}, {0, 3}, {3, 0}, {1, 2}, {2, 1},
+                        {size / 2 - 1, 0}, {0, size / 2 - 1}}) {
                     double[][] javaValues = new double[3][2 * size];
                     double[][] nativeValues = new double[3][];
                     for (int d = 0; d < 3; ++d) {
@@ -81,7 +82,7 @@ public class QuaSSENativeIntegratorTest {
                     double[] kernel = new double[2 * size];
                     for (int i = 0; i < kernel.length; ++i) kernel[i] = random.nextDouble();
                     double[] savedKernel = kernel.clone();
-                    int left = repeat % 3, right = 3 - left;
+                    int left = flanks[0], right = flanks[1];
                     SSEUtils.propagateEandDinXQuaSSE(javaValues, new double[3][2 * size], kernel,
                             new double[3][2 * size], size, left, right, 1, 2, fft);
                     nativeX.propagateX(nativeValues, kernel, left, right);
