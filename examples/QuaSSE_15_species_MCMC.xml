@@ -40,7 +40,7 @@
       <!-- QuaSSE supplies the tree/trait likelihood, including survival conditioning.
            The tree is fixed and deliberately absent from the MCMC state and operators. -->
       <distribution id="likelihood" spec="QuaSSEDistribution" priorProbAtRootType="Observed"
-                    diffusion="@diffusion">
+                    >
         <tree id="tree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false"
               offset="0" singlechild="false"
               newick="(sp2:13.773202550247193,(sp1:12.766883843390154,((((sp12:1.170387028082835,sp13:1.170387028082835)nd16:0.98377203253569978,sp9:2.1541590606185328)nd11:5.4514010923658338,((sp5:4.3116453428710377,(sp14:0.89100552792334031,sp15:0.89100552792334031)nd14:3.4206398149476924)nd9:2.5366637762168405,((sp16:0.30118661250958267,sp17:0.30118661250958267)nd12:4.2643836673599331,(sp6:3.950838430033377,sp7:3.950838430033377)nd13:0.61473184983612239)nd10:2.2827388392183647)nd8:0.75725103389649229)nd5:2.5547391408670661,((sp10:2.0594782024944212,sp11:2.0594782024944212)nd15:0.41987890184391496,sp8:2.479357104338332)nd6:7.6809421895130914)nd4:2.6065845495387281)nd3:1.0063187068570474)nd1;"/>
@@ -48,7 +48,7 @@
                    sigmoidMidpoint="@midpoint" logisticGrowthRate="@steepness"/>
         <q2mMu spec="ConstantLinkFn" yV="@mu"/>
         <q2d spec="NormalCenteredAtObservedLinkFn">
-          <quTraits spec="parameter.RealParameter"
+          <quTraits id="observedTraits" spec="parameter.RealParameter"
                     keys="sp1 sp2 sp5 sp6 sp7 sp8 sp9 sp10 sp11 sp12 sp13 sp14 sp15 sp16 sp17"
                     value="-0.053845942474322228 -0.37091895712405348 0.59169194709245065 0.14947512522958339 0.46156790938156161 0.2734568016260141 1.7335895874490215 0.38883347418439501 0.4223362483325323 1.5501178711124703 1.1716968145593605 0.72422970882039839 0.84092251329970213 0.19645522661796372 0.48495091957415187"/>
           <sdNormalQuTrValue spec="parameter.RealParameter" value="0.005"/>
@@ -56,15 +56,13 @@
 
         <!-- Fixed controls match diversitree defaults for these data. Padding can still change
              with diffusion. dynDt=true subdivides branches; it is not error-adaptive stepping. -->
-        <drift spec="parameter.RealParameter" value="0.0"/>
-        <dtMax spec="parameter.RealParameter" value="0.013773202550247199"/>
+        <grid spec="QuaSSEGrid" tree="@tree" traits="@observedTraits" diffusion="@diffusion"
+              dtMax="0.013773202550247199" tc="1.3773202550247199"
+              nX="1024" dX="0.010275920627798219"
+              xMid="0.68133531516248402" flankWidthScaler="5.0" hiLoRatio="4">
+          <drift spec="parameter.RealParameter" value="0.0"/>
+        </grid>
         <dynDt spec="parameter.BooleanParameter" value="true"/>
-        <tc spec="parameter.RealParameter" value="1.3773202550247199"/>
-        <nX spec="parameter.IntegerParameter" value="1024"/>
-        <dX spec="parameter.RealParameter" value="0.010275920627798219"/>
-        <xMid spec="parameter.RealParameter" value="0.68133531516248402"/>
-        <flankWidthScaler spec="parameter.RealParameter" value="5.0"/>
-        <hiLoRatio spec="parameter.IntegerParameter" value="4"/>
       </distribution>
     </distribution>
 

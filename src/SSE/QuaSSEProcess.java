@@ -23,20 +23,15 @@ import java.util.Arrays;
 public abstract class QuaSSEProcess extends Distribution implements AutoCloseable {
 
     final public Input<Tree> treeInput = new Input<>("tree", "Tree object containing tree.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> dtMaxInput = new Input<>("dtMax", "Length of max time interval over which integration is carried out.", Input.Validate.REQUIRED);
     final public Input<BooleanParameter> dynamicDtInput = new Input<>("dynDt", "If interval over which to carry out integration should be dynamically adjusted to maximize accuracy.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> tcInput = new Input<>("tc", "Time (backwards, i.e., present=0.0) when integration happens with discretization at low resolution.", Input.Validate.OPTIONAL);
-    final public Input<IntegerParameter> nXbinsInput = new Input<>("nX", "Total number of quantitative trait bins after discretization at low resolution.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> dXBinInput = new Input<>("dX", "Width of quantitative trait bins at low resolution.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> xMidInput = new Input<>("xMid", "Midpoint to center the quantitative trait space.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> driftInput = new Input<>("drift", "Drift term of quantitative trait diffusion process.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> diffusionInput = new Input<>("diffusion", "Diffusion term of quantitative trait diffusion process.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> flankWidthScalerInput = new Input<>("flankWidthScaler", "Multiplier of normal standard deviation when determining number of flanking bins.", Input.Validate.REQUIRED);
-    final public Input<IntegerParameter> highLowRatioInput = new Input<>("hiLoRatio", "Scale nX by this when at high resolution.", Input.Validate.REQUIRED);
     final public Input<String> priorProbAtRootTypeInput = new Input<>("priorProbAtRootType", "Type of root prior probabilities for D's.", Input.Validate.REQUIRED);
     final public Input<RealParameter> priorProbsAtRootInput = new Input<>("givenPriorProbsAtRoot", "Root prior probabilities for D's at high resolution.", Input.Validate.XOR, priorProbAtRootTypeInput);
     final public Input<String> fftBackendInput = new Input<>("fftBackend",
             "Fourier transform implementation: sst (Java, default) or fftw (requires native library).", "sst");
+
+    public final Input<QuaSSEGrid> gridInput = new Input<>("grid", "Fine/coarse computational grid.", Input.Validate.REQUIRED);
+    protected QuaSSEGrid grid;
+    private int gridRevision = -1;
 
     protected Tree tree;
     protected RealParameter quTraits;
@@ -52,15 +47,13 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
     protected boolean providedPriorAtRoot = false;
     protected boolean dynamicallyAdjustDt;
     protected double dtMax, tc;
-    protected double dXbin, flankWidthScaler, xMinLo, xMinHi, xMid;
+    protected double dXbin, xMinLo, xMinHi;
     protected int nXbinsLo, nUsefulXbinsLo, nXbinsHi, nUsefulXbinsHi, hiLoRatio;
-    protected int[] nUsefulXbins, nLeftNRightFlanksHi, nLeftNRightFlanksLo;
+    protected int[] nLeftNRightFlanksHi, nLeftNRightFlanksLo;
     protected double[] xLo, xHi; // x rulers
     protected int[] hiLoIdxs4Transfer;
 
     // quantitative trait evolution
-    protected double drift;
-    protected double diffusion;
     protected double changeInXNormalMean; // (=diversitree's drift)
     protected double changeInXNormalSd; // (=diversitree's diffusion)
     protected double[] fYLo, fYHi, fftFYLo, fftFYHi;
@@ -95,48 +88,10 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
             throw new IllegalArgumentException("priorProbAtRootType must be Flat or Observed.");
         // quTraits = quTraitsInput.get();
 
-        nLeftNRightFlanksLo = new int[2];
-        nLeftNRightFlanksHi = new int[2];
-        nUsefulXbins = new int[2];
-
         dynamicallyAdjustDt = dynamicDtInput.get().getValue();
-        dtMax = dtMaxInput.get().getValue();
-        dXbin = dXBinInput.get().getValue();
-        tc = tcInput.get().getValue();
-
-        hiLoRatio = highLowRatioInput.get().getValue();
-        nXbinsLo = nXbinsInput.get().getValue();
-        if (nXbinsLo <= 0 || (nXbinsLo & (nXbinsLo-1)) != 0)
-            throw new IllegalArgumentException("Number of quantitative character bins must be a power of 2. It was " + nXbinsLo);
-        if (hiLoRatio < 1 || 2L * nXbinsLo * hiLoRatio > Integer.MAX_VALUE)
-            throw new IllegalArgumentException("QuaSSE hiLoRatio must be positive and FFT array sizes must fit in an int.");
-        nXbinsHi = nXbinsLo * hiLoRatio;
-
-        xMid = xMidInput.get().getValue();
-        flankWidthScaler = flankWidthScalerInput.get().getValue();
-        if (!Double.isFinite(dtMax) || dtMax <= 0 || !Double.isFinite(dXbin) || dXbin <= 0
-                || !Double.isFinite(flankWidthScaler) || flankWidthScaler <= 0
-                || !Double.isFinite(xMid) || !Double.isFinite(tc) || tc < 0)
-            throw new IllegalArgumentException("QuaSSE requires finite positive dtMax, dX and flankWidthScaler, "
-                    + "finite xMid and finite nonnegative tc.");
-        drift = driftInput.get().getValue();
-        diffusion = diffusionInput.get().getValue();
-        changeInXNormalMean = drift * -dtMax;
-        changeInXNormalSd = Math.sqrt(diffusion * dtMax);
-
-        int[] padding = calculatePadding(drift, diffusion);
-        if (padding == null)
-            throw new IllegalArgumentException("Invalid QuaSSE drift/diffusion or insufficient grid for kernel support.");
-        prepareDimensionsInPlace(padding); // in parent class
-        prepareXRulers(); // in parent class
-
-        // getting indices for transferring high- to low-res E's and D's during pruning
-        hiLoIdxs4Transfer = new int[nUsefulXbinsLo];
-        boolean jtransforms = false;
-        populateIndicesHiLo(hiLoIdxs4Transfer, hiLoRatio, nUsefulXbinsLo, jtransforms); // populates hiLoIdxs4Transfer
-
-        // debugging
-        // System.out.println("hiLoIdxs4Transfer = " + Arrays.toString(hiLoIdxs4Transfer));
+        grid = gridInput.get();
+        gridRevision = -1;
+        if (!refreshGridGeometry()) throw new IllegalArgumentException("Invalid QuaSSE grid.");
 
         // JTransforms version
         fftForEandDLo = new DoubleFFT_1D(nXbinsLo);
@@ -169,97 +124,30 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
         if (fftHi != null) fftHi.close();
     }
 
-    // Apply caller-validated coarse padding to both resolutions and update their useful bin counts.
-    // Validation stays with the caller so invalid proposals cannot partially modify the live grid.
-    protected void prepareDimensionsInPlace(int[] padding) {
-        nLeftNRightFlanksLo[0] = padding[0];
-        nLeftNRightFlanksHi[0] = hiLoRatio * nLeftNRightFlanksLo[0];
-
-        nLeftNRightFlanksLo[1] = padding[1];
-        nLeftNRightFlanksHi[1] = hiLoRatio * nLeftNRightFlanksLo[1];
-
-        // nXbinsHi = hiLoRatio * nXbinsLo;
-
-        nUsefulXbinsLo = nXbinsLo - (nLeftNRightFlanksLo[0] + 1 + nLeftNRightFlanksLo[1]);
-        nUsefulXbinsHi = nXbinsHi - (nLeftNRightFlanksHi[0] + 1 + nLeftNRightFlanksHi[1]);
-        nUsefulXbins[0] = nUsefulXbinsLo;
-        nUsefulXbins[1] = nUsefulXbinsHi;
-
-        // debugging
-        // System.out.println("\n\nSetting dimensions of QuaSSEProcess");
-        // System.out.println("changeInXNormalMean = " + changeInXNormalMean + " changeInXNormalSd = " + changeInXNormalSd);
-        // System.out.println("flankWidthScaler = " + flankWidthScaler + " dXbin = " + dXbin);
-        // System.out.println("nLeftNRightFlanksLo[0] = " + nLeftNRightFlanksLo[0]);
-        // System.out.println("nXbinsLo = " + nXbinsLo + " nXbinsHi = " + nXbinsHi);
-        // System.out.println("nLeftFlankLo = " + nLeftNRightFlanksLo[0] + " nRightFlankLo = " + nLeftNRightFlanksLo[1]);
-        // System.out.println("nUsefulXbinsLo = " + nUsefulXbinsLo);
-        // System.out.println("nLeftFlankHi = " + nLeftNRightFlanksHi[0] + " nRightFlankHi = " + nLeftNRightFlanksHi[1]);
-        // System.out.println("nUsefulXbinsHi = " + nUsefulXbinsHi);
+    // Copy geometry only after a layout change; integration never mutates the grid node's arrays.
+    // Kernels read current drift/diffusion directly from the grid, even without a layout change.
+    protected boolean refreshGridGeometry() {
+        if (!grid.update()) return false;
+        if (gridRevision == grid.getRevision()) return true;
+        gridRevision = grid.getRevision();
+        dtMax = grid.getDtMax();
+        tc = grid.getTc();
+        dXbin = grid.getDx();
+        hiLoRatio = grid.getRatio();
+        nXbinsLo = grid.getBins(true);
+        nXbinsHi = grid.getBins(false);
+        nLeftNRightFlanksLo = grid.copyPadding(true);
+        nLeftNRightFlanksHi = grid.copyPadding(false);
+        xLo = grid.copyX(true);
+        xHi = grid.copyX(false);
+        xMinLo = xLo[0];
+        xMinHi = xHi[0];
+        nUsefulXbinsLo = xLo.length;
+        nUsefulXbinsHi = xHi.length;
+        hiLoIdxs4Transfer = grid.copyTransfer();
+        return true;
     }
 
-    // Calculate candidate support without mutating the live grid. Null denotes an invalid proposal.
-    protected int[] calculatePadding(double candidateDrift, double candidateDiffusion) {
-        if (!Double.isFinite(candidateDrift) || !Double.isFinite(candidateDiffusion) || candidateDiffusion <= 0)
-            return null;
-        // Backward support extents are ±v*t+a*sqrt(t), a=w*sqrt(diffusion). The growing side
-        // peaks at T=dtMax; the opposing side peaks at min(T,(a/(2*abs(v)))^2).
-        // Round only after maximising over all steps, then scale the coarse counts for the fine grid.
-        double a = flankWidthScaler * Math.sqrt(candidateDiffusion);
-        double speed = Math.abs(candidateDrift);
-        double peakRoot = speed == 0 ? Math.sqrt(dtMax) : Math.min(Math.sqrt(dtMax), a / (2 * speed));
-        double growing = speed * dtMax + a * Math.sqrt(dtMax);
-        double opposing = peakRoot * (a - speed * peakRoot);
-        double left = Math.ceil((candidateDrift >= 0 ? growing : opposing) / dXbin);
-        double right = Math.ceil((candidateDrift >= 0 ? opposing : growing) / dXbin);
-        // The preserved boundary strips must not overlap: useful > left+right.
-        // This also bounds integer casts, scaled counts and the fine-to-coarse map before allocation.
-        if (!Double.isFinite(left) || !Double.isFinite(right) || left < 1 || right < 1
-                || 2 * (left + right) + 1 >= nXbinsLo)
-            return null;
-        int useful = nXbinsLo - ((int) left + (int) right + 1);
-        double minLo = xMid - dXbin * Math.ceil((useful - 1.0) / 2.0);
-        double minHi = minLo - dXbin * (1.0 - 1.0 / hiLoRatio);
-        if (dXbin / hiLoRatio == 0 || !Double.isFinite(minLo) || !Double.isFinite(minHi)
-                || !Double.isFinite(minLo + (useful - 1.0) * dXbin)
-                || !Double.isFinite(minLo + (useful - 1.0 / hiLoRatio) * dXbin))
-            return null;
-        return new int[] {(int) left, (int) right};
-    }
-
-    /*
-     *
-     */
-    protected void prepareXRulers() {
-
-        xMinLo = xMid - dXbin * Math.ceil((nUsefulXbinsLo - 1.0) / 2.0);
-        xMinHi = xMinLo - dXbin * (1.0 - 1.0 / hiLoRatio);
-
-        // debugging
-        // System.out.println("xMinLo = " + xMinLo + " xMinHi = " + xMinHi);
-
-        // preparing x rulers
-        xLo = new double[nUsefulXbinsLo];
-        xLo[0] = xMinLo;
-        for (int i = 1; i < nUsefulXbinsLo; i++) {
-            // System.out.println("xLo[" + (i-1) + "]" + xLo[i-1]);
-            xLo[i] = xLo[i-1] + dXbin;
-            // xLo[i] = Math.round((xLo[i-1] + dXbin) * 1e4) / 1e4;
-            // System.out.println("xLo[" + i + "] = " + xLo[i] + " dx = " + dXbin);
-        }
-
-        xHi = new double[nUsefulXbinsHi];
-        xHi[0] = xMinHi;
-        for (int i = 1; i< nUsefulXbinsHi; i++) {
-            // System.out.println("xHi[" + (i-1) + "]" + xHi[i-1]);
-            xHi[i] = xHi[i-1] + dXbin / hiLoRatio;
-            // xHi[i] = Math.round((xHi[i-1] + (dXbin / hiLoRatio)) * 1e4) / 1e4;
-            // System.out.println("xHi[" + i + "] = " + xHi[i] + " dx = " + dXbin);
-        }
-    }
-
-    /*
-     *
-     */
     protected abstract void populateMacroevolParams();
 
     /*
@@ -272,8 +160,8 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
         int size = lowRes ? nXbinsLo : nXbinsHi;
         int[] padding = lowRes ? nLeftNRightFlanksLo : nLeftNRightFlanksHi;
         double dx = lowRes ? dXbin : dXbin / hiLoRatio;
-        double currentDrift = driftInput.get().getValue();
-        double currentDiffusion = diffusionInput.get().getValue();
+        double currentDrift = grid.getDrift();
+        double currentDiffusion = grid.getDiffusion();
         if (!Double.isFinite(aDt) || aDt <= 0 || !Double.isFinite(currentDrift)
                 || !Double.isFinite(currentDiffusion) || currentDiffusion <= 0)
             throw new IllegalArgumentException("A QuaSSE kernel requires finite drift and positive finite dt/diffusion.");

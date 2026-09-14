@@ -19,6 +19,7 @@
     <provider classname="SSE.MoSSEDistribution"/>
     <provider classname="SSE.NormalCenteredAtObservedLinkFn"/>
     <provider classname="SSE.QuaSSEDistribution"/>
+    <provider classname="SSE.QuaSSEGrid"/>
     <provider classname="SSE.StateDependentSpeciationExtinctionProcess"/>
     <provider classname="SSE.StateDependentSpeciationExtinctionProcessV0"/>
     <provider classname="SSE.TraitStash"/>

@@ -43,6 +43,19 @@ import static SSE.SSEUtils.everyOtherToHeadInPlace;
  * negative value under another. These differences add up!
  */
 public class QuaSSEDistributionTest {
+    // Standalone callers enter BEAST's dependency lifecycle after editing inputs.
+    private static double evaluate(QuaSSEDistribution distribution) {
+        List<beast.base.core.BEASTInterface> inputs = new ArrayList<>();
+        distribution.getPredecessors(inputs);
+        State state = new State();
+        state.initByName("stateNode", inputs.stream()
+                .filter(x -> x instanceof beast.base.inference.StateNode).toList());
+        state.initialise();
+        state.setPosterior(distribution);
+        return state.robustlyCalcPosterior(distribution);
+    }
+
+
 
     private final List<QuaSSEDistribution> opened = new ArrayList<>();
 
@@ -238,71 +251,162 @@ public class QuaSSEDistributionTest {
     @Before
     public void setupQuaSSELiks() {
         q1024 = newDistribution();
-        q1024.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
-                "tc", tc100Rp,
-                "nX", nXbins1024Ip, "dX", dxBin00005Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", driftRp, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", cfn,
+        QuaSSEGrid q1024Grid = new QuaSSEGrid();
+        q1024Grid.initByName(
+                "tree", bifTreeHeight002,
+                "traits", nfn2Sp.quTraitsInput.get(),
+                "dtMax", (dt001Rp).getValue(),
+                "tc", (tc100Rp).getValue(),
+                "nX", (nXbins1024Ip).getValue(),
+                "dX", (dxBin00005Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", driftRp,
+                "diffusion", diffusionRp0001);
+        q1024.initByName(
+                "grid", q1024Grid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", cfn,
                 "tree", bifTreeHeight002,
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
 
         q32Dt001 = newDistribution();
-        q32Dt001.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
-                "tc", tc100Rp,
-                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", driftRp, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", cfn,
+        QuaSSEGrid q32Dt001Grid = new QuaSSEGrid();
+        q32Dt001Grid.initByName(
+                "tree", bifTreeHeight001,
+                "traits", nfn2Sp.quTraitsInput.get(),
+                "dtMax", (dt001Rp).getValue(),
+                "tc", (tc100Rp).getValue(),
+                "nX", (nXbins32Ip).getValue(),
+                "dX", (dxBin001Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", driftRp,
+                "diffusion", diffusionRp0001);
+        q32Dt001.initByName(
+                "grid", q32Dt001Grid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", cfn,
                 "tree", bifTreeHeight001,
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
 
         q32Dt002 = newDistribution();
-        q32Dt002.initByName("dtMax", dt002Rp, "dynDt", dynDtbpTrue,
-                "tc", tc100Rp,
-                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", driftRp, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", cfn,
+        QuaSSEGrid q32Dt002Grid = new QuaSSEGrid();
+        q32Dt002Grid.initByName(
+                "tree", bifTreeHeight002,
+                "traits", nfn2Sp.quTraitsInput.get(),
+                "dtMax", (dt002Rp).getValue(),
+                "tc", (tc100Rp).getValue(),
+                "nX", (nXbins32Ip).getValue(),
+                "dX", (dxBin001Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", driftRp,
+                "diffusion", diffusionRp0001);
+        q32Dt002.initByName(
+                "grid", q32Dt002Grid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", cfn,
                 "tree", bifTreeHeight002,
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
 
         q32Dt0005 = newDistribution();
-        q32Dt0005.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
-                "tc", tc0005Rp,
-                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", driftRp, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", cfn,
+        QuaSSEGrid q32Dt0005Grid = new QuaSSEGrid();
+        q32Dt0005Grid.initByName(
+                "tree", bifTreeHeight001,
+                "traits", nfn2Sp.quTraitsInput.get(),
+                "dtMax", (dt0005Rp).getValue(),
+                "tc", (tc0005Rp).getValue(),
+                "nX", (nXbins32Ip).getValue(),
+                "dX", (dxBin001Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", driftRp,
+                "diffusion", diffusionRp0001);
+        q32Dt0005.initByName(
+                "grid", q32Dt0005Grid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", cfn,
                 "tree", bifTreeHeight001,
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
 
         q32BifTree0025HeightDt0005 = newDistribution();
-        q32BifTree0025HeightDt0005.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
-                "tc", tc0005Rp,
-                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", driftRp, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", cfn,
+        QuaSSEGrid q32BifTree0025HeightDt0005Grid = new QuaSSEGrid();
+        q32BifTree0025HeightDt0005Grid.initByName(
+                "tree", bifTreeHeight0025,
+                "traits", nfn2Sp.quTraitsInput.get(),
+                "dtMax", (dt0005Rp).getValue(),
+                "tc", (tc0005Rp).getValue(),
+                "nX", (nXbins32Ip).getValue(),
+                "dX", (dxBin001Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", driftRp,
+                "diffusion", diffusionRp0001);
+        q32BifTree0025HeightDt0005.initByName(
+                "grid", q32BifTree0025HeightDt0005Grid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", cfn,
                 "tree", bifTreeHeight0025,
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
 
         q32ThreeSpTreeDt0005 = newDistribution();
-        q32ThreeSpTreeDt0005.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
-                "tc", tc0005Rp,
-                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", driftRp, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", cfn,
+        QuaSSEGrid q32ThreeSpTreeDt0005Grid = new QuaSSEGrid();
+        q32ThreeSpTreeDt0005Grid.initByName(
+                "tree", threeSpTreeHeight002,
+                "traits", nfn3Sp.quTraitsInput.get(),
+                "dtMax", (dt0005Rp).getValue(),
+                "tc", (tc0005Rp).getValue(),
+                "nX", (nXbins32Ip).getValue(),
+                "dX", (dxBin001Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", driftRp,
+                "diffusion", diffusionRp0001);
+        q32ThreeSpTreeDt0005.initByName(
+                "grid", q32ThreeSpTreeDt0005Grid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", cfn,
                 "tree", threeSpTreeHeight002,
                 "q2d", nfn3Sp,
                 "priorProbAtRootType", rootPriorType);
 
         q32FifteenSp = newDistribution();
-        q32FifteenSp.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
-                "tc", tcFifteenSpRp,
-                "nX", nXbins1024Ip, "dX", dxBinFifteenSpRp, "xMid", xMidFifteenSpRp, "flankWidthScaler", flankWidthScaler5Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", driftRp, "diffusion", diffusionRp001,
-                "q2mLambda", lfn, "q2mMu", cfn,
+        QuaSSEGrid q32FifteenSpGrid = new QuaSSEGrid();
+        q32FifteenSpGrid.initByName(
+                "tree", fifteenSpTree,
+                "traits", nfn15Sp.quTraitsInput.get(),
+                "dtMax", (dt0005Rp).getValue(),
+                "tc", (tcFifteenSpRp).getValue(),
+                "nX", (nXbins1024Ip).getValue(),
+                "dX", (dxBinFifteenSpRp).getValue(),
+                "xMid", (xMidFifteenSpRp).getValue(),
+                "flankWidthScaler", (flankWidthScaler5Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", driftRp,
+                "diffusion", diffusionRp001);
+        q32FifteenSp.initByName(
+                "grid", q32FifteenSpGrid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", cfn,
                 "tree", fifteenSpTree,
                 "q2d", nfn15Sp,
                 "priorProbAtRootType", rootPriorType);
@@ -386,12 +490,24 @@ public class QuaSSEDistributionTest {
     @Test
     public void testTraitDependentExtinctionRates() {
         QuaSSEDistribution distribution = newDistribution();
-        distribution.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
-                "tc", tc100Rp,
-                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
-                "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", driftRp, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", lfn,
+        QuaSSEGrid distributionGrid = new QuaSSEGrid();
+        distributionGrid.initByName(
+                "tree", bifTreeHeight001,
+                "traits", nfn2Sp.quTraitsInput.get(),
+                "dtMax", (dt001Rp).getValue(),
+                "tc", (tc100Rp).getValue(),
+                "nX", (nXbins32Ip).getValue(),
+                "dX", (dxBin001Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", driftRp,
+                "diffusion", diffusionRp0001);
+        distribution.initByName(
+                "grid", distributionGrid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", lfn,
                 "tree", bifTreeHeight001,
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
@@ -409,22 +525,46 @@ public class QuaSSEDistributionTest {
         RealParameter positiveDrift = new RealParameter(new Double[] { 1.0 });
         RealParameter negativeDrift = new RealParameter(new Double[] { -1.0 });
         QuaSSEDistribution positive = newDistribution();
-        positive.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
-                "tc", tc100Rp,
-                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
-                "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", positiveDrift, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", cfn,
+        QuaSSEGrid positiveGrid = new QuaSSEGrid();
+        positiveGrid.initByName(
+                "tree", bifTreeHeight001,
+                "traits", nfn2Sp.quTraitsInput.get(),
+                "dtMax", (dt001Rp).getValue(),
+                "tc", (tc100Rp).getValue(),
+                "nX", (nXbins32Ip).getValue(),
+                "dX", (dxBin001Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", positiveDrift,
+                "diffusion", diffusionRp0001);
+        positive.initByName(
+                "grid", positiveGrid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", cfn,
                 "tree", bifTreeHeight001,
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
         QuaSSEDistribution negative = newDistribution();
-        negative.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
-                "tc", tc100Rp,
-                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
-                "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", negativeDrift, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", cfn,
+        QuaSSEGrid negativeGrid = new QuaSSEGrid();
+        negativeGrid.initByName(
+                "tree", bifTreeHeight001,
+                "traits", nfn2Sp.quTraitsInput.get(),
+                "dtMax", (dt001Rp).getValue(),
+                "tc", (tc100Rp).getValue(),
+                "nX", (nXbins32Ip).getValue(),
+                "dX", (dxBin001Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", negativeDrift,
+                "diffusion", diffusionRp0001);
+        negative.initByName(
+                "grid", negativeGrid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", cfn,
                 "tree", bifTreeHeight001,
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);
@@ -1353,7 +1493,7 @@ public class QuaSSEDistributionTest {
         double[] expectedDsHiAtNodeInitialSp1 = { 0.308986942687903, 0, 0.350566009871371, 0, 0.396747087835907, 0, 0.447890605896858, 0, 0.504364398303888, 0, 0.566540754832024, 0, 0.634793036713348, 0, 0.709491856924629, 0, 0.791000831787404, 0, 0.879671919608544, 0, 0.975840371583655, 0, 1.07981933026376, 0, 1.19189412137632, 0, 1.31231629549353, 0, 1.44129748672436, 0, 1.57900316601788, 0, 1.72554637653023, 0, 1.88098154753774, 0, 2.04529849127956, 0, 2.21841669358911, 0, 2.40018001393971, 0, 2.59035191331783, 0, 2.7886113289072, 0, 2.9945493127149, 0, 3.20766654683839, 0, 3.42737184095615, 0, 3.65298170778044, 0, 3.88372109966426, 0, 4.11872537439949, 0, 4.35704354065101, 0, 4.59764281368466, 0, 4.83941449038287, 0, 5.08118112938378, 0, 5.3217049979751, 0, 5.55969772261993, 0, 5.79383105522966, 0, 6.02274864309609, 0, 6.24507866733522, 0, 6.45944719335828, 0, 6.66449205783599, 0, 6.85887710038768, 0, 7.04130653528599, 0, 7.21053924923296, 0, 7.36540280606647, 0, 7.50480693833876, 0, 7.62775630921048, 0, 7.73336233605698, 0, 7.82085387950912, 0, 7.88958661815778, 0, 7.93905094954024, 0, 7.96887828189528, 0, 7.97884560802865, 0, 7.96887828189528, 0, 7.93905094954024, 0, 7.88958661815778, 0, 7.82085387950912, 0, 7.73336233605698, 0, 7.62775630921048, 0, 7.50480693833876, 0, 7.36540280606647, 0, 7.21053924923296, 0, 7.04130653528599, 0, 6.85887710038768, 0, 6.66449205783599, 0, 6.45944719335828, 0, 6.24507866733522, 0, 6.02274864309609, 0, 5.79383105522965, 0, 5.55969772261993, 0, 5.32170499797509, 0, 5.08118112938378, 0, 4.83941449038287, 0, 4.59764281368466, 0, 4.35704354065101, 0, 4.11872537439949, 0, 3.88372109966426, 0, 3.65298170778044, 0, 3.42737184095615, 0, 3.20766654683839, 0, 2.9945493127149, 0, 2.7886113289072, 0, 2.59035191331783, 0, 2.40018001393971, 0, 2.21841669358911, 0, 2.04529849127956, 0, 1.88098154753774, 0, 1.72554637653023, 0, 1.57900316601788, 0, 1.44129748672436, 0, 1.31231629549353, 0, 1.19189412137632, 0, 1.07981933026376, 0, 0.975840371583655, 0, 0.879671919608544, 0, 0.791000831787404, 0, 0.709491856924628, 0, 0.634793036713349, 0, 0.566540754832024, 0, 0.504364398303888, 0, 0.447890605896858, 0, 0.396747087835907, 0, 0.350566009871371, 0, 0.308986942687903, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         double[] expectedDsHiAtNodeInitialSp2 = { 0.000254946647636669, 0, 0.000319674822138109, 0, 0.000399835934138456, 0, 0.000498849425801072, 0, 0.000620828141157003, 0, 0.000770703934841743, 0, 0.000954372730824099, 0, 0.0011788613551308, 0, 0.00145251860604505, 0, 0.00178523314354266, 0, 0.00218868086879601, 0, 0.00267660451529771, 0, 0.00326512817532484, 0, 0.00397310942785545, 0, 0.00482253160451986, 0, 0.0058389385158292, 0, 0.00705191364734891, 0, 0.00849560541101504, 0, 0.0102092994868837, 0, 0.0122380386022755, 0, 0.0146332892566062, 0, 0.0174536539009152, 0, 0.0207656259132282, 0, 0.0246443833694604, 0, 0.0291746160933349, 0, 0.0344513787810736, 0, 0.0405809611459954, 0, 0.0476817640292969, 0, 0.0558851682975889, 0, 0.0653363811239983, 0, 0.0761952419644361, 0, 0.08863696823876, 0, 0.102852818461079, 0, 0.119050648395517, 0, 0.137455333812279, 0, 0.158309031659599, 0, 0.181871250031821, 0, 0.208418696288452, 0, 0.238244872152104, 0, 0.271659384673712, 0, 0.308986942687903, 0, 0.350566009871371, 0, 0.396747087835906, 0, 0.447890605896858, 0, 0.504364398303888, 0, 0.566540754832024, 0, 0.634793036713348, 0, 0.709491856924629, 0, 0.791000831787404, 0, 0.879671919608544, 0, 0.975840371583655, 0, 1.07981933026376, 0, 1.19189412137632, 0, 1.31231629549353, 0, 1.44129748672436, 0, 1.57900316601788, 0, 1.72554637653023, 0, 1.88098154753774, 0, 2.04529849127956, 0, 2.21841669358911, 0, 2.40018001393971, 0, 2.59035191331783, 0, 2.7886113289072, 0, 2.9945493127149, 0, 3.20766654683839, 0, 3.42737184095615, 0, 3.65298170778044, 0, 3.88372109966426, 0, 4.11872537439949, 0, 4.35704354065101, 0, 4.59764281368466, 0, 4.83941449038287, 0, 5.08118112938378, 0, 5.32170499797509, 0, 5.55969772261993, 0, 5.79383105522965, 0, 6.02274864309609, 0, 6.24507866733522, 0, 6.45944719335828, 0, 6.66449205783599, 0, 6.85887710038768, 0, 7.04130653528599, 0, 7.21053924923296, 0, 7.36540280606647, 0, 7.50480693833876, 0, 7.62775630921048, 0, 7.73336233605698, 0, 7.82085387950912, 0, 7.88958661815778, 0, 7.93905094954024, 0, 7.96887828189528, 0, 7.97884560802865, 0, 7.96887828189528, 0, 7.93905094954024, 0, 7.88958661815778, 0, 7.82085387950912, 0, 7.73336233605698, 0, 7.62775630921048, 0, 7.50480693833876, 0, 7.36540280606647, 0, 7.21053924923296, 0, 7.04130653528599, 0, 6.85887710038768, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
-        double logLik = q32Dt0005.calculateLogP();
+        double logLik = evaluate(q32Dt0005);
 
         // if using JTransforms
         // int[] expectedHiLoIdxs4Transfer = new int[] { 3, 7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47, 51, 55, 59, 63, 67, 71, 75, 79, 83, 87, 91, 95, 99 };
@@ -1400,7 +1540,7 @@ public class QuaSSEDistributionTest {
         esDsHiAtNodeInitial1[0] = Arrays.copyOf(esDsHiAtNode1[0], esDsHiAtNode1[0].length); // E
         esDsHiAtNodeInitial1[1] = Arrays.copyOf(esDsHiAtNode1[1], esDsHiAtNode1[1].length); // D
 
-        double logLik = q32BifTree0025HeightDt0005.calculateLogP();
+        double logLik = evaluate(q32BifTree0025HeightDt0005);
 
         int[] expectedHiLoIdxs4Transfer = new int[] { 6, 14, 22, 30, 38, 46, 54, 62, 70, 78, 86, 94, 102, 110, 118, 126, 134, 142, 150, 158, 166, 174, 182, 190, 198 };
         double[] expectedDsHiAtNodeInitialSp1 = { 0.308986942687903, 0, 0.350566009871371, 0, 0.396747087835907, 0, 0.447890605896858, 0, 0.504364398303888, 0, 0.566540754832024, 0, 0.634793036713348, 0, 0.709491856924629, 0, 0.791000831787404, 0, 0.879671919608544, 0, 0.975840371583655, 0, 1.07981933026376, 0, 1.19189412137632, 0, 1.31231629549353, 0, 1.44129748672436, 0, 1.57900316601788, 0, 1.72554637653023, 0, 1.88098154753774, 0, 2.04529849127956, 0, 2.21841669358911, 0, 2.40018001393971, 0, 2.59035191331783, 0, 2.7886113289072, 0, 2.9945493127149, 0, 3.20766654683839, 0, 3.42737184095615, 0, 3.65298170778044, 0, 3.88372109966426, 0, 4.11872537439949, 0, 4.35704354065101, 0, 4.59764281368466, 0, 4.83941449038287, 0, 5.08118112938378, 0, 5.3217049979751, 0, 5.55969772261993, 0, 5.79383105522966, 0, 6.02274864309609, 0, 6.24507866733522, 0, 6.45944719335828, 0, 6.66449205783599, 0, 6.85887710038768, 0, 7.04130653528599, 0, 7.21053924923296, 0, 7.36540280606647, 0, 7.50480693833876, 0, 7.62775630921048, 0, 7.73336233605698, 0, 7.82085387950912, 0, 7.88958661815778, 0, 7.93905094954024, 0, 7.96887828189528, 0, 7.97884560802865, 0, 7.96887828189528, 0, 7.93905094954024, 0, 7.88958661815778, 0, 7.82085387950912, 0, 7.73336233605698, 0, 7.62775630921048, 0, 7.50480693833876, 0, 7.36540280606647, 0, 7.21053924923296, 0, 7.04130653528599, 0, 6.85887710038768, 0, 6.66449205783599, 0, 6.45944719335828, 0, 6.24507866733522, 0, 6.02274864309609, 0, 5.79383105522965, 0, 5.55969772261993, 0, 5.32170499797509, 0, 5.08118112938378, 0, 4.83941449038287, 0, 4.59764281368466, 0, 4.35704354065101, 0, 4.11872537439949, 0, 3.88372109966426, 0, 3.65298170778044, 0, 3.42737184095615, 0, 3.20766654683839, 0, 2.9945493127149, 0, 2.7886113289072, 0, 2.59035191331783, 0, 2.40018001393971, 0, 2.21841669358911, 0, 2.04529849127956, 0, 1.88098154753774, 0, 1.72554637653023, 0, 1.57900316601788, 0, 1.44129748672436, 0, 1.31231629549353, 0, 1.19189412137632, 0, 1.07981933026376, 0, 0.975840371583655, 0, 0.879671919608544, 0, 0.791000831787404, 0, 0.709491856924628, 0, 0.634793036713349, 0, 0.566540754832024, 0, 0.504364398303888, 0, 0.447890605896858, 0, 0.396747087835907, 0, 0.350566009871371, 0, 0.308986942687903, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -1427,7 +1567,7 @@ public class QuaSSEDistributionTest {
      */
     @Test
     public void testPruneThreeSpTree32Bins() {
-        double logLik = q32ThreeSpTreeDt0005.calculateLogP();
+        double logLik = evaluate(q32ThreeSpTreeDt0005);
 
         Assert.assertEquals(0.124798371976182, logLik, 1e-6);
     }
@@ -1452,10 +1592,10 @@ public class QuaSSEDistributionTest {
         for (double[] reference : references) {
             QuaSSEDistribution fresh = smallDistribution(reference[0], reference[1], .005,
                     "(sp1:0.1,sp2:0.1);", "Observed");
-            distribution.driftInput.get().setValue(reference[0]);
-            distribution.diffusionInput.get().setValue(reference[1]);
-            Assert.assertEquals(reference[5], fresh.calculateLogP(), 1e-9);
-            Assert.assertEquals(reference[5], distribution.calculateLogP(), 1e-9);
+            distribution.gridInput.get().driftInput.get().setValue(reference[0]);
+            distribution.gridInput.get().diffusionInput.get().setValue(reference[1]);
+            Assert.assertEquals(reference[5], evaluate(fresh), 1e-9);
+            Assert.assertEquals(reference[5], evaluate(distribution), 1e-9);
             Assert.assertEquals((int) reference[2], distribution.getNLeftFlanks(true));
             Assert.assertEquals((int) reference[3], distribution.getNRightFlanks(true));
             Assert.assertEquals(reference[4], distribution.getXMinLo(), 1e-14);
@@ -1477,9 +1617,9 @@ public class QuaSSEDistributionTest {
         reference.fftBackendInput.setValue(referenceFFT, reference);
         reference.initAndValidate();
         for (double drift : new double[] {0, 1, -1}) {
-            selected.driftInput.get().setValue(drift);
-            reference.driftInput.get().setValue(drift);
-            Assert.assertEquals(reference.calculateLogP(), selected.calculateLogP(), 1e-10);
+            selected.gridInput.get().driftInput.get().setValue(drift);
+            reference.gridInput.get().driftInput.get().setValue(drift);
+            Assert.assertEquals(evaluate(reference), evaluate(selected), 1e-10);
             for (boolean low : new boolean[] {true, false}) {
                 double[][][] expected = reference.getEsDs(low), actual = selected.getEsDs(low);
                 for (int node = 0; node < expected.length; node++)
@@ -1489,15 +1629,16 @@ public class QuaSSEDistributionTest {
         }
         // Reinitialization changes transform lengths, unlike parameter-dependent padding changes.
         for (QuaSSEDistribution distribution : new QuaSSEDistribution[] {reference, selected}) {
-            distribution.nXbinsInput.get().setValue(256);
-            distribution.highLowRatioInput.get().setValue(3);
+            distribution.gridInput.get().nXInput.setValue(256, distribution.gridInput.get());
+            distribution.gridInput.get().hiLoRatioInput.setValue(3, distribution.gridInput.get());
+            distribution.gridInput.get().initAndValidate();
             distribution.initAndValidate();
         }
-        Assert.assertEquals(reference.calculateLogP(), selected.calculateLogP(), 1e-10);
+        Assert.assertEquals(evaluate(reference), evaluate(selected), 1e-10);
         // Switching back releases native storage instead of retaining closed resources.
         selected.integrationBackendInput.setValue("java", selected);
         selected.initAndValidate();
-        Assert.assertEquals(reference.calculateLogP(), selected.calculateLogP(), 1e-10);
+        Assert.assertEquals(evaluate(reference), evaluate(selected), 1e-10);
         selected.integrationBackendInput.setValue("invalid", selected);
         Assert.assertThrows(IllegalArgumentException.class, selected::initAndValidate);
         selected.integrationBackendInput.setValue("native", selected);
@@ -1528,17 +1669,22 @@ public class QuaSSEDistributionTest {
                 "sdNormalQuTrValue", new RealParameter(new Double[] { 0.05 }));
 
         QuaSSEDistribution distribution = newDistribution();
-        distribution.initByName(
-                "dtMax", new RealParameter(new Double[] { 0.005 }),
-                "dynDt", new BooleanParameter(new Boolean[] { true }),
-                "tc", new RealParameter(new Double[] { tc }),
-                "nX", new IntegerParameter(new Integer[] { 128 }),
-                "dX", new RealParameter(new Double[] { 0.01 }),
-                "xMid", new RealParameter(new Double[] { 0.0 }),
-                "flankWidthScaler", new RealParameter(new Double[] { 10.0 }),
-                "hiLoRatio", new IntegerParameter(new Integer[] { 4 }),
+        QuaSSEGrid distributionGrid = new QuaSSEGrid();
+        distributionGrid.initByName(
+                "tree", tree,
+                "traits", tipLink.quTraitsInput.get(),
+                "dtMax", (new RealParameter(new Double[] { 0.005 })).getValue(),
+                "tc", (new RealParameter(new Double[] { tc })).getValue(),
+                "nX", (new IntegerParameter(new Integer[] { 128 })).getValue(),
+                "dX", (new RealParameter(new Double[] { 0.01 })).getValue(),
+                "xMid", (new RealParameter(new Double[] { 0.0 })).getValue(),
+                "flankWidthScaler", (new RealParameter(new Double[] { 10.0 })).getValue(),
+                "hiLoRatio", (new IntegerParameter(new Integer[] { 4 })).getValue(),
                 "drift", new RealParameter(new Double[] { drift }),
-                "diffusion", new RealParameter(new Double[] { diffusion }),
+                "diffusion", new RealParameter(new Double[] { diffusion }));
+        distribution.initByName(
+                "grid", distributionGrid,
+                "dynDt", new BooleanParameter(new Boolean[] { true }),
                 "q2mLambda", speciation,
                 "q2mMu", extinction,
                 "tree", tree,
@@ -1548,13 +1694,65 @@ public class QuaSSEDistributionTest {
         return distribution;
     }
 
+    // Defaults must be resolved once, while BEAST notifications update padding. Existing reference
+    // tests use explicit controls; this also checks override rules and protection of owned arrays.
+    @Test
+    public void testGridDefaultsAndNotifications() {
+        QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
+        QuaSSEGrid previous = distribution.gridInput.get();
+        QuaSSEGrid grid = new QuaSSEGrid();
+        grid.initByName("tree", previous.treeInput.get(), "traits", previous.traitsInput.get(),
+                "drift", previous.driftInput.get(), "diffusion", previous.diffusionInput.get());
+        distribution.gridInput.setValue(grid, distribution);
+        distribution.initAndValidate();
+        Assert.assertEquals(1024, grid.getBins(true));
+        Assert.assertEquals(.5 / 1024, grid.getDx(), 0.0);
+        Assert.assertEquals(.05, grid.getMidpoint(), 0.0);
+        Assert.assertEquals(.09 / 1000, grid.getDtMax(), 0.0);
+        Assert.assertEquals(.09 / 10, grid.getTc(), 0.0);
+        double[] copy = grid.copyX(true);
+        double first = copy[0];
+        copy[0] = 100;
+        Assert.assertEquals(first, grid.copyX(true)[0], 0.0);
+        int revision = grid.getRevision();
+        grid.driftInput.get().setValue(.000001);
+        evaluate(distribution);
+        Assert.assertEquals(revision, grid.getRevision());
+        Assert.assertEquals(.000001, grid.getDrift(), 0.0); // Notification occurred even without a layout change.
+        grid.diffusionInput.get().setValue(.1);
+        evaluate(distribution);
+        Assert.assertTrue(grid.getRevision() > revision);
+        grid.treeInput.get().getRoot().setHeight(.12);
+        grid.traitsInput.get().setValue(1, .2);
+        evaluate(distribution);
+        Assert.assertEquals(.5 / 1024, grid.getDx(), 0.0);
+        Assert.assertEquals(.09 / 1000, grid.getDtMax(), 0.0);
+        grid.initAndValidate();
+        distribution.initAndValidate();
+        Assert.assertEquals(1.0 / 1024, grid.getDx(), 0.0);
+        Assert.assertEquals(.12 / 1000, grid.getDtMax(), 0.0);
+
+        grid.nXInput.setValue(256, grid);
+        grid.initAndValidate();
+        Assert.assertEquals(1.0 / 256, grid.getDx(), 0.0);
+        grid.nXInput.setValue(null, grid);
+        grid.dXInput.setValue(.01, grid);
+        grid.initAndValidate();
+        Assert.assertEquals(128, grid.getBins(true));
+        Assert.assertEquals(.01, grid.getDx(), 0.0);
+        grid.nXInput.setValue(256, grid);
+        grid.initAndValidate();
+        Assert.assertEquals(256, grid.getBins(true));
+        Assert.assertEquals(.01, grid.getDx(), 0.0);
+    }
+
     // Rejecting a proposal leaves unsnapshotted grids and link scalars at proposed values. A later
     // change to a different parameter must recover clean restored inputs, not merely the logP snapshot.
     @Test
     public void testGridRejectionLifecycle() {
         QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
-        RealParameter drift = distribution.driftInput.get();
-        RealParameter diffusion = distribution.diffusionInput.get();
+        RealParameter drift = distribution.gridInput.get().driftInput.get();
+        RealParameter diffusion = distribution.gridInput.get().diffusionInput.get();
         RealParameter lambda = ((ConstantLinkFn) distribution.q2mLambdaInput.get()).yValueInput.get();
         RealParameter mu = ((LogisticFunction) distribution.q2mMuInput.get()).curveYBaseValueInput.get();
         NormalCenteredAtObservedLinkFn tip = (NormalCenteredAtObservedLinkFn) distribution.q2dInput.get();
@@ -1587,7 +1785,7 @@ public class QuaSSEDistributionTest {
                 NormalCenteredAtObservedLinkFn freshTip = (NormalCenteredAtObservedLinkFn) fresh.q2dInput.get();
                 freshTip.sdNormalQuTrValueInput.get().setValue(.07);
                 freshTip.quTraitsInput.get().setValue(0, .01);
-                Assert.assertEquals(fresh.calculateLogP(), proposed, 1e-12);
+                Assert.assertEquals(evaluate(fresh), proposed, 1e-12);
             } else {
                 Assert.assertEquals(Double.NEGATIVE_INFINITY, proposed, 0.0);
             }
@@ -1604,7 +1802,7 @@ public class QuaSSEDistributionTest {
             QuaSSEDistribution fresh = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
             ((ConstantLinkFn) fresh.q2mLambdaInput.get()).yValueInput.get().setValue(lambda.getValue());
             accepted = posterior.calculateLogP();
-            Assert.assertEquals(fresh.calculateLogP(), accepted, 1e-12);
+            Assert.assertEquals(evaluate(fresh), accepted, 1e-12);
             state.acceptCalculationNodes();
             state.setEverythingDirty(false);
         }
@@ -1617,10 +1815,12 @@ public class QuaSSEDistributionTest {
         QuaSSEDistribution distribution = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
         QuaSSEDistribution fresh = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
         for (double[] parameters : new double[][] {{0, .001}, {.1, .001}, {0, .001}, {0, .0011}, {0, .001}}) {
-            distribution.driftInput.get().setValue(parameters[0]);
-            fresh.driftInput.get().setValue(parameters[0]);
-            distribution.diffusionInput.get().setValue(parameters[1]);
-            fresh.diffusionInput.get().setValue(parameters[1]);
+            distribution.gridInput.get().driftInput.get().setValue(parameters[0]);
+            fresh.gridInput.get().driftInput.get().setValue(parameters[0]);
+            distribution.gridInput.get().diffusionInput.get().setValue(parameters[1]);
+            fresh.gridInput.get().diffusionInput.get().setValue(parameters[1]);
+            evaluate(distribution);
+            evaluate(fresh);
             for (boolean jtransforms : new boolean[] {false, true, false}) {
                 for (boolean doFFT : new boolean[] {false, true, false, true}) {
                     for (double dt : new double[] {.005, .002, .005}) {
@@ -1642,31 +1842,32 @@ public class QuaSSEDistributionTest {
     public void testDynamicGridAgainstFreshCalculation() {
         QuaSSEDistribution distribution = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
         for (double[] parameters : new double[][] {{0, .004}, {1, .001}, {-1, .001}, {.1, .001}, {0, .001}}) {
-            distribution.driftInput.get().setValue(parameters[0]);
-            distribution.diffusionInput.get().setValue(parameters[1]);
+            distribution.gridInput.get().driftInput.get().setValue(parameters[0]);
+            distribution.gridInput.get().diffusionInput.get().setValue(parameters[1]);
             QuaSSEDistribution fresh = smallDistribution(parameters[0], parameters[1], .005,
                     "(sp1:0.1,sp2:0.1);", "Observed");
-            Assert.assertEquals(fresh.calculateLogP(), distribution.calculateLogP(), 1e-12);
+            Assert.assertEquals(evaluate(fresh), evaluate(distribution), 1e-12);
             Assert.assertEquals(fresh.getNLeftFlanks(true), distribution.getNLeftFlanks(true));
             Assert.assertEquals(fresh.getNRightFlanks(true), distribution.getNRightFlanks(true));
             Assert.assertArrayEquals(fresh.getX(true), distribution.getX(true), 0.0);
         }
         double[] ruler = distribution.getX(true);
         for (double invalid : new double[] {Double.NaN, Double.POSITIVE_INFINITY, 1e100}) {
-            distribution.driftInput.get().setValue(invalid);
-            Assert.assertEquals(Double.NEGATIVE_INFINITY, distribution.calculateLogP(), 0.0);
+            distribution.gridInput.get().driftInput.get().setValue(invalid);
+            Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(distribution), 0.0);
             Assert.assertSame(ruler, distribution.getX(true));
         }
-        distribution.driftInput.get().setValue(0.0);
+        distribution.gridInput.get().driftInput.get().setValue(0.0);
         for (double invalid : new double[] {-1, 0, Double.NaN, Double.POSITIVE_INFINITY, 1e100}) {
-            distribution.diffusionInput.get().setValue(invalid);
-            Assert.assertEquals(Double.NEGATIVE_INFINITY, distribution.calculateLogP(), 0.0);
+            distribution.gridInput.get().diffusionInput.get().setValue(invalid);
+            Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(distribution), 0.0);
             Assert.assertSame(ruler, distribution.getX(true));
         }
-        distribution.diffusionInput.get().setValue(.001);
-        Assert.assertEquals(2.7770738626454392, distribution.calculateLogP(), 1e-9);
-        distribution.dtMaxInput.get().setValue(.01);
-        Assert.assertThrows(IllegalArgumentException.class, distribution::calculateLogP);
+        distribution.gridInput.get().diffusionInput.get().setValue(.001);
+        Assert.assertEquals(2.7770738626454392, evaluate(distribution), 1e-9);
+        distribution.gridInput.get().dtMaxInput.setValue(.01, distribution.gridInput.get());
+        // Configuration overrides take effect on explicit grid reinitialization, not during MCMC.
+        Assert.assertEquals(.005, distribution.gridInput.get().getDtMax(), 0.0);
     }
 
     // Padding must cover short-step support, not only dtMax, and allow valid one-bin strips.
@@ -1675,18 +1876,19 @@ public class QuaSSEDistributionTest {
     public void testAllTimestepPadding() {
         for (double drift : new double[] {-2, 2}) {
             QuaSSEDistribution distribution = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
-            distribution.dtMaxInput.get().setValue(1.0);
-            distribution.dXBinInput.get().setValue(.1);
-            distribution.flankWidthScalerInput.get().setValue(3.0);
-            distribution.driftInput.get().setValue(drift);
-            distribution.diffusionInput.get().setValue(1.0);
+            distribution.gridInput.get().dtMaxInput.setValue(1.0, distribution.gridInput.get());
+            distribution.gridInput.get().dXInput.setValue(.1, distribution.gridInput.get());
+            distribution.gridInput.get().flankWidthScalerInput.setValue(3.0, distribution.gridInput.get());
+            distribution.gridInput.get().driftInput.get().setValue(drift);
+            distribution.gridInput.get().diffusionInput.get().setValue(1.0);
+            distribution.gridInput.get().initAndValidate();
             distribution.initAndValidate();
             Assert.assertEquals(drift > 0 ? 50 : 12, distribution.getNLeftFlanks(true));
             Assert.assertEquals(drift > 0 ? 12 : 50, distribution.getNRightFlanks(true));
         }
         QuaSSEDistribution one = smallDistribution(0, .00001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
         Assert.assertEquals(1, one.getNLeftFlanks(true));
-        Assert.assertTrue(Double.isFinite(one.calculateLogP()));
+        Assert.assertTrue(Double.isFinite(evaluate(one)));
     }
 
     // Preserve fixed-dt truncation and normalization even when a nonempty segment takes no steps.
@@ -1731,12 +1933,12 @@ public class QuaSSEDistributionTest {
                 distribution.treeInput.get().getRoot().setHeight(height);
                 QuaSSEDistribution fresh = smallDistribution(0, .001, .1,
                         "(sp1:" + height + ",sp2:" + height + ");", prior);
-                double expected = fresh.calculateLogP();
+                double expected = evaluate(fresh);
                 Assert.assertTrue(Double.isFinite(expected));
-                Assert.assertEquals(expected, distribution.calculateLogP(), 1e-12);
+                Assert.assertEquals(expected, evaluate(distribution), 1e-12);
             }
             QuaSSEDistribution zero = smallDistribution(0, .001, 0, "(sp1:0.0,sp2:0.0);", prior);
-            Assert.assertTrue(Double.isFinite(zero.calculateLogP()));
+            Assert.assertTrue(Double.isFinite(evaluate(zero)));
         }
     }
 
@@ -1756,8 +1958,8 @@ public class QuaSSEDistributionTest {
      */
     @Test
     public void testRepeatedLikelihoodCalculation() {
-        double first = q32ThreeSpTreeDt0005.calculateLogP();
-        double second = q32ThreeSpTreeDt0005.calculateLogP();
+        double first = evaluate(q32ThreeSpTreeDt0005);
+        double second = evaluate(q32ThreeSpTreeDt0005);
 
         Assert.assertEquals(first, second, 1e-12);
 
@@ -1771,9 +1973,9 @@ public class QuaSSEDistributionTest {
             mu.setEverythingDirty(false);
             QuaSSEDistribution fresh = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
             ((LogisticFunction) fresh.q2mMuInput.get()).curveYBaseValueInput.get().setValue(value);
-            double expected = fresh.calculateLogP();
-            Assert.assertEquals(expected, a.calculateLogP(), 1e-12);
-            Assert.assertEquals(expected, b.calculateLogP(), 1e-12);
+            double expected = evaluate(fresh);
+            Assert.assertEquals(expected, evaluate(a), 1e-12);
+            Assert.assertEquals(expected, evaluate(b), 1e-12);
         }
     }
 
@@ -1787,12 +1989,24 @@ public class QuaSSEDistributionTest {
         ConstantLinkFn deathLink = new ConstantLinkFn();
         deathLink.initByName("yV", deathRate);
         QuaSSEDistribution distribution = newDistribution();
-        distribution.initByName("dtMax", dt0005Rp, "dynDt", dynDtbpTrue,
-                "tc", tc0005Rp,
-                "nX", nXbins32Ip, "dX", dxBin001Rp, "xMid", xMid00Rp,
-                "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", driftRp, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", deathLink,
+        QuaSSEGrid distributionGrid = new QuaSSEGrid();
+        distributionGrid.initByName(
+                "tree", threeSpTreeHeight002,
+                "traits", nfn3Sp.quTraitsInput.get(),
+                "dtMax", (dt0005Rp).getValue(),
+                "tc", (tc0005Rp).getValue(),
+                "nX", (nXbins32Ip).getValue(),
+                "dX", (dxBin001Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", driftRp,
+                "diffusion", diffusionRp0001);
+        distribution.initByName(
+                "grid", distributionGrid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", deathLink,
                 "tree", threeSpTreeHeight002,
                 "q2d", nfn3Sp,
                 "priorProbAtRootType", rootPriorType);
@@ -1845,7 +2059,7 @@ public class QuaSSEDistributionTest {
      */
     @Test
     public void testPruneFifteenSpTree1024Bins() {
-        double logLik = q32FifteenSp.calculateLogP();
+        double logLik = evaluate(q32FifteenSp);
 
         // Original rounded R reference, corrected by -2*log(dx) with this model's dx=0.01027592.
         Assert.assertEquals(-61.27245 - 2*Math.log(0.01027592), logLik, 1e-5);
@@ -1859,11 +2073,24 @@ public class QuaSSEDistributionTest {
     public void testPowerOf2() {
 
         QuaSSEDistribution q48Dt001 = newDistribution();
-        q48Dt001.initByName("dtMax", dt001Rp, "dynDt", dynDtbpTrue,
-                "tc", tc100Rp,
-                "nX", nXbins48Ip, "dX", dxBin001Rp, "xMid", xMid00Rp, "flankWidthScaler", flankWidthScaler10Rp, "hiLoRatio", hiLoRatioIp,
-                "drift", driftRp, "diffusion", diffusionRp0001,
-                "q2mLambda", lfn, "q2mMu", cfn,
+        QuaSSEGrid q48Dt001Grid = new QuaSSEGrid();
+        q48Dt001Grid.initByName(
+                "tree", bifTreeHeight001,
+                "traits", nfn2Sp.quTraitsInput.get(),
+                "dtMax", (dt001Rp).getValue(),
+                "tc", (tc100Rp).getValue(),
+                "nX", (nXbins48Ip).getValue(),
+                "dX", (dxBin001Rp).getValue(),
+                "xMid", (xMid00Rp).getValue(),
+                "flankWidthScaler", (flankWidthScaler10Rp).getValue(),
+                "hiLoRatio", (hiLoRatioIp).getValue(),
+                "drift", driftRp,
+                "diffusion", diffusionRp0001);
+        q48Dt001.initByName(
+                "grid", q48Dt001Grid,
+                "dynDt", dynDtbpTrue,
+                "q2mLambda", lfn,
+                "q2mMu", cfn,
                 "tree", bifTreeHeight001,
                 "q2d", nfn2Sp,
                 "priorProbAtRootType", rootPriorType);

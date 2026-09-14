@@ -40,7 +40,7 @@
       <!-- QuaSSE supplies the tree/trait likelihood, including survival conditioning.
            The tree is fixed and deliberately absent from the MCMC state and operators. -->
       <distribution id="likelihood" spec="QuaSSEDistribution" priorProbAtRootType="Observed"
-                    diffusion="@diffusion" fftBackend="fftw" integrationBackend="native">
+                     fftBackend="fftw" integrationBackend="native">
         <tree id="tree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false"
               offset="0" singlechild="false"
               newick="(((((Galago_matschiei:3.6449842729999999,
@@ -281,7 +281,7 @@
         <q2mMu spec="ConstantLinkFn" yV="@mu"/>
         <q2d spec="NormalCenteredAtObservedLinkFn">
           <!-- Keep keys single-spaced: BEAST treats repeated spaces as empty taxon keys. -->
-          <quTraits spec="parameter.RealParameter"
+          <quTraits id="observedTraits" spec="parameter.RealParameter"
                     keys="Allenopithecus_nigroviridis Allocebus_trichotis Alouatta_belzebul Alouatta_caraya Alouatta_coibensis Alouatta_fusca Alouatta_palliata Alouatta_pigra Alouatta_sara Alouatta_seniculus Aotus_azarai Aotus_brumbacki Aotus_hershkovitzi Aotus_infulatus Aotus_lemurinus Aotus_miconax Aotus_nancymaae Aotus_nigriceps Aotus_trivirgatus Aotus_vociferans Arctocebus_aureus Arctocebus_calabarensis Ateles_belzebuth Ateles_chamek Ateles_fusciceps Ateles_geoffroyi Ateles_marginatus Ateles_paniscus Avahi_laniger Brachyteles_arachnoides Cacajao_calvus Cacajao_melanocephalus Callicebus_brunneus Callicebus_caligatus Callicebus_cinerascens Callicebus_cupreus Callicebus_donacophilus Callicebus_dubius Callicebus_hoffmannsi Callicebus_modestus Callicebus_moloch Callicebus_oenanthe Callicebus_olallae Callicebus_personatus Callicebus_torquatus Callimico_goeldii Callithrix_argentata Callithrix_aurita Callithrix_flaviceps Callithrix_geoffroyi Callithrix_humeralifera Callithrix_jacchus Callithrix_kuhlii Callithrix_penicillata Callithrix_pygmaea Cebus_albifrons Cebus_apella Cebus_capucinus Cebus_olivaceus Cercocebus_agilis Cercocebus_galeritus Cercocebus_torquatus Cercopithecus_ascanius Cercopithecus_campbelli Cercopithecus_cephus Cercopithecus_diana Cercopithecus_dryas Cercopithecus_erythrogaster Cercopithecus_erythrotis Cercopithecus_hamlyni Cercopithecus_lhoesti Cercopithecus_mitis Cercopithecus_mona Cercopithecus_neglectus Cercopithecus_nictitans Cercopithecus_petaurista Cercopithecus_pogonias Cercopithecus_preussi Cercopithecus_sclateri Cercopithecus_solatus Cercopithecus_wolfi Cheirogaleus_major Cheirogaleus_medius Chiropotes_albinasus Chiropotes_satanas Chlorocebus_aethiops Colobus_angolensis Colobus_guereza Colobus_polykomos Colobus_satanas Daubentonia_madagascariensis Erythrocebus_patas Eulemur_coronatus Eulemur_fulvus Eulemur_macaco Eulemur_mongoz Eulemur_rubriventer Euoticus_elegantulus Euoticus_pallidus Galago_alleni Galago_gallarum Galago_matschiei Galago_moholi Galago_senegalensis Galagoides_demidoff Galagoides_zanzibaricus Gorilla_gorilla Hapalemur_aureus Hapalemur_griseus Hapalemur_simus Homo_sapiens Hylobates_agilis Hylobates_concolor Hylobates_gabriellae Hylobates_hoolock Hylobates_klossii Hylobates_lar Hylobates_leucogenys Hylobates_moloch Hylobates_muelleri Hylobates_pileatus Hylobates_syndactylus Indri_indri Lagothrix_flavicauda Lagothrix_lagotricha Lemur_catta Leontopithecus_caissara Leontopithecus_chrysomela Leontopithecus_chrysopygus Leontopithecus_rosalia Lepilemur_dorsalis Lepilemur_edwardsi Lepilemur_leucopus Lepilemur_microdon Lepilemur_mustelinus Lepilemur_ruficaudatus Lepilemur_septentrionalis Lophocebus_albigena Loris_tardigradus Macaca_arctoides Macaca_assamensis Macaca_cyclopis Macaca_fascicularis Macaca_fuscata Macaca_maura Macaca_mulatta Macaca_nemestrina Macaca_nigra Macaca_ochreata Macaca_radiata Macaca_silenus Macaca_sinica Macaca_sylvanus Macaca_thibetana Macaca_tonkeana Mandrillus_leucophaeus Mandrillus_sphinx Microcebus_coquereli Microcebus_murinus Microcebus_rufus Miopithecus_talapoin Nasalis_concolor Nasalis_larvatus Nycticebus_coucang Nycticebus_pygmaeus Otolemur_crassicaudatus Otolemur_garnettii Pan_paniscus Pan_troglodytes Papio_hamadryas Perodicticus_potto Phaner_furcifer Pithecia_aequatorialis Pithecia_albicans Pithecia_irrorata Pithecia_monachus Pithecia_pithecia Pongo_pygmaeus Presbytis_comata Presbytis_femoralis Presbytis_frontata Presbytis_hosei Presbytis_melalophos Presbytis_potenziani Presbytis_rubicunda Presbytis_thomasi Procolobus_badius Procolobus_pennantii Procolobus_preussi Procolobus_rufomitratus Procolobus_verus Propithecus_diadema Propithecus_tattersalli Propithecus_verreauxi Pygathrix_avunculus Pygathrix_bieti Pygathrix_brelichi Pygathrix_nemaeus Pygathrix_roxellana Saguinus_bicolor Saguinus_fuscicollis Saguinus_geoffroyi Saguinus_imperator Saguinus_inustus Saguinus_labiatus Saguinus_leucopus Saguinus_midas Saguinus_mystax Saguinus_nigricollis Saguinus_oedipus Saguinus_tripartitus Saimiri_boliviensis Saimiri_oerstedii Saimiri_sciureus Saimiri_ustus Saimiri_vanzolinii Semnopithecus_entellus Tarsius_bancanus Tarsius_dianae Tarsius_pumilus Tarsius_spectrum Tarsius_syrichta Theropithecus_gelada Trachypithecus_auratus Trachypithecus_cristatus Trachypithecus_francoisi Trachypithecus_geei Trachypithecus_johnii Trachypithecus_obscurus Trachypithecus_phayrei Trachypithecus_pileatus Trachypithecus_vetulus Varecia_variegata"
                     value="8.4658998970286863 4.3681812278518288 8.7290735504517372 8.628734566149145
                            8.7640532693477624 8.5544889761599343 8.7917900243193632 8.8818363050041462
@@ -347,15 +347,13 @@
 
         <!-- Fixed controls match diversitree defaults for these data. Padding can still change
              with diffusion. dynDt=true subdivides branches; it is not error-adaptive stepping. -->
-        <drift spec="parameter.RealParameter" value="0.0"/>
-        <dtMax spec="parameter.RealParameter" value="0.065091685983699993"/>
+        <grid spec="QuaSSEGrid" tree="@tree" traits="@observedTraits" diffusion="@diffusion"
+              dtMax="0.065091685983699993" tc="6.5091685983699987"
+              nX="1024" dX="0.037902294577310529"
+              xMid="7.7627587626600354" flankWidthScaler="5.0" hiLoRatio="4">
+          <drift spec="parameter.RealParameter" value="0.0"/>
+        </grid>
         <dynDt spec="parameter.BooleanParameter" value="true"/>
-        <tc spec="parameter.RealParameter" value="6.5091685983699987"/>
-        <nX spec="parameter.IntegerParameter" value="1024"/>
-        <dX spec="parameter.RealParameter" value="0.037902294577310529"/>
-        <xMid spec="parameter.RealParameter" value="7.7627587626600354"/>
-        <flankWidthScaler spec="parameter.RealParameter" value="5.0"/>
-        <hiLoRatio spec="parameter.IntegerParameter" value="4"/>
       </distribution>
     </distribution>
 

@@ -792,23 +792,11 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     // Reconcile the live grid with current parameters, including clean values restored after rejection.
     // Validate before touching any live arrays; invalid proposals leave the last usable grid intact.
     private boolean refreshGrid() {
-        if (nXbinsInput.get().getValue() != nXbinsLo || highLowRatioInput.get().getValue() != hiLoRatio
-                || dXBinInput.get().getValue() != dXbin || xMidInput.get().getValue() != xMid
-                || dtMaxInput.get().getValue() != dtMax || tcInput.get().getValue() != tc
-                || flankWidthScalerInput.get().getValue() != flankWidthScaler
-                || dynamicDtInput.get().getValue() != dynamicallyAdjustDt)
-            throw new IllegalArgumentException("QuaSSE numerical grid controls must remain fixed after initialization.");
-        double currentDrift = driftInput.get().getValue();
-        double currentDiffusion = diffusionInput.get().getValue();
-        int[] padding = calculatePadding(currentDrift, currentDiffusion);
-        if (padding == null) return false;
-        drift = currentDrift;
-        diffusion = currentDiffusion;
-        if (!Arrays.equals(padding, nLeftNRightFlanksLo)) {
-            prepareDimensionsInPlace(padding);
-            prepareXRulers();
-            hiLoIdxs4Transfer = new int[nUsefulXbinsLo];
-            populateIndicesHiLo(hiLoIdxs4Transfer, hiLoRatio, nUsefulXbinsLo, false);
+        if (dynamicDtInput.get().getValue() != dynamicallyAdjustDt)
+            throw new IllegalArgumentException("QuaSSE dynDt must remain fixed after initialization.");
+        double[] previousX = xLo;
+        if (!refreshGridGeometry()) return false;
+        if (previousX != xLo) {
             birthRatesLo = new double[nUsefulXbinsLo];
             birthRatesHi = new double[nUsefulXbinsHi];
             deathRatesLo = new double[nUsefulXbinsLo];
