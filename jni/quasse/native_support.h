@@ -31,8 +31,10 @@ public:
         input.reset(fftw_alloc_complex(size));
         output.reset(fftw_alloc_complex(size));
         if (!input || !output) throw std::bad_alloc();
-        forward = fftw_plan_dft_1d(size, input.get(), output.get(), FFTW_FORWARD, FFTW_ESTIMATE);
-        inverse = fftw_plan_dft_1d(size, input.get(), output.get(), FFTW_BACKWARD, FFTW_ESTIMATE);
+        // Measure candidate algorithms once for repeated execution. Preparation overwrites arrays;
+        // callers supply actual input only after construction.
+        forward = fftw_plan_dft_1d(size, input.get(), output.get(), FFTW_FORWARD, FFTW_MEASURE);
+        inverse = fftw_plan_dft_1d(size, input.get(), output.get(), FFTW_BACKWARD, FFTW_MEASURE);
         if (!forward || !inverse) {
             // A failed constructor does not run this destructor; release any completed plan here.
             if (forward) fftw_destroy_plan(forward);
