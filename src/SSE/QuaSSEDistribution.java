@@ -2,6 +2,7 @@ package SSE;
 
 import beast.base.core.Input;
 import beast.base.inference.State;
+import beast.base.inference.parameter.RealParameter;
 import beast.base.evolution.tree.Node;
 
 import java.util.Arrays;
@@ -13,6 +14,9 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     public final Input<String> integrationBackendInput = new Input<>("integrationBackend",
             "Integration implementation: java or native T/X segments (requires fftBackend=fftw).", "java");
     private QuaSSENativeIntegrator nativeLo, nativeHi;
+    public final Input<RealParameter> driftInput = new Input<>("drift", "Trait drift for an automatic grid.");
+    public final Input<RealParameter> diffusionInput = new Input<>("diffusion", "Diffusion variance rate for an automatic grid.");
+    private QuaSSEGrid automaticGrid;
 
     final public Input<LinkFn> q2mLambdaInput = new Input<>("q2mLambda", "Function converting quantitative trait into lambda parameter.", Input.Validate.REQUIRED);
     final public Input<LinkFn> q2mMuInput = new Input<>("q2mMu", "Function converting quantitative trait into mu parameter.", Input.Validate.REQUIRED);
@@ -36,10 +40,10 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     @Override
     public void initAndValidate() {
 
-        super.initAndValidate(); // read in all dimension-related stuff, populates fYLo and fYHi
-
-        // The parent has allocated FFT resources; release them if the remaining initialization fails.
+        // Release any existing or newly allocated FFT resources if initialization fails.
         try {
+            initializeGrid();
+            super.initAndValidate(); // read dimensions and allocate FFT resources
             String integration = integrationBackendInput.get();
             if (!"java".equals(integration) && !"native".equals(integration))
                 throw new IllegalArgumentException("integrationBackend must be java or native.");
@@ -75,6 +79,29 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         } catch (RuntimeException | Error failure) {
             close();
             throw failure;
+        }
+    }
+
+    // Own only the generated grid; explicit grids retain caller-controlled initialization.
+    // Attaching through Input registers it for ordinary BEAST dependency discovery before MCMC starts.
+    private void initializeGrid() {
+        QuaSSEGrid supplied = gridInput.get();
+        if (supplied == null || supplied == automaticGrid) {
+            if (driftInput.get() == null || diffusionInput.get() == null)
+                throw new IllegalArgumentException("Without an explicit grid, QuaSSE requires drift and diffusion.");
+            if (!(q2dInput.get() instanceof NormalCenteredAtObservedLinkFn normal))
+                throw new IllegalArgumentException("Automatic grids require NormalCenteredAtObservedLinkFn; "
+                        + "supply an explicit grid for other links.");
+            if (automaticGrid == null) automaticGrid = new QuaSSEGrid();
+            automaticGrid.initByName("tree", treeInput.get(), "traits", normal.quTraitsInput.get(),
+                    "drift", driftInput.get(), "diffusion", diffusionInput.get());
+            gridInput.setValue(automaticGrid, this);
+        } else {
+            // Serialization may expose the generated grid and the same parameter references twice.
+            if ((driftInput.get() != null && driftInput.get() != supplied.driftInput.get())
+                    || (diffusionInput.get() != null && diffusionInput.get() != supplied.diffusionInput.get()))
+                throw new IllegalArgumentException(
+                        "Likelihood drift/diffusion must reference the explicit grid's parameters.");
         }
     }
 

@@ -54,7 +54,7 @@
           <sdNormalQuTrValue spec="parameter.RealParameter" value="0.005"/>
         </q2d>
 
-        <!-- Fixed controls match diversitree defaults for these data. Padding can still change
+        <!-- Retain original time controls: defaults from the parsed tree differ slightly. Padding can change
              with diffusion. dynDt=true subdivides branches; it is not error-adaptive stepping. -->
         <grid spec="QuaSSEGrid" tree="@tree" traits="@observedTraits" diffusion="@diffusion"
               dtMax="0.013773202550247199" tc="1.3773202550247199"

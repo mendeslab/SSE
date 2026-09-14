@@ -29,7 +29,7 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
     final public Input<String> fftBackendInput = new Input<>("fftBackend",
             "Fourier transform implementation: sst (Java, default) or fftw (requires native library).", "sst");
 
-    public final Input<QuaSSEGrid> gridInput = new Input<>("grid", "Fine/coarse computational grid.", Input.Validate.REQUIRED);
+    public final Input<QuaSSEGrid> gridInput = new Input<>("grid", "Fine/coarse grid; omit for observation-derived defaults.");
     protected QuaSSEGrid grid;
     private int gridRevision = -1;
 

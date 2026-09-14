@@ -345,14 +345,10 @@
           <sdNormalQuTrValue spec="parameter.RealParameter" value="0.02"/>
         </q2d>
 
-        <!-- Fixed controls match diversitree defaults for these data. Padding can still change
-             with diffusion. dynDt=true subdivides branches; it is not error-adaptive stepping. -->
-        <grid spec="QuaSSEGrid" tree="@tree" traits="@observedTraits" diffusion="@diffusion"
-              dtMax="0.065091685983699993" tc="6.5091685983699987"
-              nX="1024" dX="0.037902294577310529"
-              xMid="7.7627587626600354" flankWidthScaler="5.0" hiLoRatio="4">
-          <drift spec="parameter.RealParameter" value="0.0"/>
-        </grid>
+        <!-- Grid defaults come from the initial tree and observed traits; padding can change.
+             dynDt=true subdivides branches; it is not error-adaptive stepping. -->
+        <diffusion idref="diffusion"/>
+        <drift spec="parameter.RealParameter" value="0.0"/>
         <dynDt spec="parameter.BooleanParameter" value="true"/>
       </distribution>
     </distribution>

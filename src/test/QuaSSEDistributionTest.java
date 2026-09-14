@@ -1694,8 +1694,8 @@ public class QuaSSEDistributionTest {
         return distribution;
     }
 
-    // Defaults must be resolved once, while BEAST notifications update padding. Existing reference
-    // tests use explicit controls; this also checks override rules and protection of owned arrays.
+    // Generated and explicit grids must agree and remain visible to BEAST notifications. Existing
+    // references use explicit controls; this also checks frozen defaults and reinitialization.
     @Test
     public void testGridDefaultsAndNotifications() {
         QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
@@ -1703,8 +1703,16 @@ public class QuaSSEDistributionTest {
         QuaSSEGrid grid = new QuaSSEGrid();
         grid.initByName("tree", previous.treeInput.get(), "traits", previous.traitsInput.get(),
                 "drift", previous.driftInput.get(), "diffusion", previous.diffusionInput.get());
-        distribution.gridInput.setValue(grid, distribution);
+        distribution.gridInput.setValue(null, distribution);
+        distribution.driftInput.setValue(previous.driftInput.get(), distribution);
+        distribution.diffusionInput.setValue(previous.diffusionInput.get(), distribution);
         distribution.initAndValidate();
+        QuaSSEGrid explicit = grid;
+        grid = distribution.gridInput.get();
+        Assert.assertArrayEquals(explicit.copyX(true), grid.copyX(true), 0.0);
+        Assert.assertArrayEquals(explicit.copyX(false), grid.copyX(false), 0.0);
+        Assert.assertTrue(distribution.listActiveBEASTObjects().contains(grid));
+        Assert.assertTrue(grid.getOutputs().contains(distribution));
         Assert.assertEquals(1024, grid.getBins(true));
         Assert.assertEquals(.5 / 1024, grid.getDx(), 0.0);
         Assert.assertEquals(.05, grid.getMidpoint(), 0.0);
@@ -1727,8 +1735,8 @@ public class QuaSSEDistributionTest {
         evaluate(distribution);
         Assert.assertEquals(.5 / 1024, grid.getDx(), 0.0);
         Assert.assertEquals(.09 / 1000, grid.getDtMax(), 0.0);
-        grid.initAndValidate();
         distribution.initAndValidate();
+        Assert.assertSame(grid, distribution.gridInput.get());
         Assert.assertEquals(1.0 / 1024, grid.getDx(), 0.0);
         Assert.assertEquals(.12 / 1000, grid.getDtMax(), 0.0);
 
@@ -1751,6 +1759,15 @@ public class QuaSSEDistributionTest {
     @Test
     public void testGridRejectionLifecycle() {
         QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
+        QuaSSEGrid explicit = distribution.gridInput.get();
+        distribution.gridInput.setValue(null, distribution);
+        distribution.driftInput.setValue(explicit.driftInput.get(), distribution);
+        distribution.diffusionInput.setValue(explicit.diffusionInput.get(), distribution);
+        distribution.initAndValidate();
+        // Keep this small lifecycle test's controls; fresh reference models still use explicit grids.
+        for (String name : List.of("nX", "dX", "xMid", "dtMax", "tc", "hiLoRatio", "flankWidthScaler"))
+            distribution.gridInput.get().setInputValue(name, explicit.getInput(name).get());
+        distribution.initAndValidate();
         RealParameter drift = distribution.gridInput.get().driftInput.get();
         RealParameter diffusion = distribution.gridInput.get().diffusionInput.get();
         RealParameter lambda = ((ConstantLinkFn) distribution.q2mLambdaInput.get()).yValueInput.get();
@@ -1806,6 +1823,44 @@ public class QuaSSEDistributionTest {
             state.acceptCalculationNodes();
             state.setEverythingDirty(false);
         }
+    }
+
+    // Optional grid construction must reject ambiguity and survive XML serialization. Numerical
+    // references do not exercise these configuration paths; remove if the implicit route is removed.
+    @Test
+    public void testAutomaticGridConfiguration() throws Exception {
+        QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
+        QuaSSEGrid explicit = distribution.gridInput.get();
+        distribution.gridInput.setValue(null, distribution);
+        Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
+        distribution.driftInput.setValue(explicit.driftInput.get(), distribution);
+        Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
+        distribution.diffusionInput.setValue(explicit.diffusionInput.get(), distribution);
+        LinkFn normal = distribution.q2dInput.get();
+        distribution.q2dInput.setValue(new ConstantLinkFn(), distribution);
+        Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
+        distribution.q2dInput.setValue(normal, distribution);
+        distribution.initAndValidate();
+        QuaSSEGrid generated = distribution.gridInput.get();
+        distribution.gridInput.setValue(explicit, distribution);
+        distribution.initAndValidate();
+        Assert.assertEquals(128, explicit.getBins(true)); // Supplied grids are not reinitialized.
+        distribution.driftInput.setValue(new RealParameter("0.0"), distribution);
+        Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
+        distribution.driftInput.setValue(explicit.driftInput.get(), distribution);
+        distribution.gridInput.setValue(null, distribution);
+        distribution.initAndValidate();
+        Assert.assertSame(generated, distribution.gridInput.get());
+
+        beast.pkgmgmt.BEASTClassLoader.initServices();
+        beast.pkgmgmt.BEASTClassLoader.addServices("version.xml");
+        String xml = new beast.base.parser.XMLProducer().toRawXML(distribution);
+        QuaSSEDistribution restored = (QuaSSEDistribution) new beast.base.parser.XMLParser().parseBareFragment(xml, true);
+        opened.add(restored);
+        Assert.assertSame(restored.driftInput.get(), restored.gridInput.get().driftInput.get());
+        Assert.assertSame(restored.diffusionInput.get(), restored.gridInput.get().diffusionInput.get());
+        Assert.assertArrayEquals(generated.copyX(true), restored.gridInput.get().copyX(true), 0.0);
+        Assert.assertEquals(evaluate(distribution), evaluate(restored), 1e-12);
     }
 
     // Kernel validity is per resolution and representation, not a global dt/dirty hint. Compare

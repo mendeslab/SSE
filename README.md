@@ -57,12 +57,15 @@ For a short fixed-tree QuaSSE MCMC example, see
 run commands, validation status, and numerical caveats.
 The [233-primate example](examples/QuaSSE_233_primates_MCMC.md) uses FFTW/native integration.
 
-QuaSSE now requires an explicit `grid` of type `QuaSSEGrid`; old likelihood-level grid inputs
-are not supported. The grid takes `tree`, `traits`, `drift`, and `diffusion`. Optional scalar
+QuaSSE can omit `grid` when `q2d` is `NormalCenteredAtObservedLinkFn`: supply likelihood-level
+`drift` and `diffusion`, and defaults use the initial tree and observed traits. Reinitialize the
+likelihood to resolve these defaults again. Other links or numerical overrides require an explicit
+`QuaSSEGrid`, taking `tree`, `traits`, `drift`, and `diffusion`. Optional scalar
 attributes `nX`, `dX`, `xMid`, `hiLoRatio`, `flankWidthScaler`, `rangeMultiplier`, `dtMax`, and `tc`
 override diversitree-style defaults resolved at initialization. Reinitialize the grid and likelihood
 after editing these configuration values. Parameter proposals use BEAST's invalidation lifecycle;
 standalone callers should likewise notify through `State` before evaluating changed inputs.
+If drift/diffusion are supplied both on the likelihood and grid, they must reference the same objects.
 
 ## Optional QuaSSE FFTW transforms (Linux)
 
