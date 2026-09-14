@@ -50,12 +50,14 @@ public:
     ComplexFFT(const ComplexFFT&) = delete;
     ComplexFFT& operator=(const ComplexFFT&) = delete;
 
-    // FFTW forward is unscaled; divide every component of its unscaled inverse by N to match SST.
+    // FFTW forward is unscaled; normalize its inverse by 1/N to match SST's convention.
+    // Multiplying by the reciprocal avoids division for every component.
     void transform(bool backwards) {
         fftw_execute(backwards ? inverse : forward);
         if (backwards) {
             auto* values = reinterpret_cast<double*>(output.get());
-            for (int i = 0; i < 2 * size; ++i) values[i] /= size;
+            const double inverseSize = 1.0 / size;
+            for (int i = 0; i < 2 * size; ++i) values[i] *= inverseSize;
         }
     }
 };
