@@ -30,6 +30,9 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
             "Fourier transform implementation: sst (Java, default) or fftw (requires native library).", "sst");
 
     public final Input<QuaSSEGrid> gridInput = new Input<>("grid", "Fine/coarse grid; omit for observation-derived defaults.");
+    public final Input<Double> minimumKernelVarianceRatioInput = new Input<>("minimumKernelVarianceRatio",
+            "Minimum sampled/expected Gaussian variance, in (0, 1]; failure stops evaluation, not a proposal rejection.",
+            0.95);
     protected QuaSSEGrid grid;
     private int gridRevision = -1;
 
@@ -64,6 +67,7 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
     private final boolean[] kernelJTransforms = new boolean[2];
     private final double[] kernelDt = new double[2], kernelDrift = new double[2];
     private final double[] kernelDiffusion = new double[2], kernelDx = new double[2];
+    private final double[] kernelMinimumVarianceRatio = new double[2];
     private final int[] kernelLeft = new int[2], kernelRight = new int[2];
     // One per resolution, shared by kernel and E/D transforms. Padding/parameter refresh reuses
     // them; reinitialization recreates them and invalidates kernels. Native scratch needs no snapshot.
@@ -73,6 +77,7 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
     public void initAndValidate() {
 
         close();
+        minimumKernelVarianceRatio();
         // Select once per initialization, not dynamically during likelihood evaluation.
         String backend = fftBackendInput.get();
         if (!"sst".equals(backend) && !"fftw".equals(backend))
@@ -162,6 +167,7 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
         double dx = lowRes ? dXbin : dXbin / hiLoRatio;
         double currentDrift = grid.getDrift();
         double currentDiffusion = grid.getDiffusion();
+        double minimumRatio = minimumKernelVarianceRatio();
         if (!Double.isFinite(aDt) || aDt <= 0 || !Double.isFinite(currentDrift)
                 || !Double.isFinite(currentDiffusion) || currentDiffusion <= 0)
             throw new IllegalArgumentException("A QuaSSE kernel requires finite drift and positive finite dt/diffusion.");
@@ -171,7 +177,7 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
                 && kernelDrift[resolution] == currentDrift && kernelDiffusion[resolution] == currentDiffusion
                 && kernelDx[resolution] == dx && kernelLeft[resolution] == padding[0]
                 && kernelRight[resolution] == padding[1] && kernelJTransforms[resolution] == jtransforms
-                && kernelHasFFT[resolution] == doFFT)
+                && kernelHasFFT[resolution] == doFFT && kernelMinimumVarianceRatio[resolution] == minimumRatio)
             return;
 
         kernelValid[resolution] = false;
@@ -181,14 +187,25 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
         Arrays.fill(spectrum, 0.0);
         changeInXNormalMean = -currentDrift * aDt;
         changeInXNormalSd = Math.sqrt(currentDiffusion * aDt);
-        if (jtransforms) {
-            SSEUtils.makeNormalKernelInPlace(raw, changeInXNormalMean, changeInXNormalSd,
-                    size, padding[0], padding[1], dx);
-            if (doFFT) (lowRes ? fftForEandDLo : fftForEandDHi).realForwardFull(raw);
-        } else {
-            SSEUtils.makeNormalKernelInPlaceSSTJavaFftService(raw, changeInXNormalMean, changeInXNormalSd,
-                    size, padding[0], padding[1], dx);
-            if (doFFT) (lowRes ? fftLo : fftHi).forward(raw, spectrum);
+        try {
+            if (jtransforms) {
+                SSEUtils.makeNormalKernelInPlace(raw, changeInXNormalMean, changeInXNormalSd,
+                        size, padding[0], padding[1], dx);
+            } else {
+                SSEUtils.makeNormalKernelInPlaceSSTJavaFftService(raw, changeInXNormalMean, changeInXNormalSd,
+                        size, padding[0], padding[1], dx);
+            }
+            checkKernelVariance(raw, size, padding, dx, jtransforms ? 1 : 2,
+                    currentDiffusion * aDt, minimumRatio);
+        } catch (QuaSSEKernelException failure) {
+            throw new QuaSSEKernelException(failure.getMessage() + "; minimumRatio=" + minimumRatio
+                    + ", dt=" + aDt + ", dx=" + dx + ", drift=" + currentDrift
+                    + ", diffusion=" + currentDiffusion + ", resolution=" + (lowRes ? "coarse" : "fine")
+                    + ", leftPadding=" + padding[0] + ", rightPadding=" + padding[1], failure);
+        }
+        if (doFFT) {
+            if (jtransforms) (lowRes ? fftForEandDLo : fftForEandDHi).realForwardFull(raw);
+            else (lowRes ? fftLo : fftHi).forward(raw, spectrum);
         }
         kernelDt[resolution] = aDt;
         kernelDrift[resolution] = currentDrift;
@@ -198,7 +215,40 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
         kernelRight[resolution] = padding[1];
         kernelJTransforms[resolution] = jtransforms;
         kernelHasFFT[resolution] = doFFT;
+        kernelMinimumVarianceRatio[resolution] = minimumRatio;
         kernelValid[resolution] = true;
+    }
+
+    // Validate at initialization and on use, including changes made after a kernel was cached.
+    private double minimumKernelVarianceRatio() {
+        double ratio = minimumKernelVarianceRatioInput.get();
+        if (!Double.isFinite(ratio) || ratio <= 0 || ratio > 1)
+            throw new IllegalArgumentException("minimumKernelVarianceRatio must be finite and in (0, 1].");
+        return ratio;
+    }
+
+    // Normalization preserves mass, not variance. Use signed offsets across the wrapped support,
+    // then a second pass about the sampled mean to avoid cancellation in E[x²] - E[x]².
+    private void checkKernelVariance(double[] weights, int size, int[] padding, double dx, int stride,
+                                     double expectedVariance, double minimumRatio) {
+        if (!Double.isFinite(expectedVariance) || expectedVariance <= 0)
+            throw new QuaSSEKernelException("Expected Gaussian variance must be positive and finite: "
+                    + expectedVariance);
+        double mean = 0;
+        for (int offset = -padding[0]; offset <= padding[1]; offset++) {
+            int index = stride * (offset < 0 ? size + offset : offset);
+            mean += weights[index] * (offset * dx);
+        }
+        double variance = 0;
+        for (int offset = -padding[0]; offset <= padding[1]; offset++) {
+            int index = stride * (offset < 0 ? size + offset : offset);
+            double delta = offset * dx - mean;
+            variance += weights[index] * delta * delta;
+        }
+        double ratio = variance / expectedVariance;
+        if (!Double.isFinite(variance) || !Double.isFinite(ratio) || ratio < minimumRatio)
+            throw new QuaSSEKernelException("Gaussian kernel has insufficient or non-finite variance: ratio="
+                    + ratio + ", sampledVariance=" + variance + ", expectedVariance=" + expectedVariance);
     }
 
     /*

@@ -1898,6 +1898,64 @@ public class QuaSSEDistributionTest {
         Assert.assertEquals(evaluate(distribution), evaluate(restored), 1e-12);
     }
 
+    // Reference likelihoods do not detect finite kernels that suppress diffusion. Check both
+    // layouts and cached thresholds; retain while diffusion is represented by sampled Gaussians.
+    @Test
+    public void testKernelVarianceGuard() {
+        QuaSSEDistribution distribution = smallDistribution(0, .01, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        for (boolean jtransforms : new boolean[] {false, true}) {
+            for (boolean low : new boolean[] {false, true}) {
+                double dt = low ? .001 : .001 / 16;
+                distribution.minimumKernelVarianceRatioInput.setValue(.95, distribution);
+                distribution.populatefY(.005, false, true, low, jtransforms);
+                QuaSSEKernelException error = Assert.assertThrows(QuaSSEKernelException.class,
+                        () -> distribution.populatefY(dt, false, true, low, jtransforms));
+                Assert.assertTrue(error.getMessage().contains("ratio="));
+                Assert.assertTrue(error.getMessage().contains("resolution=" + (low ? "coarse" : "fine")));
+                Assert.assertTrue(error.getMessage().contains("dt=" + dt));
+                Assert.assertNotNull(error.getCause());
+                distribution.minimumKernelVarianceRatioInput.setValue(.1, distribution);
+                distribution.populatefY(dt, false, true, low, jtransforms);
+                distribution.minimumKernelVarianceRatioInput.setValue(.95, distribution);
+                Assert.assertThrows(QuaSSEKernelException.class,
+                        () -> distribution.populatefY(dt, false, true, low, jtransforms));
+                distribution.populatefY(.005, false, true, low, jtransforms);
+            }
+        }
+        for (double threshold : new double[] {0, -1, 1.01, Double.NaN, Double.POSITIVE_INFINITY}) {
+            distribution.minimumKernelVarianceRatioInput.setValue(threshold, distribution);
+            Assert.assertThrows(IllegalArgumentException.class,
+                    () -> distribution.populatefY(.005, false, true, true, false));
+        }
+        QuaSSEDistribution shifted = smallDistribution(2, .002, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        for (boolean jtransforms : new boolean[] {false, true}) {
+            // Mean -0.01 lies on a grid point: its squared displacement must not count as variance.
+            Assert.assertThrows(QuaSSEKernelException.class,
+                    () -> shifted.populatefY(.005, false, true, true, jtransforms));
+        }
+        QuaSSEDistribution unresolved = smallDistribution(0, .00001, .005,
+                "(sp1:0.1,sp2:0.1);", "Observed");
+        Assert.assertThrows(QuaSSEKernelException.class, () -> evaluate(unresolved));
+    }
+
+    // Failed normalization must be diagnosed before division, even for direct utility callers.
+    // This complements the finite-variance guard and can go if kernel construction is replaced.
+    @Test
+    public void testKernelNormalizationFailure() {
+        for (boolean jtransforms : new boolean[] {false, true}) {
+            for (double sd : new double[] {1e-6, Double.MIN_VALUE}) {
+                double[] weights = new double[64];
+                // First case underflows between grid points; the second has a non-finite peak.
+                double mean = sd == Double.MIN_VALUE ? 0 : .005;
+                QuaSSEKernelException error = Assert.assertThrows(QuaSSEKernelException.class, () -> {
+                    if (jtransforms) SSEUtils.makeNormalKernelInPlace(weights, mean, sd, 32, 2, 2, .01);
+                    else SSEUtils.makeNormalKernelInPlaceSSTJavaFftService(weights, mean, sd, 32, 2, 2, .01);
+                });
+                Assert.assertTrue(error.getMessage().contains("normalization total"));
+            }
+        }
+    }
+
     // Kernel validity is per resolution and representation, not a global dt/dirty hint. Compare
     // non-forced calls with forced construction through raw/FFT and parameter A-B-A transitions.
     @Test

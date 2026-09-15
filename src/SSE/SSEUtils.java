@@ -575,6 +575,8 @@ public class SSEUtils {
             x += dx;
         }
 
+        if (!Double.isFinite(total) || total <= 0)
+            throw new QuaSSEKernelException("Gaussian kernel normalization total must be positive and finite: " + total);
         for (int i = 0; i <= nRightFlankBins; i++) yValues[i] /= total;
         for (int i = (nXbins - nLeftFlankBins); i < nXbins; i++) yValues[i] /= total;
     }
@@ -626,6 +628,8 @@ public class SSEUtils {
             x += dx;
         }
 
+        if (!Double.isFinite(total) || total <= 0)
+            throw new QuaSSEKernelException("Gaussian kernel normalization total must be positive and finite: " + total);
         for (int i=0; i <= nRightFlankBins*2; i+=2) yValues[i] /= total;
         for (int i=(nXbins - nLeftFlankBins)*2; i < nXbins*2; i+=2) yValues[i] /= total;
     }
