@@ -55,7 +55,8 @@ public class QuaSSENativeIntegratorTest {
                         }
                         for (int d = 0; d < 3; ++d) {
                             assertArrayEquals(expected[d], actual[d], steps == 0 ? 0 : 1e-12);
-                            assertArrayEquals(singleSteps[d], actual[d], 0);
+                            // Combined reaction halves differ only by floating-point rounding.
+                            assertArrayEquals(singleSteps[d], actual[d], steps == 0 ? 0 : 1e-12);
                         }
                     }
                     assertArrayEquals(savedBirth, birth, 0);
