@@ -45,19 +45,20 @@ public:
         }
     }
 
-    // Each X restores POST-T boundaries. Swapping makes its result the next step's input,
-    // without Java transfers or a full-array copy. Final values always reside in original.
+    // Strang splitting: T(dt/2), X(dt), T(dt/2). X restores its post-half-T input boundaries.
+    // Swap before the final half-T, without Java transfers; final values reside in original.
     void integrate(double dt, int steps, int left, int right) {
         if (steps == 0) return;
         const int useful = fft.size - left - right - 1;
         // Rates and dt stay fixed within this segment; E-dependent factors still change each step.
         // Refresh every segment, including when only dt changed since the previous call.
         for (int i = 0; i < useful; ++i)
-            expDtNetRates[i] = std::exp(dt * (birth[i] - death[i]));
+            expDtNetRates[i] = std::exp((dt / 2) * (birth[i] - death[i]));
         for (int step = 0; step < steps; ++step) {
             propagateT(useful);
             propagate(left, right);
             original.swap(result);
+            propagateT(useful);
         }
     }
 

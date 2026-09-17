@@ -1310,8 +1310,10 @@ public class QuaSSEDistributionTest {
         Assert.assertArrayEquals(expectedInitialDsLater10, Arrays.copyOfRange(esDsHiAtNodeInitial[1], 154, 173), 1E-14);
         Assert.assertArrayEquals(expectedSp1EsAfterPropTandXFirst10, Arrays.copyOfRange(esDsHiAtNode[0], 0, 20), 1E-14);
         Assert.assertArrayEquals(expectedSp1EsAfterPropTandXLater10, Arrays.copyOfRange(esDsHiAtNode[0], 154, 173), 1E-14); // OK til here
-        Assert.assertArrayEquals(expectedSp1DsAfterPropTandXFirst10, Arrays.copyOfRange(esDsHiAtNode[1], 0, 20), 1E-14);
-        Assert.assertArrayEquals(expectedSp1DsAfterPropTandXLater10, Arrays.copyOfRange(esDsHiAtNode[1], 154, 173), 1E-14);
+        // Historical R T/X arrays differ from Strang by about 9e-12. Exact composition is checked
+        // separately in testFixedStepSegments; retain these as an external branch-level reference.
+        Assert.assertArrayEquals(expectedSp1DsAfterPropTandXFirst10, Arrays.copyOfRange(esDsHiAtNode[1], 0, 20), 1E-10);
+        Assert.assertArrayEquals(expectedSp1DsAfterPropTandXLater10, Arrays.copyOfRange(esDsHiAtNode[1], 154, 173), 1E-10);
 
         // if using JTransforms
         // double[] expectedInitialDsFirst10 = new double[] { 0.791000831787404, 0.879671919608544, 0.975840371583655, 1.07981933026376, 1.19189412137632, 1.31231629549353, 1.44129748672436, 1.57900316601788, 1.72554637653023, 1.88098154753774 };
@@ -2039,15 +2041,15 @@ public class QuaSSEDistributionTest {
         Assert.assertTrue(Double.isFinite(evaluate(one)));
     }
 
-    // Preserve fixed-dt truncation and normalization even when a nonempty segment takes no steps.
-    // Full likelihood references use dynamic dt; replace this check when fixed-dt behavior is repaired.
+    // Check Strang composition, fixed-dt truncation and normalization at both resolutions.
+    // Model references cannot isolate ordering; revise truncation checks when fixed dt is repaired.
     @Test
     public void testFixedStepSegments() {
         for (boolean low : new boolean[]{true, false}) {
             for (double length : new double[]{0, .002, .012}) {
-                QuaSSEDistribution selected = smallDistribution(0, .001, .005,
+                QuaSSEDistribution selected = smallDistribution(0, .01, .005,
                         "(sp1:0.02,sp2:0.02);", "Observed");
-                QuaSSEDistribution reference = smallDistribution(0, .001, .005,
+                QuaSSEDistribution reference = smallDistribution(0, .01, .005,
                         "(sp1:0.02,sp2:0.02);", "Observed");
                 reference.integrationBackendInput.setValue("java", reference);
                 reference.initAndValidate();
@@ -2059,8 +2061,14 @@ public class QuaSSEDistributionTest {
                 }
                 if (length != 0) {
                     reference.populatefY(.005, false, true, low, false);
-                    for (int step = 0; step < Math.floor(length / .005); ++step)
-                        reference.doIntegrateInPlace(0, .005, low);
+                    // Assemble Strang independently of doIntegrateInPlace to catch ordering errors.
+                    for (int step = 0; step < Math.floor(length / .005); ++step) {
+                        double[][] scratch = reference.getScratchAtNode(0, low);
+                        reference.propagateTInPlace(expected, scratch, .0025, low, false);
+                        reference.propagateXInPlace(expected, new double[expected.length][expected[0].length],
+                                scratch, low);
+                        reference.propagateTInPlace(expected, scratch, .0025, low, false);
+                    }
                     reference.normalizeDs(0, low, false);
                 }
                 selected.integrateLength(0, actual, selected.getScratchAtNode(0, low),
@@ -2197,20 +2205,14 @@ public class QuaSSEDistributionTest {
         state.setEverythingDirty(false);
     }
 
-    /*
-     * Checks log-likelihood and other internal quantities
-     * for tree with 15 species, with 1024 quantitative trait
-     * bins.
-     *
-     * This is shows decisively that this implementation
-     * is correct.
-     */
+    // Independent R Strang reference checks pruning, normalization and integration together.
+    // Regenerate with validation/r_scripts/QuaSSEStrangReference.R if the numerical model changes.
     @Test
     public void testPruneFifteenSpTree1024Bins() {
         double logLik = evaluate(q32FifteenSp);
 
-        // Original rounded R reference, corrected by -2*log(dx) with this model's dx=0.01027592.
-        Assert.assertEquals(-61.27245 - 2*Math.log(0.01027592), logLik, 1e-5);
+        // Same rounded input data and grid as before; R applies half-T/X/half-T, not legacy T/X.
+        Assert.assertEquals(-52.116649459550381, logLik, 1e-9);
     }
 
     /*

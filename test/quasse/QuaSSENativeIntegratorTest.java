@@ -9,6 +9,7 @@ import static org.junit.Assert.*;
 
 public class QuaSSENativeIntegratorTest {
     // Model likelihoods can hide stale segment values: change dt with rates held fixed on one owner.
+    // Explicit half-T/X/half-T composition checks Strang ordering beyond likelihood references.
     // Compare full arrays and one-step calls; revisit Java equivalence when the algorithms diverge.
     @Test
     public void matchesJavaSegments() {
@@ -45,9 +46,11 @@ public class QuaSSENativeIntegratorTest {
                         nativeT.integrateSegment(actual, birth, death, spectrum, dt, steps, left, right);
                         for (int step = 0; step < steps; ++step) {
                             SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(
-                                    expected, scratch, birth, death, dt, useful, 2);
+                                    expected, scratch, birth, death, dt / 2, useful, 2);
                             SSEUtils.propagateEandDinXQuaSSE(expected, transformed, spectrum, scratch,
                                     size, left, right, 1, 2, fft);
+                            SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(
+                                    expected, scratch, birth, death, dt / 2, useful, 2);
                             nativeT.integrateSegment(singleSteps, birth, death, spectrum, dt, 1, left, right);
                         }
                         for (int d = 0; d < 3; ++d) {

@@ -52,6 +52,23 @@ The generator retains the original zero-drift check and adds diffusion 0.004 and
 It prints padding and coordinate minima as well as likelihoods. Java checks both fresh and
 reused objects against these values within 10⁻⁹, and checks the grid coordinates and transfer map.
 
+## Strang reference
+
+QuaSSE now uses half-T/X/half-T rather than diversitree's original T/X sequence. Regenerate
+the 15-species test with:
+
+```sh
+Rscript validation/r_scripts/QuaSSEStrangReference.R build/diversitree-root-reference/library
+```
+
+This uses the Java test's rounded tree/traits and original grid. It replaces only the R
+integrator in that R process with an explicit Strang composition of diversitree's existing
+T and X routines; neither the package installation nor its checkout is modified. The result
+is −52.116649459550381, compared with −52.116547992841099 for the original C T/X calculation
+on these inputs. This is an independent implementation comparison at fixed discretization,
+not a claim that the grid or timestep is converged. The old rounded −61.27245 reference also
+contained the historical root-normalization factor described above.
+
 ## R tests
 
 Install missing test dependencies into the isolated library, without replacing normal packages:

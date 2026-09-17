@@ -609,9 +609,9 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         // System.out.println("scratchAtNode[0] before propagate in t = " + Arrays.toString(scratchAtNode[0]));
         // System.out.println("scratchAtNode[1] before propagate in t = " + Arrays.toString(scratchAtNode[1]));
 
-        // integrate over birth and death events (low or high resolution inside)
+        // Strang splitting: reaction half-steps surround transport with the full-dt kernel.
         boolean jtransforms = false;
-        propagateTInPlace(esDsAtNode, scratchAtNode, aDt, lowRes, jtransforms);
+        propagateTInPlace(esDsAtNode, scratchAtNode, aDt / 2, lowRes, jtransforms);
 
         // debugging
         // System.out.println("esAtNode after propagate in t and before x = " + Arrays.toString(esDsAtNode[0]));
@@ -626,6 +626,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         // debugging
         // System.out.println("D's length before propagating in X = " + esDsAtNode[1].length);
         propagateXInPlace(esDsAtNode, fftBufferEsDsAtNode, scratchAtNode, lowRes);
+        propagateTInPlace(esDsAtNode, scratchAtNode, aDt / 2, lowRes, jtransforms);
 
         // debugging
         // System.out.println("esAtNode after propagate in t and x = " + Arrays.toString(esDsAtNode[0]));

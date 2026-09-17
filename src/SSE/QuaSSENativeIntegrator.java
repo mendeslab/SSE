@@ -5,7 +5,7 @@ import java.lang.ref.Reference;
 
 /**
  * Native QuaSSE calculations, with independently owned arrays and FFTW transforms.
- * Segment calls copy current E/D, rates and kernel once, then repeat T/X in native storage.
+ * Segment calls copy current E/D, rates and kernel once, then repeat Strang steps in native storage.
  * No model state is cached between calls. Close explicitly; Cleaner releases abandoned instances.
  */
 public final class QuaSSENativeIntegrator implements AutoCloseable {
@@ -53,7 +53,8 @@ public final class QuaSSENativeIntegrator implements AutoCloseable {
         cleanable.clean();
     }
 
-    /** Repeat T then X; row zero is E and remaining rows are D. Rates have N-left-right-1 entries.
+    /** Repeat T(dt/2), X(dt), T(dt/2); row zero is E and remaining rows are D.
+     * Rates have N-left-right-1 entries; the supplied kernel must represent the full dt.
      * Requires at least one D row and nonnegative steps; E/D storage follows propagateX's contract.
      * Inputs other than E/D are unchanged. Zero steps are the identity, with no normalization.
      */

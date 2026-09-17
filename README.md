@@ -90,7 +90,11 @@ For an IDE run, set `-Djava.library.path=/path/to/SSE/build/gcc-16-debug-O` in J
 On newer JDKs, add `--enable-native-access=ALL-UNNAMED` to JVM options (or `JAVA_TOOL_OPTIONS`).
 By default only transforms move into C++; the numerical method is unchanged.
 
-To run repeated T/X steps in C++, set `integrationBackend="native"` alongside
+Both integration backends use Strang splitting: half a reaction step, a full drift/diffusion
+step, then half a reaction step. This does not remove spatial or boundary error or
+automatically select a timestep.
+
+To run repeated steps in C++, set `integrationBackend="native"` alongside
 `fftBackend="fftw"` on the QuaSSE distribution. The default is `integrationBackend="java"`;
 Java still selects time steps and handles grids, tree operations, and normalization.
 Rebuild with `ant native` after updating the JNI interface.
