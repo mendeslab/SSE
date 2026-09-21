@@ -62,7 +62,8 @@ QuaSSE can omit `grid` when `q2d` is `NormalCenteredAtObservedLinkFn`: supply li
 likelihood to resolve these defaults again. Other links or numerical overrides require an explicit
 `QuaSSEGrid`, taking `tree`, `traits`, `drift`, and `diffusion`. Optional scalar
 attributes `nX`, `dX`, `xMid`, `hiLoRatio`, `flankWidthScaler`, `rangeMultiplier`, `dtMax`, and `tc`
-override diversitree-style defaults resolved at initialization. Reinitialize the grid and likelihood
+override defaults resolved at initialization. With Strang splitting, `dtMax` defaults to the initial
+tree height / 250; an explicit value overrides it. Reinitialize the grid and likelihood
 after editing these configuration values. Parameter proposals use BEAST's invalidation lifecycle;
 standalone callers should likewise notify through `State` before evaluating changed inputs.
 If drift/diffusion are supplied both on the likelihood and grid, they must reference the same objects.

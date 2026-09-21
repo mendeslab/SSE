@@ -21,7 +21,7 @@ public class QuaSSEGrid extends CalculationNode {
     public final Input<Double> rangeMultiplierInput = new Input<>("rangeMultiplier", "Observed range multiplier.", 5.0);
     public final Input<Integer> hiLoRatioInput = new Input<>("hiLoRatio", "Fine/coarse resolution ratio.", 4);
     public final Input<Double> flankWidthScalerInput = new Input<>("flankWidthScaler", "Kernel support width in SDs.", 5.0);
-    public final Input<Double> dtMaxInput = new Input<>("dtMax", "Maximum step; defaults to initial tree height / 1000.");
+    public final Input<Double> dtMaxInput = new Input<>("dtMax", "Maximum step; defaults to initial tree height / 250.");
     public final Input<Double> tcInput = new Input<>("tc", "Resolution switch; defaults to initial tree height / 10.");
 
     private double dtMax, tc, dXbin, xMid, flankWidthScaler, drift, diffusion;
@@ -50,7 +50,7 @@ public class QuaSSEGrid extends CalculationNode {
         }
         dXbin = dXInput.get() == null ? width / nXbinsLo : dXInput.get();
         xMid = xMidInput.get() == null ? (min + max) / 2 : xMidInput.get();
-        dtMax = dtMaxInput.get() == null ? height / 1000 : dtMaxInput.get();
+        dtMax = dtMaxInput.get() == null ? height / 250 : dtMaxInput.get();
         tc = tcInput.get() == null ? height / 10 : tcInput.get();
         hiLoRatio = hiLoRatioInput.get();
         flankWidthScaler = flankWidthScalerInput.get();

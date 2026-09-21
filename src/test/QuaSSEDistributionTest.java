@@ -1718,7 +1718,7 @@ public class QuaSSEDistributionTest {
         Assert.assertEquals(1024, grid.getBins(true));
         Assert.assertEquals(.5 / 1024, grid.getDx(), 0.0);
         Assert.assertEquals(.05, grid.getMidpoint(), 0.0);
-        Assert.assertEquals(.09 / 1000, grid.getDtMax(), 0.0);
+        Assert.assertEquals(.09 / 250, grid.getDtMax(), 0.0);
         Assert.assertEquals(.09 / 10, grid.getTc(), 0.0);
         double[] copy = grid.copyX(true);
         double first = copy[0];
@@ -1771,11 +1771,14 @@ public class QuaSSEDistributionTest {
         grid.traitsInput.get().setValue(1, .2);
         evaluate(distribution);
         Assert.assertEquals(.5 / 1024, grid.getDx(), 0.0);
-        Assert.assertEquals(.09 / 1000, grid.getDtMax(), 0.0);
+        Assert.assertEquals(.09 / 250, grid.getDtMax(), 0.0);
         distribution.initAndValidate();
         Assert.assertSame(grid, distribution.gridInput.get());
         Assert.assertEquals(1.0 / 1024, grid.getDx(), 0.0);
-        Assert.assertEquals(.12 / 1000, grid.getDtMax(), 0.0);
+        Assert.assertEquals(.12 / 250, grid.getDtMax(), 0.0);
+        grid.dtMaxInput.setValue(.0001, grid);
+        grid.initAndValidate();
+        Assert.assertEquals(.0001, grid.getDtMax(), 0.0);
 
         grid.nXInput.setValue(256, grid);
         grid.initAndValidate();

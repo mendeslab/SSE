@@ -30,9 +30,10 @@ by the simulation; they are not claimed to be weakly informative. Neither endpoi
 to exceed the other, so increasing and decreasing speciation are both possible. No numerical lower
 cutoff has been imposed on diffusion to hide under-resolution of its kernel.
 
-The grid controls reproduce diversitree's defaults for the saved data: nX=1024, dX=5 times the trait
+The spatial grid controls follow diversitree's defaults for the saved data: nX=1024, dX=5 times the trait
 range divided by 1024, xMid at the trait-range midpoint, hiLoRatio=4, flankWidthScaler=5, tc=tree
-height/10, and dtMax=tree height/1000. Controls remain fixed, but padding can change with diffusion.
+height/10. With Strang splitting, dtMax defaults to tree height/250. Controls remain fixed, but
+padding can change with diffusion.
 `dynDt=true` subdivides branch intervals; it does not select timesteps from an error estimate.
 
 ## Run without an IDE

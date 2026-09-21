@@ -35,8 +35,10 @@ random-walk window is 0.5; the five scale operators retain scaleFactor=0.75 and 
 
 Grid controls follow the same defaults as the smaller example: nX=1024, hiLoRatio=4,
 flankWidthScaler=5, dX=5 times trait range/1024, xMid=trait-range midpoint, tc=tree height/10,
-and dtMax=tree height/1000. Here height is 65.0916859837, dX=0.0379022945773, and
-dtMax=0.0650916859837. Padding can change with diffusion; `dynDt=true` is not error-adaptive.
+and dtMax=tree height/250 for Strang splitting. Here height is 65.0916859837, dX=0.0379022945773,
+and dtMax=0.260366743935. Padding can change with diffusion; `dynDt=true` is not error-adaptive.
+The current default grid can still fail the kernel-variance guard on short branch segments,
+including at the initial parameters. Increasing `dtMax` does not resolve those kernels.
 
 ## Run
 
