@@ -20,7 +20,7 @@ ORIGINAL_HASH = "9bcb4ca968390566e93d791b5da91f643329edd04e70c8b50d8e69e3b3e1795
 
 # Explicit settings keep the study small: method, bins, timestep divisor, width factor, support SDs.
 def settings():
-    rows = [("Strang", n, d, 1, 8) for n in (512, 1024, 2048, 4096, 8192) for d in DIVISORS]
+    rows = [("Strang", n, d, 1, 8) for n in (256, 512, 1024, 2048, 4096, 8192) for d in DIVISORS]
     rows += [("Strang", 16384, d, 1, 8) for d in (62.5, 125, 250, 8000, 16000, 32000)]
     rows += [("Original", 4096, d, 1, 8) for d in DIVISORS]
     return rows + [("Strang", 16384, 8000, 2, 8), ("Strang", 8192, 8000, 1, 10)]
@@ -62,7 +62,9 @@ def prepare(previous):
                                            beast / "lib/launcher.jar"])
     if hashes["Original"] != ORIGINAL_HASH:
         raise SystemExit("Archived original-method library does not match the source-checked binary.")
-    if previous and previous["sha256"] != hashes:
+    # The runner may extend the matrix or change plots; input, driver and numerical binaries must match.
+    if previous and any(previous["sha256"].get(name) != digest
+                        for name, digest in hashes.items() if name != "runner"):
         raise SystemExit("Input or code changed. Preserve the existing table before starting a fresh study.")
     metadata = previous or {"revision": subprocess.check_output(
         ["jj", "log", "-r", "@", "--no-graph", "-T", "commit_id"], text=True).strip(),
@@ -82,7 +84,7 @@ def measure(budget):
     metadata, rows = read_table()
     done = {key(row) for row in rows}
     if done == set(settings()):
-        print("All 56 measurements already saved; regenerating figures only.")
+        print(f"All {len(settings())} measurements already saved; regenerating figures only.")
         return
     metadata, cp = prepare(metadata)
     for setting in settings():
@@ -169,7 +171,7 @@ def plot():
     strang = [r for r in positive if r["method"] == "Strang"]
     figures = []
     fig, ax = plt.subplots(figsize=(13, 6), layout="constrained")
-    for n in (16384, 8192, 4096, 2048, 1024, 512):
+    for n in sorted({int(r["n"]) for r in strang}, reverse=True):
         curve(ax, [r for r in strang if int(r["n"]) == n], "dtMax", f"{n} bins")
     figures.append((fig, [ax], "error-vs-dt.png"))
     ax.set_title("Timestep sensitivity — Strang")
