@@ -2,7 +2,7 @@
 
 This study asks how much the **log likelihood** changes when we refine the spatial grid or shorten
 the integration timestep. It evaluates one fixed 233-species primate example, not an MCMC chain.
-All measurements were rerun together with the same padding rule.
+All measurements use the same padding rule.
 
 ## Main findings
 
@@ -18,6 +18,7 @@ Selected absolute log-likelihood discrepancies:
 
 | Uniform bins | H/62.5 | H/250 | H/8000 |
 | ---: | ---: | ---: | ---: |
+| 256 | 304.640 | 304.194 | nonfinite |
 | 512 | 10.3702 | 10.3697 | 2343.45 |
 | 1024 | 0.0725976 | 0.0732384 | 26.9014 |
 | 2048 | 0.000699255 | 0.0000583662 | 0.00140772 |
@@ -59,6 +60,7 @@ padding takes space out of that interval. Usable endpoints are recorded in the m
 
 | Uniform bins | Numerical Δx |
 | ---: | ---: |
+| 256 | 0.151609178 |
 | 512 | 0.075804589 |
 | 1024 | 0.037902295 |
 | 2048 | 0.018951147 |
@@ -84,6 +86,11 @@ At 1024 bins, much of the curve is a spatial-error plateau. Shortening the times
 does little to help. At the smallest timesteps, it makes the result markedly worse: the sampled
 diffusion kernel becomes too narrow relative to Δx to express its intended variance.
 The 2048-bin curve has a smaller plateau and also deteriorates at H/8000.
+
+At 256 bins, discrepancies are about 304 at the largest timesteps, rising to 3491 at H/4000.
+H/8000 produces a nonfinite likelihood and is recorded as a failure, not plotted as an error
+value. All eight settings have severely unresolved kernels: minimum variance retention is about
+4.2 × 10⁻²⁸, falling to 8.6 × 10⁻³⁷ at H/8000. Finite output here does not imply useful accuracy.
 
 A slightly lower absolute discrepancy at a larger timestep need not mean a more accurate
 time-integration method: errors from spatial and temporal approximations can cancel.
@@ -166,19 +173,21 @@ width are fixed across the main measurements. Padding is always sized for H/62.5
 standard deviations, even when the integration timestep is much smaller. Thus geometry does not
 change with dtMax within a given bin count.
 
-There are 54 main evaluations:
+There are 62 main evaluations:
 
-- Strang: 512, 1024, 2048, 4096 and 8192 bins, each at H/62.5 through H/8000 by successive halving.
+- Strang: 256, 512, 1024, 2048, 4096 and 8192 bins, each at H/62.5 through H/8000 by successive halving.
 - Strang: six settings at 16384 bins, listed above.
 - Original: 4096 bins at H/62.5 through H/8000.
 
 Two additional boundary checks use doubled Fourier width or ten-standard-deviation support.
 They are recorded in the same table but excluded from the main curves.
-All 56 evaluations completed successfully, with 464 branch-segment kernel requests each.
-Likelihood computation totaled 394.93 seconds; full subprocess time totaled 435.30 seconds
-(7.26 minutes), within one 15-minute budget.
+The original 56 evaluations completed successfully in 435.30 seconds including startup.
+Eight additional 256-bin evaluations took 4.67 seconds including startup (0.65 seconds of likelihood
+computation); seven returned finite likelihoods and one returned a nonfinite likelihood.
+All 64 traversed 464 branch-segment kernel requests. Earlier measurements and the reference
+are unchanged.
 
-At 512–2048 bins, diagnostic mode permits positive variance loss so that we can measure its
+At 256–2048 bins, diagnostic mode permits positive variance loss so that we can measure its
 consequences instead of discarding those likelihoods. Zero variance, invalid normalization and
 nonfinite kernels remain errors. Finer grids use the 99.9% guard. A completed diagnostic run
 does not imply an adequately resolved kernel. Counts refer to branch-segment kernel requests,
@@ -191,7 +200,9 @@ entire posterior distribution.
 ## Files and commands
 
 [measurements.tsv](measurements.tsv) is the only data table. Its first line is a JSON comment with
-the input/code hashes and run revision; the remaining lines are tab-separated measurements.
+the initial input/code hashes and run revision; the remaining lines are tab-separated measurements.
+The runner was subsequently extended to add 256 bins; input, Java driver and numerical binaries
+still match these hashes.
 Columns record settings, method, guard mode, log likelihood, computation time, actual timestep
 range, kernel variance diagnostics and usable grid geometry. Rows marked `kind=boundary` are
 the separate boundary checks. Figure discrepancies are computed directly from these likelihoods.
@@ -209,7 +220,8 @@ the release native library at `build/gcc-16/libsse_quasse.so`, and the verified 
 at `build/strang/baseline/libsse_quasse.so`. The latter is a local archive, not rebuilt by this runner.
 The runner compiles the experimental Java driver and keeps classes, input copies and execution
 logs under `build/likelihood-reference2/`. It runs serially with a 900-second budget, appends each
-completed result immediately, and skips settings already in the table on resume. Changed input
-or executable code requires preserving the old table before starting a fresh run.
+completed result immediately, and skips settings already in the table on resume. Runner changes
+to extend the matrix or adjust plots are allowed; changed input, Java driver or numerical binaries
+require preserving the old table before starting a fresh run.
 
 The previous `likelihood_reference/` archive is untouched and is not needed to generate these figures.
