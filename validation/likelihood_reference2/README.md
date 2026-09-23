@@ -108,6 +108,21 @@ Only measured points are shown. The 16384-bin series is deliberately sparse: H/6
 H/250, H/8000, H/16000 and H/32000. The H/16000 spatial curve has just one point; H/32000
 contains only the reference and consequently has no positive discrepancy to plot.
 
+## Joint spatial and timestep sensitivity
+
+![Log discrepancy as a function of log grid spacing and log timestep limit](error-3d.png)
+
+[Open the interactive 3D figure](error-3d.html) to rotate, zoom and inspect individual measurements.
+The HTML includes its plotting library and works offline. Hover details give the bin count, Δx,
+timestep setting, dtMax, absolute discrepancy and minimum kernel variance retention.
+
+All three coordinates are base-10 logarithms: Δx, dtMax and |log L − log L_reference|.
+The wireframe joins immediate measured neighbors in the study grid along each direction.
+Missing settings, the nonfinite result and the zero-error reference leave gaps; no surface is
+interpolated across them. The error remains a discrepancy from the numerical reference, not a
+certified exact-solution error. Colors encode log discrepancy. Marker shapes retain the kernel
+variance categories above; the interactive figure uses a diamond in place of the triangle.
+
 ## Strang versus the original method
 
 ![Splitting methods: discrepancy versus timestep and computation time](splitting-comparison.png)
@@ -211,11 +226,13 @@ From the SSE repository root:
 
 ```sh
 python3 validation/likelihood_reference2/run.py --plot-only
+# Also generate the offline interactive figure (requires the Python plotly package):
+python3 validation/likelihood_reference2/run.py --plot-only --interactive
 # To compute missing settings, with BEAST2_HOME set and compiled Java/native code available:
 python3 validation/likelihood_reference2/run.py
 ```
 
-Plotting requires Python and Matplotlib only. Measurement additionally requires Java, BEAST2,
+Static plotting requires Python and Matplotlib only; interactive HTML additionally requires Plotly. Measurement additionally requires Java, BEAST2,
 the release native library at `build/gcc-16/libsse_quasse.so`, and the verified archived library
 at `build/strang/baseline/libsse_quasse.so`. The latter is a local archive, not rebuilt by this runner.
 The runner compiles the experimental Java driver and keeps classes, input copies and execution

@@ -3,6 +3,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -152,8 +153,104 @@ def condition_ticks(ax, rows, spatial=False):
                   "Maximum timestep dtMax\nFraction of tree height / numerical value")
 
 
+# Prepare one set of logged points and edges for both renderers. Only immediate neighbors
+# in the full study grid are connected, so missing, failed and zero-error points leave gaps.
+def error_grid(rows):
+    bins = sorted({n for method, n, _, width, support in settings() if method == "Strang"})
+    divisors = sorted({d for method, _, d, width, support in settings() if method == "Strang"})
+    points = {(int(r["n"]), float(r["divisor"])): r for r in rows
+              if r["method"] == "Strang" and r["kind"] == "main" and r["status"] == "ok"
+              and math.isfinite(r["error"]) and r["error"] > 0}
+    coordinates = {key: (math.log10(float(r["dx"])), math.log10(float(r["dtMax"])),
+                         math.log10(r["error"])) for key, r in points.items()}
+    edges = []
+    for i, n in enumerate(bins):
+        for j, d in enumerate(divisors):
+            neighbors = []
+            if i + 1 < len(bins):
+                neighbors.append((bins[i + 1], d))
+            if j + 1 < len(divisors):
+                neighbors.append((n, divisors[j + 1]))
+            for neighbor in neighbors:
+                if (n, d) in points and neighbor in points:
+                    edges.append((coordinates[n, d], coordinates[neighbor]))
+    return list(points.values()), list(coordinates.values()), edges
+
+
+# Render the same measured points and adjacency in a static figure and optional offline HTML.
+# Explicitly logged coordinates keep the 3D geometry identical between plotting libraries.
+def plot_error_3d(rows, interactive=False):
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d.art3d import Line3DCollection
+    from matplotlib.colors import Normalize
+
+    points, coordinates, edges = error_grid(rows)
+    labels = ("log₁₀ Δx", "log₁₀ dtMax", "log₁₀ |log L − log L_reference|")
+    caption = ("Error is discrepancy from the numerical reference; Δt denotes dtMax.\n"
+               "Lines connect adjacent measured settings; missing, nonfinite and zero-error points are omitted.")
+    groups = [("o", "circle", "≥99.9%", []), ("^", "diamond", "95–99.9%", []),
+              ("x", "x", "<95%", [])]
+    for i, row in enumerate(points):
+        retention = float(row["minVariance"])
+        groups[0 if retention >= .999 else 1 if retention >= .95 else 2][3].append(i)
+    norm = Normalize(min(p[2] for p in coordinates), max(p[2] for p in coordinates))
+    fig = plt.figure(figsize=(12, 9))
+    ax = fig.add_subplot(projection="3d")
+    ax.add_collection3d(Line3DCollection(edges, colors="0.55", linewidths=.8, alpha=.65))
+    for marker, _, name, indices in groups:
+        if indices:
+            x, y, z = zip(*(coordinates[i] for i in indices))
+            ax.scatter(x, y, z, c=z, cmap="viridis", norm=norm, marker=marker, s=42,
+                       depthshade=False, label=name)
+    ax.set(xlabel=labels[0], ylabel=labels[1], zlabel=labels[2], title="Space and timestep sensitivity — Strang")
+    ax.view_init(elev=25, azim=-130)
+    ax.legend(title="Minimum variance retention", loc="upper left")
+    fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap="viridis"), ax=ax, shrink=.55,
+                 pad=.13, label="log₁₀ absolute discrepancy")
+    fig.subplots_adjust(left=.02, right=.88, bottom=.12, top=.94)
+    fig.text(.5, .035, caption, ha="center", fontsize=10)
+    fig.savefig(HERE / "error-3d.png", dpi=160)
+    plt.close(fig)
+
+    if not interactive:
+        return
+    import plotly.graph_objects as go
+
+    lines = [[value for edge in edges for value in (edge[0][axis], edge[1][axis], None)]
+             for axis in range(3)]
+    figure = go.Figure(go.Scatter3d(x=lines[0], y=lines[1], z=lines[2], mode="lines",
+                                  line=dict(color="#888", width=2), hoverinfo="skip", showlegend=False))
+    for _, symbol, name, indices in groups:
+        if not indices:
+            continue
+        x, y, z = zip(*(coordinates[i] for i in indices))
+        details = [[int(points[i]["n"]), float(points[i]["dx"]), float(points[i]["divisor"]),
+                    float(points[i]["dtMax"]), points[i]["error"], float(points[i]["minVariance"])]
+                   for i in indices]
+        figure.add_trace(go.Scatter3d(
+            x=x, y=y, z=z, mode="markers", name=name, customdata=details,
+            marker=dict(symbol=symbol, size=5, color=z, coloraxis="coloraxis"),
+            hovertemplate="%{customdata[0]} bins<br>Δx: %{customdata[1]:.6g}"
+                          "<br>Timestep: H/%{customdata[2]}<br>dtMax: %{customdata[3]:.6g}"
+                          "<br>Absolute error: %{customdata[4]:.6g}"
+                          "<br>Minimum variance retention: %{customdata[5]:.6g}<extra></extra>"))
+    figure.update_layout(
+        title="Space and timestep sensitivity — Strang", autosize=True,
+        scene=dict(xaxis_title=labels[0], yaxis_title=labels[1], zaxis_title=labels[2],
+                   aspectmode="cube", camera=dict(eye=dict(x=-1.5, y=-1.8, z=1.2))),
+        coloraxis=dict(colorscale="Viridis", cmin=norm.vmin, cmax=norm.vmax,
+                       colorbar=dict(title="log₁₀ error", len=.55, y=.4)),
+        legend=dict(title="Minimum variance retention", x=0, y=1),
+        margin=dict(l=0, r=60, b=100, t=60),
+        annotations=[dict(text=caption.replace("\n", "<br>") +
+                          "<br>Drag to rotate; scroll to zoom. Diamonds denote 95–99.9% retention.",
+                          x=.5, y=-.12, xref="paper", yref="paper", showarrow=False)])
+    figure.write_html(HERE / "error-3d.html", include_plotlyjs=True, full_html=True,
+                      default_height="95vh", config=dict(displaylogo=False, scrollZoom=True))
+
+
 # Plot only saved data: the report and figures do not require BEAST or a native library.
-def plot():
+def plot(interactive=False):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -205,14 +302,21 @@ def plot():
             ax.legend(fontsize=9)
         fig.savefig(HERE / filename, dpi=160)
         plt.close(fig)
+    plot_error_3d(main, interactive)
     print(f"Figures use reference logL={ref:.13f}; its zero self-discrepancy is omitted.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plot-only", action="store_true")
+    parser.add_argument("--interactive", action="store_true", help="Also generate offline 3D HTML (requires Plotly)")
     parser.add_argument("--seconds", type=float, default=900, help="Total computation budget; default 900 seconds")
     args = parser.parse_args()
+    if args.interactive:
+        try:
+            import plotly.graph_objects
+        except ImportError:
+            parser.error("--interactive requires Plotly: install it with python3 -m pip install plotly")
     if not args.plot_only:
         measure(args.seconds)
-    plot()
+    plot(args.interactive)

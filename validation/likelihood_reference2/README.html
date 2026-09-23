@@ -474,6 +474,28 @@ refinement has almost no visible benefit at the larger timesteps once
 sparse: H/62.5, H/125, H/250, H/8000, H/16000 and H/32000. The H/16000
 spatial curve has just one point; H/32000 contains only the reference
 and consequently has no positive discrepancy to plot.</p>
+<h2 id="joint-spatial-and-timestep-sensitivity">Joint spatial and
+timestep sensitivity</h2>
+<figure>
+<img src="error-3d.png"
+alt="Log discrepancy as a function of log grid spacing and log timestep limit" />
+<figcaption aria-hidden="true">Log discrepancy as a function of log grid
+spacing and log timestep limit</figcaption>
+</figure>
+<p><a href="error-3d.html">Open the interactive 3D figure</a> to rotate,
+zoom and inspect individual measurements. The HTML includes its plotting
+library and works offline. Hover details give the bin count, Δx,
+timestep setting, dtMax, absolute discrepancy and minimum kernel
+variance retention.</p>
+<p>All three coordinates are base-10 logarithms: Δx, dtMax and |log L −
+log L_reference|. The wireframe joins immediate measured neighbors in
+the study grid along each direction. Missing settings, the nonfinite
+result and the zero-error reference leave gaps; no surface is
+interpolated across them. The error remains a discrepancy from the
+numerical reference, not a certified exact-solution error. Colors encode
+log discrepancy. Marker shapes retain the kernel variance categories
+above; the interactive figure uses a diamond in place of the
+triangle.</p>
 <h2 id="strang-versus-the-original-method">Strang versus the original
 method</h2>
 <figure>
@@ -636,10 +658,13 @@ boundary checks. Figure discrepancies are computed directly from these
 likelihoods.</p>
 <p>From the SSE repository root:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> validation/likelihood_reference2/run.py <span class="at">--plot-only</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"># To compute missing settings, with BEAST2_HOME set and compiled Java/native code available:</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> validation/likelihood_reference2/run.py</span></code></pre></div>
-<p>Plotting requires Python and Matplotlib only. Measurement
-additionally requires Java, BEAST2, the release native library at
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Also generate the offline interactive figure (requires the Python plotly package):</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> validation/likelihood_reference2/run.py <span class="at">--plot-only</span> <span class="at">--interactive</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># To compute missing settings, with BEAST2_HOME set and compiled Java/native code available:</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> validation/likelihood_reference2/run.py</span></code></pre></div>
+<p>Static plotting requires Python and Matplotlib only; interactive HTML
+additionally requires Plotly. Measurement additionally requires Java,
+BEAST2, the release native library at
 <code>build/gcc-16/libsse_quasse.so</code>, and the verified archived
 library at <code>build/strang/baseline/libsse_quasse.so</code>. The
 latter is a local archive, not rebuilt by this runner. The runner
