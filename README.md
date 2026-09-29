@@ -77,17 +77,19 @@ not drift accuracy or total likelihood error. There is no automatic grid refinem
 
 ## Optional QuaSSE FFTW transforms (Linux)
 
-Requires GCC 16 with C++20 support, FFTW development files, `pkg-config`, and JDK headers
+Requires a C++20 compiler, FFTW development files, `pkg-config`, and JDK headers
 (`JAVA_HOME` if not using the `javac` on PATH). MoSSE's native library is separate.
+Compilation and the FFT/native-integrator unit tests have been checked with GCC 13 and GCC 16;
+other C++20 compilers have not been verified.
 
 ```sh
 ant test-native
-export LD_LIBRARY_PATH="$PWD/build/gcc-16-debug-O${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$PWD/build/native${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 ```
 
 Set `fftBackend="fftw"` on the XML's `QuaSSEDistribution`, then run with `beast-sse` as usual.
 The default is `sst`; selecting FFTW requires the library and never falls back silently.
-For an IDE run, set `-Djava.library.path=/path/to/SSE/build/gcc-16-debug-O` in JVM options.
+For an IDE run, set `-Djava.library.path=/path/to/SSE/build/native` in JVM options.
 On newer JDKs, add `--enable-native-access=ALL-UNNAMED` to JVM options (or `JAVA_TOOL_OPTIONS`).
 By default only transforms move into C++; the numerical method is unchanged.
 
@@ -100,7 +102,52 @@ To run repeated steps in C++, set `integrationBackend="native"` alongside
 Java still selects time steps and handles grids, tree operations, and normalization.
 Rebuild with `ant native` after updating the JNI interface.
 
-For release timings, build with
-`make -C jni/quasse BUILD_DIR=../../build/gcc-16 CXXFLAGS='-O3 -g'`
-and use `build/gcc-16` as the library directory. `ant native` builds only the debug library;
-`ant test-native -Dnative.build=build/gcc-16` tests the release library once built.
+Native builds default to release mode. Each mode selects its own directory and default flags:
+
+| Mode | Directory | Default compiler flags |
+|---|---|---|
+| `release` | `build/native` | `-O3` |
+| `debug-O` | `build/native-debug-O` | `-O -g` |
+| `debug` | `build/native-debug` | `-g` |
+
+Select a mode with `ant native -Dnative.mode=debug-O` or
+`ant test-native -Dnative.mode=debug-O`. Native tests build and load that same configuration.
+To run an analysis with it, use its directory in `LD_LIBRARY_PATH` or `java.library.path`.
+
+Make uses the default C++ compiler (`g++`), or `CXX` from the environment or command line.
+For example, `CXX=g++-13 ant native` selects GCC 13. `CXXFLAGS` replaces the mode's default flags;
+`CPPFLAGS`, `LDFLAGS`, and `LDLIBS` supply additional preprocessor, linker, and library options.
+Required C++20, shared-library, JNI, and FFTW options remain part of the build command.
+No architecture flags are added automatically: use, for example,
+`CXXFLAGS='-O3 -march=ivybridge' ant native` to select one explicitly. These flags affect SSE's
+C++ code, not the installed FFTW library. `-march=native` targets the build machine's CPU,
+which may differ from the compute nodes where the library will run.
+
+Direct Make builds accept the same modes, for example `make -C jni/quasse MODE=debug`.
+For a custom output directory, Make resolves relative paths from `jni/quasse`, while Ant resolves
+them from the project root:
+
+```sh
+make -C jni/quasse MODE=debug CXX=g++ BUILD_DIR=../../build/custom
+CXX=g++ ant test-native -Dnative.mode=debug -Dnative.build=build/custom
+```
+
+Make tracks source timestamps, not compiler selection, Java paths, or flags. Clean and rebuild
+before changing those settings within an existing directory. Switching between modes requires
+no cleaning because their default directories are separate. Repeat the same overrides when
+running tests so any rebuild uses the intended settings.
+
+```sh
+ant clean-native -Dnative.mode=debug-O
+CXX=g++-13 ant native -Dnative.mode=debug-O
+# Equivalent direct Make commands:
+make -C jni/quasse MODE=debug-O clean
+make -C jni/quasse MODE=debug-O CXX=g++-13
+```
+
+Cleaning removes only the selected directory's library, generated JNI headers/classes, and any
+obsolete configuration records. It preserves unrelated files and other builds. Make's `clean`
+requires no Java, compiler, or FFTW installation; `ant clean-native` needs only Ant's Java runtime.
+Use the same directory override for cleaning a custom build.
+Checkout paths may contain spaces when using the relative output paths above; arbitrary output
+directory names containing spaces are not supported by the Makefile.

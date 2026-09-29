@@ -45,8 +45,9 @@ including at the initial parameters. Increasing `dtMax` does not resolve those k
 From the SSE checkout, with `BEAST2_HOME` configured:
 
 ```sh
-make -C jni/quasse BUILD_DIR=../../build/gcc-16 CXXFLAGS='-O3 -g'
-export LD_LIBRARY_PATH="$PWD/build/gcc-16${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+native_dir="$PWD/build/native"
+ant native -Dnative.build="$native_dir"
+export LD_LIBRARY_PATH="$native_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 sse_dir="$PWD"
 run_dir=$(mktemp -d "$PWD/build/primates.XXXXXX")
 cd "$run_dir"

@@ -23,7 +23,7 @@
   <property name="build" location="build"/>
   <property name="build-test" location="build-test"/>
   <property name="test-reports" location="test-reports"/>
-  <property name="native.build" location="build/gcc-16-debug-O"/>
+  <property name="native.mode" value="release"/>
   <property name="dist" location="dist"/>
   <property name="pack" location="${dist}/package"/>
 
@@ -122,11 +122,37 @@
     </java>
   </target>
 
+  <!-- Resolve the test library directory with the same mode naming as Make; flags belong to Make. -->
+  <target name="native-config">
+    <condition property="native.suffix" value="">
+      <equals arg1="${native.mode}" arg2="release"/>
+    </condition>
+    <condition property="native.suffix" value="-${native.mode}">
+      <or>
+        <equals arg1="${native.mode}" arg2="debug-O"/>
+        <equals arg1="${native.mode}" arg2="debug"/>
+      </or>
+    </condition>
+    <fail unless="native.suffix" message="Unknown native.mode '${native.mode}'; choose release, debug-O, or debug."/>
+    <property name="native.build" location="build/native${native.suffix}"/>
+    <!-- Keep the checkout's absolute path (which may contain spaces) out of Make's targets. -->
+    <property name="native.make.build" location="${native.build}" relative="true" basedir="jni/quasse"/>
+  </target>
+
   <!-- Optional QuaSSE native build; ordinary compile/test do not require a C++ toolchain or FFTW. -->
-  <target name="native" description="Build the optional C++20 QuaSSE FFTW library">
+  <target name="native" depends="native-config" description="Build the optional C++20 QuaSSE FFTW library">
     <exec executable="make" dir="jni/quasse" failonerror="true">
-      <!-- Resolve relative overrides at the project root, not Make's working directory. -->
-      <env key="BUILD_DIR" path="${native.build}"/>
+      <arg value="MODE=${native.mode}"/>
+      <env key="BUILD_DIR" value="${native.make.build}"/>
+    </exec>
+  </target>
+
+  <!-- Clean only the selected native outputs; no Java compilation or dependency lookup is needed. -->
+  <target name="clean-native" depends="native-config" description="Clean the selected QuaSSE native build">
+    <exec executable="make" dir="jni/quasse" failonerror="true">
+      <arg value="clean"/>
+      <arg value="MODE=${native.mode}"/>
+      <env key="BUILD_DIR" value="${native.make.build}"/>
     </exec>
   </target>
 
