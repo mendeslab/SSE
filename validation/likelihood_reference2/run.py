@@ -14,8 +14,6 @@ ROOT = HERE.parents[1]
 BUILD = ROOT / "build/likelihood-reference2"
 TABLE = HERE / "measurements.tsv"
 DIVISORS = (62.5, 125, 250, 500, 1000, 2000, 4000, 8000)
-LIBRARIES = {"Strang": ROOT / "build/gcc-16/libsse_quasse.so",
-             "Original": ROOT / "build/strang/baseline/libsse_quasse.so"}
 ORIGINAL_HASH = "9bcb4ca968390566e93d791b5da91f643329edd04e70c8b50d8e69e3b3e17959"
 
 
@@ -51,11 +49,11 @@ def combined_hash(paths):
 
 
 # Resume only with unchanged input and executable code; compile outside the report folder.
-def prepare(previous):
+def prepare(previous, libraries):
     beast = Path(os.environ["BEAST2_HOME"])
     input_xml = ROOT / "examples/QuaSSE_233_primates_MCMC.xml"
     files = {"input": input_xml, "driver": HERE / "ReferenceStudy.java", "runner": Path(__file__),
-             **LIBRARIES}
+             **libraries}
     hashes = {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in files.items()}
     hashes["java"] = combined_hash(list((ROOT / "build/SSE").rglob("*.class")))
     hashes["dependencies"] = combined_hash(list((ROOT / "lib").glob("*.jar")) +
@@ -79,15 +77,16 @@ def prepare(previous):
 
 
 # Each subprocess releases native memory. Completed rows are appended immediately for resuming.
-def measure(budget):
+def measure(budget, native_library):
     os.chdir(ROOT)
+    libraries = {"Strang": native_library, "Original": ROOT / "build/strang/baseline/libsse_quasse.so"}
     deadline = time.monotonic() + budget
     metadata, rows = read_table()
     done = {key(row) for row in rows}
     if done == set(settings()):
         print(f"All {len(settings())} measurements already saved; regenerating figures only.")
         return
-    metadata, cp = prepare(metadata)
+    metadata, cp = prepare(metadata, libraries)
     for setting in settings():
         if setting in done:
             continue
@@ -100,7 +99,7 @@ def measure(budget):
         (directory / "input.xml").write_bytes((BUILD / "input.xml").read_bytes())
         mode = "diagnostic" if n <= 2048 else "reference"
         cmd = ["java", "-Xmx6g", "--enable-native-access=ALL-UNNAMED",
-               f"-Djava.library.path={LIBRARIES[method].parent}", "-cp", cp, "ReferenceStudy",
+               f"-Djava.library.path={libraries[method].parent}", "-cp", cp, "ReferenceStudy",
                str(directory), str(n), str(divisor), str(width), str(support), mode, "62.5"]
         print(f"Starting {name} ({len(rows) + 1}/{len(settings())})", flush=True)
         start = time.monotonic()
@@ -311,6 +310,8 @@ if __name__ == "__main__":
     parser.add_argument("--plot-only", action="store_true")
     parser.add_argument("--interactive", action="store_true", help="Also generate offline 3D HTML (requires Plotly)")
     parser.add_argument("--seconds", type=float, default=900, help="Total computation budget; default 900 seconds")
+    parser.add_argument("--native-library", type=Path, default=ROOT / "build/native/libsse_quasse.so",
+                        help="Current-method library; default build/native/libsse_quasse.so (ignored for --plot-only)")
     args = parser.parse_args()
     if args.interactive:
         try:
@@ -318,5 +319,8 @@ if __name__ == "__main__":
         except ImportError:
             parser.error("--interactive requires Plotly: install it with python3 -m pip install plotly")
     if not args.plot_only:
-        measure(args.seconds)
+        # Java loads this fixed basename from its directory; hash the same file, retaining symlinks.
+        if args.native_library.name != "libsse_quasse.so":
+            parser.error("--native-library must point to a file named libsse_quasse.so")
+        measure(args.seconds, args.native_library.expanduser().absolute())
     plot(args.interactive)

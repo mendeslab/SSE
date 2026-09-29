@@ -232,9 +232,15 @@ python3 validation/likelihood_reference2/run.py --plot-only --interactive
 python3 validation/likelihood_reference2/run.py
 ```
 
-Static plotting requires Python and Matplotlib only; interactive HTML additionally requires Plotly. Measurement additionally requires Java, BEAST2,
-the release native library at `build/gcc-16/libsse_quasse.so`, and the verified archived library
-at `build/strang/baseline/libsse_quasse.so`. The latter is a local archive, not rebuilt by this runner.
+Static plotting requires Python and Matplotlib only; interactive HTML additionally requires Plotly.
+Measurement additionally requires Java, BEAST2, the current native library (default
+`build/native/libsse_quasse.so`), and the verified archived library at
+`build/strang/baseline/libsse_quasse.so`. The latter is a local archive, not rebuilt by this runner.
+Use `--native-library /path/to/libsse_quasse.so` to select another current-method build; relative
+paths are resolved from the directory where you invoke the runner. This option is ignored for
+`--plot-only`, which needs neither library. The saved measurements used the release library at
+`build/gcc-16/libsse_quasse.so`; selecting a newly compiled library does not change their provenance
+or bypass the hash checks for resuming that study.
 The runner compiles the experimental Java driver and keeps classes, input copies and execution
 logs under `build/likelihood-reference2/`. It runs serially with a 900-second budget, appends each
 completed result immediately, and skips settings already in the table on resume. Runner changes
