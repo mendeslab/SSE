@@ -343,62 +343,35 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public void integrateLength(
-    		int nodeIdx,
-    		double[][] esDsAtNode,
-    		double[][] scratchAtNode,
-    		double aLength,
-    		boolean dynamicallyAdjust,
-    		double maxDt,
-    		boolean lowRes,
-    		boolean forceRecalcKernel,
-    		boolean jtransforms) {
-
-        // option of jtransforms, and jni
-
-        // An empty segment is the identity, including when a branch ends exactly at tc.
-        // The caller still transfers fine to coarse bins, but no Gaussian or normalization is needed.
-        if (aLength == 0.0) return;
-
-        // dealing with dt
-        double dt, nIntervals;
-        // double nonIntegratedDt;
-
-        if (dynamicallyAdjust) {
-            nIntervals = Math.ceil(aLength / maxDt);
-            dt = aLength / nIntervals; // dynamically adjusted dt
-        } else {
-            nIntervals = Math.floor(aLength / maxDt);
-            dt = maxDt;
-            // nonIntegratedDt = aLength % maxDt; // maybe later we do something with this when we fix dt at dtMax
-        }
-
-        // updating fY if necessary
-        // remove next two later
-        populatefY(dt, forceRecalcKernel, true, lowRes, false);
-
-        if ((lowRes ? nativeLo : nativeHi) != null && Double.isFinite(nIntervals)
-                && nIntervals >= 0 && nIntervals <= Integer.MAX_VALUE && nIntervals == Math.rint(nIntervals)) {
-            integrateNativeSegment(nodeIdx, dt, (int) nIntervals, lowRes);
-        } else {
-            // Compatibility path: preserve the old loop outside JNI's int range, including its
-            // existing overflow limitation. Remove when step-count behavior is addressed separately.
-            for (int i=0; i<nIntervals; i++) {
-                doIntegrateInPlace(nodeIdx, dt, lowRes);
-            }
-        }
-
-        // normalization that happens in make.pde.quasse.fftR
-        // System.out.println("Prior to normalization inside integrateLength (lowRes=" + lowRes + ") = " + Arrays.toString(esDsAtNode[1]));
-        // System.out.println("After normalization inside integrateLength (lowRes=" + lowRes + ") = " + Arrays.toString(esDsAtNode[1]));
-
-        // if (lowRes) logNormalizationFactors[nodeIdx] += normalizeDs(esDsAtNode[1], dXbin);
-        // else logNormalizationFactors[nodeIdx] += normalizeDs(esDsAtNode[1], dXbin / hiLoRatio);
-
-        // debugging
+    public void integrateLength(int nodeIdx, double[][] rows, double[][] scratch, double length,
+            boolean dynamicallyAdjust, double maxDt, boolean lowRes, boolean forceRecalcKernel,
+            boolean jtransforms) {
+        // An empty interval is the identity, including branch ends exactly at tc.
+        if (length == 0) return;
+        integrateSegment(rows, scratch, (lowRes ? fftBufferEsDsLo : fftBufferEsDsHi)[nodeIdx],
+                length, dynamicallyAdjust, maxDt, lowRes, forceRecalcKernel, lowRes ? nativeLo : nativeHi);
         logNormalizationFactors[nodeIdx] += normalizeDs(nodeIdx, lowRes, jtransforms);
-        // System.out.println("    log-normalization factor total, for node " + nodeIdx + " = " + logNormalizationFactors[nodeIdx]);
+    }
 
+    // Advance explicit E/D or E-only storage; the caller alone owns likelihood scaling.
+    // This shares timestep selection, kernels and Strang ordering without inventing a D row for E.
+    private void integrateSegment(double[][] rows, double[][] scratch, double[][] transformed,
+            double length, boolean dynamicallyAdjust, double maxDt, boolean lowRes, boolean force,
+            QuaSSENativeIntegrator owner) {
+        if (length == 0) return;
+        double intervals = dynamicallyAdjust ? Math.ceil(length / maxDt) : Math.floor(length / maxDt);
+        double dt = dynamicallyAdjust ? length / intervals : maxDt;
+        // Compatibility: legacy fixed-dt mode drops the remainder. Sampling inputs require dynDt=true;
+        // repairing the old mode's timestep convention is a separate numerical change.
+        populatefY(dt, force, true, lowRes, false);
+        if (owner != null && Double.isFinite(intervals) && intervals >= 0
+                && intervals <= Integer.MAX_VALUE && intervals == Math.rint(intervals)) {
+            integrateNativeSegment(rows, owner, dt, (int) intervals, lowRes);
+        } else {
+            // Compatibility: preserve the existing int-loop limitation outside JNI's step-count range.
+            for (int i = 0; i < intervals; ++i)
+                integrateStep(rows, scratch, transformed, dt, lowRes, owner);
+        }
     }
 
     @Override
@@ -574,82 +547,49 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         else { throw new RuntimeException("ERROR: You specified an invalid prior probability distribution for the root. Exiting..."); }
     }
 
-    // Select current grid-dependent inputs once; the native owner caches storage, not model state.
-    private void integrateNativeSegment(int nodeIdx, double dt, int steps, boolean lowRes) {
-        QuaSSENativeIntegrator integrator = lowRes ? nativeLo : nativeHi;
+    // Copy current inputs into the supplied native owner; owners cache storage, not model state.
+    private void integrateNativeSegment(double[][] rows, QuaSSENativeIntegrator owner,
+            double dt, int steps, boolean lowRes) {
         int[] flanks = lowRes ? nLeftNRightFlanksLo : nLeftNRightFlanksHi;
-        integrator.integrateSegment((lowRes ? esDsLo : esDsHi)[nodeIdx],
-                lowRes ? birthRatesLo : birthRatesHi, lowRes ? deathRatesLo : deathRatesHi,
-                lowRes ? fftFYLo : fftFYHi, 0.0, dt, steps, flanks[0], flanks[1]);
+        owner.integrateSegment(rows, lowRes ? birthRatesLo : birthRatesHi,
+                lowRes ? deathRatesLo : deathRatesHi, lowRes ? fftFYLo : fftFYHi,
+                0.0, dt, steps, flanks[0], flanks[1]);
     }
 
+    // Single-step entry point retained for callers using node storage and a prepared full-dt kernel.
     @Override
-    public void doIntegrateInPlace(int nodeIdx, double aDt, boolean lowRes) {
+    public void doIntegrateInPlace(int nodeIdx, double dt, boolean lowRes) {
+        integrateStep((lowRes ? esDsLo : esDsHi)[nodeIdx], (lowRes ? scratchLo : scratchHi)[nodeIdx],
+                (lowRes ? fftBufferEsDsLo : fftBufferEsDsHi)[nodeIdx], dt, lowRes, lowRes ? nativeLo : nativeHi);
+    }
 
-        if ((lowRes ? nativeLo : nativeHi) != null) {
-            integrateNativeSegment(nodeIdx, aDt, 1, lowRes);
+    // Strang splitting: reaction half-steps surround transport with the prepared full-dt kernel.
+    private void integrateStep(double[][] rows, double[][] scratch, double[][] transformed,
+            double dt, boolean lowRes, QuaSSENativeIntegrator owner) {
+        if (owner != null) {
+            integrateNativeSegment(rows, owner, dt, 1, lowRes);
             return;
         }
-
-        double[][] esDsAtNode, fftBufferEsDsAtNode;
-        double[][] scratchAtNode;
-        if (lowRes) {
-            esDsAtNode = esDsLo[nodeIdx];
-            fftBufferEsDsAtNode = fftBufferEsDsLo[nodeIdx];
-            scratchAtNode = scratchLo[nodeIdx];
-        } else {
-            esDsAtNode = esDsHi[nodeIdx];
-            fftBufferEsDsAtNode = fftBufferEsDsHi[nodeIdx];
-            scratchAtNode = scratchHi[nodeIdx];
-        }
-
-        // debugging
-        // System.out.println("esAtNode before propagate in t = " + Arrays.toString(esDsAtNode[0]));
-        // System.out.println("dsAtNode before propagate in t = " + Arrays.toString(esDsAtNode[1]));
-        // System.out.println("scratchAtNode[0] before propagate in t = " + Arrays.toString(scratchAtNode[0]));
-        // System.out.println("scratchAtNode[1] before propagate in t = " + Arrays.toString(scratchAtNode[1]));
-
-        // Strang splitting: reaction half-steps surround transport with the full-dt kernel.
-        boolean jtransforms = false;
-        propagateTInPlace(esDsAtNode, scratchAtNode, aDt / 2, lowRes, jtransforms);
-
-        // debugging
-        // System.out.println("esAtNode after propagate in t and before x = " + Arrays.toString(esDsAtNode[0]));
-        // System.out.println("dsAtNode after propagate in t and before x = " + Arrays.toString(esDsAtNode[1]));
-        // System.out.println("scratchAtNode[0] after propagate in t and before x = " + Arrays.toString(scratchAtNode[0]));
-        // System.out.println("scratchAtNode[1] after propagate in t and before x = " + Arrays.toString(scratchAtNode[1]));
-
-        // make normal kernel and FFTs it
-        // populatefY(aDt, true, true, lowRes, jtransforms);
-
-        // integrate over diffusion of quantitative trait
-        // debugging
-        // System.out.println("D's length before propagating in X = " + esDsAtNode[1].length);
-        propagateXInPlace(esDsAtNode, fftBufferEsDsAtNode, scratchAtNode, lowRes);
-        propagateTInPlace(esDsAtNode, scratchAtNode, aDt / 2, lowRes, jtransforms);
-
-        // debugging
-        // System.out.println("esAtNode after propagate in t and x = " + Arrays.toString(esDsAtNode[0]));
-        // System.out.println("dsAtNode after propagate in t and x = " + Arrays.toString(esDsAtNode[1]));
-        // System.out.println("scratchAtNode[0] after propagate in t and x = " + Arrays.toString(scratchAtNode[0]));
-        // System.out.println("scratchAtNode[1] after propagate in t and x = " + Arrays.toString(scratchAtNode[1]));
+        propagateTInPlace(rows, scratch, dt / 2, lowRes, false);
+        propagateXInPlace(rows, transformed, scratch, lowRes);
+        propagateTInPlace(rows, scratch, dt / 2, lowRes, false);
     }
 
     @Override
     public void propagateTInPlace(double[][] esDsAtNode, double[][] scratchAtNode, double dt, boolean lowRes, boolean jtranforms) {
         if (jtranforms) {
             // grab scratch, dt and nDimensions from QuaSSEDistribution state
-            // if (lowRes) SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, nDimensionsD);
-            // else SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, nDimensionsD);
+            // if (lowRes) SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, esDsAtNode.length - 1);
+            // else SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, esDsAtNode.length - 1);
             if (lowRes)
-                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, nDimensionsD);
+                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, esDsAtNode.length - 1);
             else
-                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, nDimensionsD);
+                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, esDsAtNode.length - 1);
         } else {
             if (lowRes)
-                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, nDimensionsD);
+                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, esDsAtNode.length - 1);
             else
-                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, nDimensionsD);
+                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, esDsAtNode.length - 1);
         }
     }
 
@@ -662,14 +602,14 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 //        // System.out.println("scratch[1] = " + Arrays.toString(scratch[1]));
 //
 //        // grab dt and nDimensions from state
-//        if (lowRes) SSEUtils.propagateEandDinXQuaLike(esDsAtNode, scratchAtNode, fYLo, nXbinsLo, nLeftNRightFlanksLo[0], nLeftNRightFlanksLo[1], nDimensionsE, nDimensionsD, fftForEandDLo);
-//        else SSEUtils.propagateEandDinXQuaLike(esDsAtNode, scratchAtNode, fYHi, nXbinsHi, nLeftNRightFlanksHi[0], nLeftNRightFlanksHi[1], nDimensionsE, nDimensionsD, fftForEandDHi);
+//        if (lowRes) SSEUtils.propagateEandDinXQuaLike(esDsAtNode, scratchAtNode, fYLo, nXbinsLo, nLeftNRightFlanksLo[0], nLeftNRightFlanksLo[1], 1, esDsAtNode.length - 1, fftForEandDLo);
+//        else SSEUtils.propagateEandDinXQuaLike(esDsAtNode, scratchAtNode, fYHi, nXbinsHi, nLeftNRightFlanksHi[0], nLeftNRightFlanksHi[1], 1, esDsAtNode.length - 1, fftForEandDHi);
 //    }
 
     @Override
     public void propagateXInPlace(double[][] esDsAtNode, double[][] fftBufferEsDsAtNode, double[][] scratchAtNode, boolean lowRes) {
 
-        QuaSSENativeIntegrator nativeX = lowRes ? nativeLo : nativeHi;
+        QuaSSENativeIntegrator nativeX = esDsAtNode.length == nDimensions ? (lowRes ? nativeLo : nativeHi) : null;
         if (nativeX != null) {
             int[] flanks = lowRes ? nLeftNRightFlanksLo : nLeftNRightFlanksHi;
             nativeX.propagateX(esDsAtNode, lowRes ? fftFYLo : fftFYHi, flanks[0], flanks[1]);
@@ -683,11 +623,11 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         // Use the same resolution's prepared transform for E/D as for its Gaussian kernel.
         if (lowRes) {
             SSEUtils.propagateEandDinXQuaSSE(esDsAtNode, fftBufferEsDsAtNode, fftFYLo, scratchAtNode,
-                    nXbinsLo, nLeftNRightFlanksLo[0], nLeftNRightFlanksLo[1], nDimensionsE, nDimensionsD, fftLo);
+                    nXbinsLo, nLeftNRightFlanksLo[0], nLeftNRightFlanksLo[1], 1, esDsAtNode.length - 1, fftLo);
         }
         else {
             SSEUtils.propagateEandDinXQuaSSE(esDsAtNode, fftBufferEsDsAtNode, fftFYHi, scratchAtNode,
-                    nXbinsHi, nLeftNRightFlanksHi[0], nLeftNRightFlanksHi[1], nDimensionsE, nDimensionsD, fftHi);
+                    nXbinsHi, nLeftNRightFlanksHi[0], nLeftNRightFlanksHi[1], 1, esDsAtNode.length - 1, fftHi);
         }
     }
 
