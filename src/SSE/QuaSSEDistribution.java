@@ -831,6 +831,12 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             else prodSumPriorDs += (priorProbsAtRoot[i] * dsAtRoot[j]);
         }
 
+        // Branch normalization cannot catch disjoint underflowed root partials: validate the
+        // final product integral too, rather than reporting numerical loss as zero model support.
+        if (!(prodSumPriorDs > 0) || !Double.isFinite(prodSumPriorDs))
+            throw new ArithmeticException("Invalid root likelihood integral on the "
+                    + (got2LowRes ? "coarse" : "fine") + " grid.");
+
         double thisLogLik = Math.log(prodSumPriorDs * dXAtRightRes) + sumOfLogNormalizationFactors; // denormalizing by adding sumOfLogNormalizationFactors
 
         return thisLogLik;
