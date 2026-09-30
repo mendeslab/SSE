@@ -69,6 +69,13 @@ on these inputs. This is an independent implementation comparison at fixed discr
 not a claim that the grid or timestep is converged. The old rounded −61.27245 reference also
 contained the historical root-normalization factor described above.
 
+The fossil implementation explicitly applies TreeParser `threshold="1e-5"` to the supplied
+QuaSSE examples and the rounded 15-species test. The generator now also extends the rounded
+terminal edges by their tiny implied ages, leaving internal ages fixed, and reports the adjusted
+reference **−52.116649450126559**. The Java test uses that value with the unchanged 1e−9 tolerance;
+the generator retains the historical unadjusted result above. This is a change to the input tree,
+not to the Strang method or its root conditioning.
+
 ## R tests
 
 Install missing test dependencies into the isolated library, without replacing normal packages:

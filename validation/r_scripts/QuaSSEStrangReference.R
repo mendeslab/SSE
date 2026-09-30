@@ -32,3 +32,15 @@ lik <- make.quasse(tr,traits,.02,sigmoid.x,constant.x,
                   list(nx=1024L,dx=.01027592,xmid=.6813353,tc=1.37732,
                        dt.max=.005,r=4L,w=5,method="fftR"))
 cat("Strang log likelihood:",format(lik(pars),digits=17),"\n")
+
+## Match TreeParser threshold=1e-5: extend terminal edges to the latest tip without moving
+## internal nodes. Keep the unadjusted result above as the historical rounded-tree reference.
+depths <- ape::node.depth.edgelength(tr)
+ages <- max(depths[seq_len(length(tr$tip.label))]) - depths[seq_len(length(tr$tip.label))]
+stopifnot(all(ages >= 0), all(ages < 1e-5))
+terminal <- which(tr$edge[,2] <= length(tr$tip.label))
+tr$edge.length[terminal] <- tr$edge.length[terminal] + ages[tr$edge[terminal,2]]
+lik <- make.quasse(tr,traits,.02,sigmoid.x,constant.x,
+                  list(nx=1024L,dx=.01027592,xmid=.6813353,tc=1.37732,
+                       dt.max=.005,r=4L,w=5,method="fftR"))
+cat("Strang log likelihood, threshold-adjusted tips:",format(lik(pars),digits=17),"\n")

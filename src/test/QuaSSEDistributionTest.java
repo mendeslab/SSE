@@ -110,7 +110,10 @@ public class QuaSSEDistributionTest {
         bifTreeHeight002 = new TreeParser(bifTreeStr002, false, false, true, 0);
         bifTreeHeight0025 = new TreeParser(bifTreeStr0025, false, false, true, 0);
         threeSpTreeHeight002 = new TreeParser(trifTreeStr002, false, false, true, 0);
-        fifteenSpTree = new TreeParser(fifteenTreeStr, false, false, true, 0);
+        // Rounded Newick lengths give living tips tiny positive ages; apply the explicit input policy.
+        fifteenSpTree = new TreeParser();
+        fifteenSpTree.initByName("newick", fifteenTreeStr, "IsLabelledNewick", true,
+                "adjustTipHeights", false, "threshold", 1e-5, "singlechild", false, "offset", 0);
 
         // qu trait data
         String spNames2Sp = "sp1 sp2";
@@ -2227,7 +2230,7 @@ public class QuaSSEDistributionTest {
     QuaSSEDistribution fossilDistribution(String newick, double tc, boolean gaussian, int nX,
             double dx, double dt, double support, int ratio) {
         TreeParser tree = new TreeParser();
-        tree.initByName("newick", newick, "IsLabelledNewick", true, "adjustTipHeights", false);
+        tree.initByName("newick", newick, "IsLabelledNewick", true, "adjustTipHeights", false, "threshold", 1e-5);
         RealParameter traits = new RealParameter();
         traits.initByName("value", "-0.2 0.1 0.3 0.0", "keys", "A B F S");
         LinkFn observation;
@@ -2345,8 +2348,9 @@ public class QuaSSEDistributionTest {
     public void testPruneFifteenSpTree1024Bins() {
         double logLik = evaluate(q32FifteenSp);
 
-        // Same rounded input data and grid as before; R applies half-T/X/half-T, not legacy T/X.
-        Assert.assertEquals(-52.116649459550381, logLik, 1e-9);
+        // R uses the same threshold-adjusted extant tips and half-T/X/half-T composition.
+        // The historical unadjusted reference was −52.116649459550381; keep the same tolerance.
+        Assert.assertEquals(-52.116649450126559, logLik, 1e-9);
     }
 
     /*

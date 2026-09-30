@@ -48,7 +48,7 @@
            The tree is fixed and deliberately absent from the MCMC state and operators. -->
       <distribution id="likelihood" spec="QuaSSEDistribution" priorProbAtRootType="Observed"
                      fftBackend="fftw" integrationBackend="native">
-        <tree id="tree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false"
+        <tree id="tree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false" threshold="1e-5"
               offset="0" singlechild="false"
               newick="(((((Galago_matschiei:3.6449842729999999,
                       (Euoticus_pallidus:1.4498621519999999,

@@ -41,7 +41,7 @@
            The tree is fixed and deliberately absent from the MCMC state and operators. -->
       <distribution id="likelihood" spec="QuaSSEDistribution" priorProbAtRootType="Observed"
                     >
-        <tree id="tree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false"
+        <tree id="tree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false" threshold="1e-5"
               offset="0" singlechild="false"
               newick="(sp2:13.773202550247193,(sp1:12.766883843390154,((((sp12:1.170387028082835,sp13:1.170387028082835)nd16:0.98377203253569978,sp9:2.1541590606185328)nd11:5.4514010923658338,((sp5:4.3116453428710377,(sp14:0.89100552792334031,sp15:0.89100552792334031)nd14:3.4206398149476924)nd9:2.5366637762168405,((sp16:0.30118661250958267,sp17:0.30118661250958267)nd12:4.2643836673599331,(sp6:3.950838430033377,sp7:3.950838430033377)nd13:0.61473184983612239)nd10:2.2827388392183647)nd8:0.75725103389649229)nd5:2.5547391408670661,((sp10:2.0594782024944212,sp11:2.0594782024944212)nd15:0.41987890184391496,sp8:2.479357104338332)nd6:7.6809421895130914)nd4:2.6065845495387281)nd3:1.0063187068570474)nd1;"/>
         <q2mLambda spec="LogisticFunction" curveYBaseValue="@lambda0" curveMaxY="@lambda1"
