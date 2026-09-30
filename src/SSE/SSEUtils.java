@@ -44,6 +44,17 @@ public class SSEUtils {
 
     /*
      * Propagates E's and D's, leaving the result in esDs.
+     * At fixed trait x and constant rates λ and μ, exactly integrates the reaction ODEs
+     * E′ = μ − (λ + μ)E + λE² and D′ = [2λE − (λ + μ)]D, without trait transport.
+     * E is the probability of no sampled descendants; D is the descendant-subtree likelihood.
+     * Trait drift and diffusion are handled separately; the combined calculation is not exact.
+     *
+     * For λ ≠ μ, starting values E₀, D₀, duration h = dt, and z = exp[(λ − μ)h]:
+     * E₁ = [μ − λE₀ + μz(E₀ − 1)] / [μ − λE₀ + λz(E₀ − 1)]
+     * D₁ = D₀ z [(λ − μ) / (zλ − μ + (1 − z)λE₀)]².
+     * Factoring E′ = (1 − E)(μ − λE) and separating variables gives the E update.
+     * Its derivative with respect to E₀ is the D multiplier. Both updates use the OLD E₀.
+     *
      * Equivalent to Fitzjohn's fftR.propagate.t (R/model-quasse-fftR.R) and propagate_t (src/quasse-eqs-fftC.c)
      *
      * Note: only the first nUsefulTraitBins elements in each row of esDs are used (and in birthRate and deathRate);
@@ -77,7 +88,7 @@ public class SSEUtils {
             // System.out.println("ithMu = " + ithMu + " ithLambda = " + ithLambda + " ithE = " + ithE + " ithZ = " + ithZ);
             // System.out.println("esDsAtNode[0][i] = " + esDsAtNode[0][i]);
 
-            // Saving values for updating D below
+            // Compute the D multiplier from saved ithE = E₀; scratchAtNode[1] stores it below.
             tmp1 = (ithLambda - ithMu) / (ithZ * ithLambda - ithMu + (1 - ithZ) * ithLambda * ithE);
 
             // checking against R
@@ -116,6 +127,17 @@ public class SSEUtils {
 
     /*
      * Propagates E's and D's, leaving the result in esDs.
+     * At fixed trait x and constant rates λ and μ, exactly integrates the reaction ODEs
+     * E′ = μ − (λ + μ)E + λE² and D′ = [2λE − (λ + μ)]D, without trait transport.
+     * E is the probability of no sampled descendants; D is the descendant-subtree likelihood.
+     * Trait drift and diffusion are handled separately; the combined calculation is not exact.
+     *
+     * For λ ≠ μ, starting values E₀, D₀, duration h = dt, and z = exp[(λ − μ)h]:
+     * E₁ = [μ − λE₀ + μz(E₀ − 1)] / [μ − λE₀ + λz(E₀ − 1)]
+     * D₁ = D₀ z [(λ − μ) / (zλ − μ + (1 − z)λE₀)]².
+     * Factoring E′ = (1 − E)(μ − λE) and separating variables gives the E update.
+     * Its derivative with respect to E₀ is the D multiplier. Both updates use the OLD E₀.
+     *
      * Equivalent to Fitzjohn's fftR.propagate.t (R/model-quasse-fftR.R) and propagate_t (src/quasse-eqs-fftC.c)
      *
      * Note: only the first nUsefulTraitBins elements in each row of esDs are used (and in birthRate and deathRate);
@@ -150,7 +172,7 @@ public class SSEUtils {
             // System.out.println("ithMu = " + ithMu + " ithLambda = " + ithLambda + " ithE = " + ithE + " ithZ = " + ithZ);
             // System.out.println("esDsAtNode[0][i] = " + esDsAtNode[0][i]);
 
-            // Saving values for updating D below
+            // Compute the D multiplier from saved ithE = E₀; scratchAtNode[1] stores it below.
             tmp1 = (ithLambda - ithMu) / (ithZ * ithLambda - ithMu + (1 - ithZ) * ithLambda * ithE);
 
             // checking against R

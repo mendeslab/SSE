@@ -22,6 +22,18 @@ public:
         original(std::size_t(2) * size * dims), result(original.size()), kernel(2 * size),
         birth(size), death(size), dFactors(size), expDtNetRates(size), expHalfDtNetRates(size) {}
 
+    // At fixed trait x and constant rates λ and μ, exactly integrates the reaction ODEs
+    // E′ = μ − (λ + μ)E + λE² and D′ = [2λE − (λ + μ)]D, without trait transport.
+    // E is the probability of no sampled descendants; D is the descendant-subtree likelihood.
+    // Trait drift and diffusion are handled separately; the combined calculation is not exact.
+    //
+    // For λ ≠ μ, starting values E₀, D₀, and reaction duration h, the supplied rateExponentials
+    // contain z = exp[(λ − μ)h] for each bin (h is a half or full step, chosen by integrate()).
+    // E₁ = [μ − λE₀ + μz(E₀ − 1)] / [μ − λE₀ + λz(E₀ − 1)]
+    // D₁ = D₀ z [(λ − μ) / (zλ − μ + (1 − z)λE₀)]².
+    // Factoring E′ = (1 − E)(μ − λE) and separating variables gives the E update.
+    // Its derivative with respect to E₀ is the D multiplier saved in dFactors.
+    //
     // Literal Java T update: real useful bins only, E first then all D rows.
     // Both E and the saved D factor use OLD E. Preserve singular cases and expression order;
     // in particular, negative D is cleared without multiplying, while NaN follows the else branch.
