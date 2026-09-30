@@ -105,3 +105,12 @@ output. The FFT root-mode expectations after the blocked method-of-lines call we
 separately, including the unchanged unconditioned likelihood. The generator passes all preflight,
 backend, and domain-width checks; the previous reference package fails its normalization preflight.
 Java's `ant test` passes 74 tests, with two expected aborts for absent validation data and no failures.
+
+## Fossil sampling references
+
+[FossilSampling.md](FossilSampling.md) records independent matrix-exponential reaction and scalar-tree
+references, the fixed-bin-boundary Gaussian refinement study, and Java/native comparisons.
+The [fixed-tree fossil guide](../examples/QuaSSE_fossils_fixed_tree.md) gives the equations,
+non-removing observation events, sampled-ancestor encoding, present-anchor restriction, and root
+conditioning convention. Its Flat example does not replace historical Observed references here
+or in `likelihood_reference2`; changing root weights changes the likelihood convention.

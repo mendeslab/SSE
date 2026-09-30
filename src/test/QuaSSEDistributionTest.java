@@ -2346,10 +2346,29 @@ public class QuaSSEDistributionTest {
     // A resolved trait-dependent fossil case protects both the spatial reference and BEAST rejection.
     // Scalar event tests cannot expose stale E workspaces or missing sampling-parameter dependencies.
     @Test
-    public void testFossilGaussianParameterRoundTrip() {
+    public void testFossilGaussianParameterRoundTrip() throws Exception {
         String newick = "(A:2,(F:0.5,(S:0,B:0.75):0.25):1);";
-        QuaSSEDistribution distribution = fossilDistribution(newick, 0, true,
-                8192, 7.5 / 7679, 1.0 / 256, Math.sqrt(320), 1);
+        beast.pkgmgmt.BEASTClassLoader.initServices();
+        beast.pkgmgmt.BEASTClassLoader.addServices("version.xml");
+        String xml = java.nio.file.Files.readString(java.nio.file.Path.of("examples/QuaSSE_fossils_fixed_tree.xml"))
+                .replace("fftBackend=\"fftw\"", "fftBackend=\"" + System.getProperty("test.quasse.fft", "sst") + "\"")
+                .replace("integrationBackend=\"native\"",
+                        "integrationBackend=\"" + System.getProperty("test.quasse.integration", "java") + "\"");
+        beast.base.inference.MCMC run = (beast.base.inference.MCMC)
+                new beast.base.parser.XMLParser().parseFragment(xml, true);
+        QuaSSEDistribution distribution = (QuaSSEDistribution)
+                ((CompoundDistribution) run.posteriorInput.get()).pDistributions.get().get(1);
+        opened.add(distribution);
+        Assert.assertEquals(2, distribution.treeInput.get().getRoot().getHeight(), 0);
+        for (Node node : distribution.treeInput.get().getNodesAsArray()) {
+            if ("F".equals(node.getID())) Assert.assertEquals(.5, node.getHeight(), 0);
+            if ("S".equals(node.getID())) {
+                Assert.assertEquals(.75, node.getHeight(), 0);
+                Assert.assertTrue(node.isDirectAncestor());
+                Assert.assertEquals(1, node.getParent().getParent().getHeight(), 0);
+            }
+            if ("A".equals(node.getID()) || "B".equals(node.getID())) Assert.assertEquals(0, node.getHeight(), 0);
+        }
         RealParameter[] parameters = {distribution.fossilSamplingRateInput.get(),
                 distribution.presentSamplingProbabilityInput.get(), distribution.gridInput.get().diffusionInput.get(),
                 ((LogisticFunction) distribution.q2mLambdaInput.get()).curveYBaseValueInput.get()};

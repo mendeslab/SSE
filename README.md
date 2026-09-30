@@ -56,6 +56,12 @@ For a short fixed-tree QuaSSE MCMC example, see
 [the 15-species example](examples/QuaSSE_15_species_MCMC.md), including its priors,
 run commands, validation status, and numerical caveats.
 The [233-primate example](examples/QuaSSE_233_primates_MCMC.md) uses FFTW/native integration.
+The [fixed-tree fossil example](examples/QuaSSE_fossils_fixed_tree.md) includes terminal fossils,
+sampled ancestors, and inference of the scalar sampling parameters ψ and ρ. It requires a living
+sample to anchor the present and `dynDt=true`; it uses non-removing sampling and Flat root weights.
+The linked guide explains the event equations, BEAST encoding, root conditioning, numerical domain,
+and the repeated E-integration cost. Supplied QuaSSE XMLs use a parser tip-age threshold of 1e−5
+for rounded living-tip lengths; mixed fossil trees must retain `adjustTipHeights="false"`.
 
 QuaSSE can omit `grid` when `q2d` is `NormalCenteredAtObservedLinkFn`: supply likelihood-level
 `drift` and `diffusion`, and defaults use the initial tree and observed traits. Reinitialize the
