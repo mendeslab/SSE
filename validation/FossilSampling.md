@@ -1,28 +1,61 @@
-# Fossil sampling implementation: interim validation
+# Fossil sampling implementation and validation
 
-2026-09-30. The corrected spatial study passes the numerical acceptance criteria in
-`../TODO/FossilSampling2.md`, section 9.3. The user chose to retain equal-weight integration and
-hold useful bin boundaries fixed during refinement. The initial study and its diagnosis are
-preserved below. Fossil implementation remains incomplete: the permanent Gaussian/lifecycle
-checks, XML example, legacy tip-age correction, and performance measurements remain to be done.
+2026-09-30. Fossil tips, sampled ancestors, and present-day sampling are implemented for a fixed
+binary tree with a living sample anchoring the present. The user chose equal-weight integration
+with fixed useful-bin boundaries in the refinement study, and a parser threshold of 1e−5 for tiny
+rounded tip ages. The original measurements and their diagnosis are preserved below.
 
-## Implementation state
+## Implementation and tests
 
-The draft model change connects ψ and ρ to Java/native integration, restarts an E-only trajectory
-for each terminal fossil, handles sampled ancestors, and tracks sampling factors in log space.
-Its parent changes contain the generalized reaction and shared segment integration.
+The [XML example](../examples/QuaSSE_fossils_fixed_tree.xml) and
+[model/numerical guide](../examples/QuaSSE_fossils_fixed_tree.md) describe the input contract,
+observation events, root conditioning, resolution switch, and numerical failure policy.
+No interpolation or shared E trajectory is used. Each terminal fossil independently integrates
+E from the present in reusable storage; a sampled ancestor uses its continuing child's E.
 
-Production inventory for the model change: two new public inputs; no new production classes,
-structs, or enums; three private helpers (sampling parameter refresh, tree validation, and sample
-initialization). Two reusable E-only workspace sets and two optional native owners supplement the
-existing node arrays. There is no stored E trajectory or separate observation map.
-The model file grows by 152 lines net; its existing test file grows by 131 lines net, including
-one test-only constant observation class and a model construction helper.
+Production inventory relative to `utxu` (535452dbf9703ac6fec706769087579b6450a4b6): **77 net lines**
+across four production files, versus the plan's rough estimate of 350–600. There are no new
+production classes, structs, enums, or result/option types. Two public model inputs, two reusable
+E-only workspace sets, and two optional one-row native owners supplement existing node arrays.
+Native rate/step coefficients use four additional arrays net of the old exponent arrays. There is
+no persistent trajectory, observation map, or alternative tree representation. The shared segment
+helpers and private reaction helper replace duplicated code; parameter refresh, tree validation,
+and sample initialization account for the other three new helpers.
 
-Build: `BEAST2_HOME=/home/bredelings/Applications/beast2/beast ant compile-test native` passes.
-The new scalar-tree and sampling-support test groups pass under Java/SST and native/FFTW with
-`-Xcheck:jni`. The broader native distribution suite has 21 passing tests and 17 failures:
-16 unchanged kernel-resolution failures and the additional compatibility failure below.
+The three affected test files grow by **295 net lines** (planned estimate 180–300), including one
+test-only constant observation class. Reaction references check E and D's analytic multiplier
+against a 70-digit matrix exponential, equal/unequal rates, zero rates/duration, and half-step
+composition. Native tests cover one/two/three rows, changing ψ and rates, close/reinitialization,
+and JNI array validation. Small-tree tests isolate sampling event factors; the resolved Gaussian
+case checks the real XML, E transport, and BEAST's state lifecycle without adding a new framework.
+
+`BEAST2_HOME=/home/bredelings/Applications/beast2/beast ant compile-test native` passes.
+Final results:
+
+| Run | Passed | Aborted | Failed |
+| --- | ---: | ---: | ---: |
+| `ant test` (Java/SST) | 74 | 2 | 16 |
+| `ant test-native`, first launch (Java integration/FFTW plus FFT/native unit tests) | 30 | 0 | 16 |
+| Explicit native distribution/reaction/segment tests | 42 | 0 | 16 |
+
+All 16 failing names and exception types match the recorded pre-feature kernel-resolution
+failures. No new failures remain and no kernel guard or test tolerance was weakened.
+The first failing launch stops `ant test-native`, so the native-segment distribution tests were
+also run explicitly with `-Xcheck:jni`. The two Java aborts are the existing optional native tests.
+
+The finest Gaussian reference is −11.075528805735900 with 1e−8 tolerance. The permanent test parses
+the actual XML, verifies living/fossil/ancestor ages, changes ψ, ρ, diffusion and a λ parameter
+through BEAST State, compares with fresh distributions, rejects/restores each proposal, and checks
+an out-of-bounds ψ proposal. Invalid tree structures and missing sample observations are rejected.
+The example's actual 20-step MCMC runs on Java and native with seed 42 have 21 matching trace rows;
+the maximum difference across their numeric entries is **8.17e−14**. Logs/state files remain under
+`build/fossil-validation/example-java` and `example-native`.
+
+Reaction references were generated with
+`python3 build/fossil-validation/reaction-references.py` (mpmath 1.4.1, 70 decimal digits).
+Its compact input/output table is retained in `src/test/PropagatesQuaSSETest.java`; the temporary
+generator and output remain under build. Scalar tree references use the separate generator below.
+
 
 ## Independent scalar references
 
@@ -127,7 +160,8 @@ likelihood scales and the existing Flat density 1/((nX−1)*dX); conditioning in
 same density. They are reported separately to make weighting effects visible.
 
 The last spatial/temporal refinement difference is **1.3073641220451293e−4**, exceeding the
-planned 1e−4 threshold. No tolerance was changed and no new permanent Gaussian reference was added.
+planned 1e−4 threshold. At that stage no tolerance was changed and no permanent Gaussian reference
+was added.
 At fixed nX=8192 and dX=3.75/3839, temporal refinement gives:
 
 | dtMax | support multiplier (same physical support) | log likelihood |
@@ -147,29 +181,80 @@ endpoints ±7.751041938, log numerator −13.9007313384464, conditioning integra
 and is not an integration-convergence failure.
 
 Local reproduction artifacts are under `build/fossil-validation/`: `tree-references.py`,
-`FossilStudy.java`, `continuous-study.csv`, `run-tests.sh`, and the test reports/logs.
+`continuous-study.csv`, `run-tests.sh`, and the test reports/logs. The initial `FossilStudy.java`
+is archived in `fixed-center-endpoints/`; the current driver uses bin boundaries instead.
 These investigation scripts are intentionally not tracked as permanent test infrastructure.
 
-## Legacy rounded tree: compatibility assumption failed
+## Rounded extant tip ages: resolved at parsing
 
-`testPruneFifteenSpTree1024Bins` now returns −∞ instead of its existing −52.11664945955038.
-Its Newick branch lengths are rounded and TreeParser is called with tip-height adjustment off.
-Thirteen nominally living tips therefore have positive heights between about 1e−10 and 4e−9;
-only sp8 and sp9 have exactly zero height. Under the specified positive-height classification,
-the new code treats these as fossils. The omitted ψ input defaults to zero, giving zero support.
+The rounded 15-species Newick has thirteen nominally living tips with inferred ages between
+about 1e−10 and 4e−9; only sp8 and sp9 were exactly zero. The new exact-zero classification exposed
+these input rounding errors, initially yielding −∞ at default ψ=0. The supplied QuaSSE XMLs and
+that test now use TreeParser `threshold="1e-5"` with `adjustTipHeights="false"`, explicitly setting
+small leaf heights to zero. This does not add a tolerance inside the likelihood. Near-present
+sampled ancestors below the parser threshold are deferred, as discussed with the user.
 
-This is a conflict between automatic fossil detection and preserving legacy extant-only inputs.
-Simply applying a time tolerance would change the supported age convention and could erase
-real young fossils. No such tolerance or compatibility rule has been introduced.
+The independent R generator `validation/r_scripts/QuaSSEStrangReference.R` retains the original
+unadjusted result −52.116649459550381 and additionally reports the threshold-adjusted tree result
+**−52.116649450126559**. Java/native agrees within the unchanged 1e−9 test tolerance. R extends
+the terminal edges by the computed tip ages without moving internal nodes, matching the parser.
+Historical `likelihood_reference2` measurements are unchanged.
 
-Separately, the existing test for a zero-age root with two zero-length leaves now expects
-rejection: that tree is ambiguous in BEAST's ancestor encoding and is explicitly excluded by
-the planned tree validation. Positive-height resolution-transition references are unchanged.
+The existing test for a zero-age root with two zero-length leaves now expects rejection: that
+tree is ambiguous in BEAST's ancestor encoding and excluded by the planned validation.
+Positive-height resolution-transition references are unchanged.
 
-## Remaining implementation work
+## Scope and remaining limitations
 
-The user resolved the spatial convention by choosing fixed bin boundaries and unchanged
-production quadrature; the rerun passes all planned numerical acceptance criteria. Update the
-legacy tree inputs with the agreed parser treatment of rounded extant tip ages separately.
-Then finish lifecycle/tree-structure checks, rerun old and new tests, retain the accepted Gaussian
-reference, add the documented XML example, and measure warmed performance.
+This completes the specified first implementation; fossil-only trees, tree proposals, stems,
+discrete states, removal at sampling, and trait-dependent/time-dependent sampling remain outside
+its scope. Fixed-step remainder handling is preserved for legacy extant-only inputs; new sampling
+inputs require dynDt=true. Numerical failures still terminate evaluation rather than silently
+altering model support. Performance is measured below; no speed-oriented rewrite is part of this
+implementation.
+
+## Warmed native timing comparison
+
+Measured sequentially on an AMD Ryzen 9 7900X, GCC 16.2.0, `-O3`, default architecture flags,
+with FFTW/native integration. The local `build/fossil-validation/timing/TimingStudy.java` driver
+repeats BEAST posterior evaluation with fixed parameter values, excludes startup, and reports
+the likelihood separately from priors. `timing/run.sh` runs each variant in a separate JVM.
+[Per-evaluation measurements](fossil-sampling-timing.csv) retain all measured samples.
+
+The primate case uses the existing 233-species Observed reference at 4096 bins, dtMax=H/8000,
+padding sized for H/62.5, eight-SD support, and no resolution switch. All variants use the same
+input with parser threshold=1e−5. Two warmups precede five measured likelihood evaluations.
+
+| Variant | Median seconds | Range (seconds) |
+| --- | ---: | --- |
+| Archived pre-feature Java/native implementation | 8.729089 | 8.719501–8.740751 |
+| Completed fossil implementation | 10.230472 | 10.223501–10.238248 |
+| Temporary current build without per-bin reaction validity checks | 10.061454 | 10.049528–10.094627 |
+
+The complete change is **17.2% slower** in this workload.
+The checked version is **1.7% slower** than the otherwise matching
+no-check experiment. Removing the checks therefore does not recover most of the baseline speed;
+the remaining difference needs profiling before attributing it to particular arithmetic or memory
+operations. All three likelihoods agree within 1.3e−11. This is a measured local comparison,
+not a hardware-independent speed claim. Production checks were not removed.
+
+The corrected finest fossil example uses five warmups and fifteen measured evaluations:
+median **0.119223 seconds**. It cannot be compared with a pre-feature fossil likelihood because
+the old implementation did not support fossils. A separate instrumented current build times the
+E-only restart/integration/copy for the one terminal fossil: median **0.006423 seconds**, about
+**5.1%** of its 0.126129-second total. This includes workspace clearing,
+kernel preparation and the copied E boundary, and is specific to this tree's one fossil at age 0.5.
+The sampled-ancestor observation requires no separate E trajectory. Instrumentation is confined to
+an untracked build copy; the production Java and C++ sources contain no benchmark timing calls.
+
+Inspection confirms that native exponentials, expm1, and square roots are evaluated once per
+segment/bin in coefficient preparation, outside the timestep loop. No performance rewrite or
+alternative ψ=0 numerical path has been added in response to these measurements.
+
+Library SHA-256 values used in this comparison:
+
+```text
+baseline   613afb4cf711091c8cc9bf6a9e0e717e20d4e3ac183e043fb2850dbe1448074b
+current    d0e6422311dd15002a38d3c19af28fc954440e6d8c56dd034a2db2dcc545839c
+unchecked  a73f8c423b1a1ddc834f64b689e658dc43fb540f17c511e6761111bc6465494e
+```
