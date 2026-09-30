@@ -2096,8 +2096,9 @@ public class QuaSSEDistributionTest {
                 Assert.assertTrue(Double.isFinite(expected));
                 Assert.assertEquals(expected, evaluate(distribution), 1e-12);
             }
-            QuaSSEDistribution zero = smallDistribution(0, .001, 0, "(sp1:0.0,sp2:0.0);", prior);
-            Assert.assertTrue(Double.isFinite(evaluate(zero)));
+            // Two zero-length leaves are ambiguous ancestor observations in BEAST's encoding.
+            Assert.assertThrows(IllegalArgumentException.class,
+                    () -> smallDistribution(0, .001, 0, "(sp1:0.0,sp2:0.0);", prior));
         }
     }
 
@@ -2206,6 +2207,136 @@ public class QuaSSEDistributionTest {
         Assert.assertEquals("unchanged likelihood reuse", initial - .5, posterior.calculateLogP(), 1e-12);
         state.acceptCalculationNodes();
         state.setEverythingDirty(false);
+    }
+
+    // Constant observation densities isolate sampling-event factors from trait transport. Existing
+    // Gaussian references cannot do this; this test-only link adds no production observation mode.
+    public static class UnitObservation extends beast.base.inference.CalculationNode implements LinkFn {
+        @Override public void initAndValidate() { }
+        @Override public boolean refreshParams() { return false; }
+        @Override public String getLinkFnName() { return "unit observation"; }
+        @Override public double[] getY(double[] x, double[] y, int[] flanks, String taxon, boolean force) {
+            Arrays.fill(y, 0);
+            Arrays.fill(y, 0, x.length, 1);
+            return y;
+        }
+    }
+
+    // Use independent inputs and the documented fossil grid, with optional real trait observations.
+    // Package access allows the temporary refinement study to reuse these model definitions.
+    QuaSSEDistribution fossilDistribution(String newick, double tc, boolean gaussian, int nX,
+            double dx, double dt, double support, int ratio) {
+        TreeParser tree = new TreeParser();
+        tree.initByName("newick", newick, "IsLabelledNewick", true, "adjustTipHeights", false);
+        RealParameter traits = new RealParameter();
+        traits.initByName("value", "-0.2 0.1 0.3 0.0", "keys", "A B F S");
+        LinkFn observation;
+        if (gaussian) {
+            NormalCenteredAtObservedLinkFn normal = new NormalCenteredAtObservedLinkFn();
+            normal.initByName("quTraits", traits, "sdNormalQuTrValue", new RealParameter("0.1"));
+            observation = normal;
+        } else observation = new UnitObservation();
+        LinkFn birth;
+        if (gaussian) {
+            LogisticFunction logistic = new LogisticFunction();
+            logistic.initByName("curveYBaseValue", new RealParameter("0.2"),
+                    "curveMaxY", new RealParameter("0.3"), "sigmoidMidpoint", new RealParameter("0"),
+                    "logisticGrowthRate", new RealParameter("1"));
+            birth = logistic;
+        } else {
+            ConstantLinkFn constant = new ConstantLinkFn();
+            constant.initByName("yV", new RealParameter("0.3"));
+            birth = constant;
+        }
+        ConstantLinkFn death = new ConstantLinkFn();
+        death.initByName("yV", new RealParameter("0.1"));
+        QuaSSEGrid grid = new QuaSSEGrid();
+        grid.initByName("tree", tree, "traits", traits, "drift", new RealParameter("0"),
+                "diffusion", new RealParameter("0.05"), "nX", nX, "dX", dx, "xMid", 0.0,
+                "dtMax", dt, "tc", tc, "hiLoRatio", ratio, "flankWidthScaler", support);
+        QuaSSEDistribution distribution = newDistribution();
+        distribution.initByName("tree", tree, "grid", grid, "q2mLambda", birth, "q2mMu", death,
+                "q2d", observation, "dynDt", new BooleanParameter("true"), "priorProbAtRootType", "Flat",
+                "fossilSamplingRate", new RealParameter("0.08"),
+                "presentSamplingProbability", new RealParameter("0.7"));
+        return distribution;
+    }
+
+    // Independent 70-digit matrix-exponential references protect event factors and normalization;
+    // reaction-only tests cannot detect missing/duplicated ψ, ρ, E, or λ in tree pruning.
+    @Test
+    public void testFossilSamplingScalarTrees() {
+        String[] trees = {"(A:2,B:2);", "(A:2,F:1.5);", "(A:2,(S:0,B:0.75):1.25);",
+                "(A:2,(F:0.5,(S:0,B:0.75):0.25):1);"};
+        double[] expected = {-1.30503697077521588852453732830365510993835118579730047, -4.553502530096844596242260350955896024972035398044699016, -3.83076561508347132830882387329785382091405375997408066, -8.94450156751828936041078667050598304991597308940224921};
+        for (int t = 0; t < trees.length; ++t) {
+            for (double tc : new double[]{0, .25, .5, 1.25}) {
+                QuaSSEDistribution distribution = fossilDistribution(trees[t], tc, false,
+                        2048, 3.75 / 959, 1.0 / 64, Math.sqrt(80), 2);
+                Tree tree = distribution.treeInput.get();
+                Assert.assertEquals(2, tree.getRoot().getHeight(), 0);
+                for (Node node : tree.getExternalNodes()) {
+                    if ("F".equals(node.getID())) Assert.assertEquals(.5, node.getHeight(), 0);
+                    if ("S".equals(node.getID())) {
+                        Assert.assertEquals(.75, node.getHeight(), 0);
+                        Assert.assertTrue(node.isDirectAncestor());
+                        Assert.assertTrue(node.getParent().isFake());
+                    }
+                }
+                Assert.assertEquals(expected[t], evaluate(distribution), 1e-8);
+                for (Node node : tree.getInternalNodes()) {
+                    Node left = node.getLeft(), right = node.getRight();
+                    node.removeAllChildren(false);
+                    node.addChild(right); node.addChild(left);
+                }
+                Assert.assertEquals(expected[t], evaluate(distribution), 1e-8);
+            }
+        }
+    }
+
+    // Zero model support and invalid proposals must reject before normalization. Invalid initial
+    // configuration must fail explicitly; numerical breakdowns are covered by the reaction tests.
+    @Test
+    public void testFossilSamplingSupportAndInputs() {
+        QuaSSEDistribution distribution = fossilDistribution("(A:2,F:1.5);", 0, false,
+                2048, 3.75 / 959, 1.0 / 64, Math.sqrt(80), 2);
+        double initial = evaluate(distribution);
+        RealParameter psi = distribution.fossilSamplingRateInput.get();
+        RealParameter rho = distribution.presentSamplingProbabilityInput.get();
+        for (RealParameter parameter : new RealParameter[]{psi, rho}) {
+            double original = parameter.getValue();
+            for (double invalid : new double[]{0, -1, Double.NaN, Double.POSITIVE_INFINITY}) {
+                parameter.setValue(invalid);
+                Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(distribution), 0);
+                if (invalid != 0)
+                    Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
+            }
+            parameter.setValue(original);
+        }
+        distribution.initAndValidate();
+        Assert.assertEquals(initial, evaluate(distribution), 1e-12);
+        rho.setValue(1.1);
+        Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(distribution), 0);
+        rho.setValue(1.0);
+        RealParameter mu = ((ConstantLinkFn) distribution.q2mMuInput.get()).yValueInput.get();
+        mu.setValue(0.0);
+        Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(distribution), 0);
+        mu.setValue(.1); rho.setValue(.7);
+        RealParameter lambda = ((ConstantLinkFn) distribution.q2mLambdaInput.get()).yValueInput.get();
+        lambda.setValue(0.0);
+        Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(distribution), 0);
+        lambda.setValue(.3);
+        distribution.dynamicDtInput.get().setValue(false);
+        Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
+        distribution.dynamicDtInput.get().setValue(true);
+        psi.setDimension(2);
+        Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
+        psi.setDimension(1);
+        distribution.initAndValidate();
+        Assert.assertEquals(initial, evaluate(distribution), 1e-12);
+        distribution.close();
+        distribution.initAndValidate();
+        Assert.assertEquals(initial, evaluate(distribution), 1e-12);
     }
 
     // Independent R Strang reference checks pruning, normalization and integration together.

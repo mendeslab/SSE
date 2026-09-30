@@ -13,7 +13,15 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     public final Input<String> integrationBackendInput = new Input<>("integrationBackend",
             "Integration implementation: java or native T/X segments (requires fftBackend=fftw).", "java");
-    private QuaSSENativeIntegrator nativeLo, nativeHi;
+    private QuaSSENativeIntegrator nativeLo, nativeHi, nativeELo, nativeEHi;
+    public final Input<RealParameter> fossilSamplingRateInput = new Input<>("fossilSamplingRate",
+            "Constant non-removing fossil sampling rate; defaults to zero.");
+    public final Input<RealParameter> presentSamplingProbabilityInput = new Input<>("presentSamplingProbability",
+            "Probability of sampling a living lineage; defaults to one.");
+    private double fossilSamplingRate, presentSamplingProbability = 1;
+    private boolean hasFossils, hasTerminalFossils;
+    // One reusable E-only workspace per resolution, restarted for each terminal fossil.
+    private double[][] fossilELo, fossilEHi, scratchELo, scratchEHi, fftBufferELo, fftBufferEHi;
     public final Input<RealParameter> driftInput = new Input<>("drift", "Trait drift for an automatic grid.");
     public final Input<RealParameter> diffusionInput = new Input<>("diffusion", "Diffusion variance rate for an automatic grid.");
     private QuaSSEGrid automaticGrid;
@@ -44,6 +52,10 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         try {
             initializeGrid();
             super.initAndValidate(); // read dimensions and allocate FFT resources
+            if (!refreshSamplingParameters())
+                throw new IllegalArgumentException("QuaSSE sampling inputs must be scalar, with finite "
+                        + "fossilSamplingRate >= 0 and presentSamplingProbability in [0,1].");
+            validateSamplingTree();
             String integration = integrationBackendInput.get();
             if (!"java".equals(integration) && !"native".equals(integration))
                 throw new IllegalArgumentException("integrationBackend must be java or native.");
@@ -52,6 +64,18 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                     throw new IllegalArgumentException("Native integration requires fftBackend=fftw.");
                 nativeLo = new QuaSSENativeIntegrator(nXbinsLo, nDimensionsE + nDimensionsD);
                 nativeHi = new QuaSSENativeIntegrator(nXbinsHi, nDimensionsE + nDimensionsD);
+            }
+            if (hasTerminalFossils) {
+                fossilELo = new double[1][2 * nXbinsLo];
+                fossilEHi = new double[1][2 * nXbinsHi];
+                scratchELo = new double[1][2 * nXbinsLo];
+                scratchEHi = new double[1][2 * nXbinsHi];
+                fftBufferELo = new double[1][2 * nXbinsLo];
+                fftBufferEHi = new double[1][2 * nXbinsHi];
+                if (nativeLo != null) {
+                    nativeELo = new QuaSSENativeIntegrator(nXbinsLo, 1);
+                    nativeEHi = new QuaSSENativeIntegrator(nXbinsHi, 1);
+                }
             }
             int nNodes = tree.getNodeCount();
 
@@ -82,6 +106,56 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         }
     }
 
+    // Read live parameters on every evaluation, including clean values restored after rejection.
+    // Null inputs retain the legacy defaults and remain distinguishable for the dynDt requirement.
+    private boolean refreshSamplingParameters() {
+        RealParameter psi = fossilSamplingRateInput.get(), rho = presentSamplingProbabilityInput.get();
+        if ((psi != null && psi.getDimension() != 1) || (rho != null && rho.getDimension() != 1))
+            return false;
+        fossilSamplingRate = psi == null ? 0 : psi.getValue();
+        presentSamplingProbability = rho == null ? 1 : rho.getValue();
+        return Double.isFinite(fossilSamplingRate) && fossilSamplingRate >= 0
+                && Double.isFinite(presentSamplingProbability)
+                && presentSamplingProbability >= 0 && presentSamplingProbability <= 1;
+    }
+
+    // BEAST represents an ancestor observation by an exactly zero-length leaf, not a unary node.
+    // Validate that encoding before using its binary-node helpers; tree topology and ages stay fixed.
+    private void validateSamplingTree() {
+        hasFossils = hasTerminalFossils = false;
+        boolean hasLivingSample = false;
+        for (Node node : tree.getNodesAsArray()) {
+            if (!Double.isFinite(node.getHeight()) || node.getHeight() < 0
+                    || (!node.isRoot() && node.getHeight() > node.getParent().getHeight()))
+                throw new IllegalArgumentException("Invalid age or branch length at node " + node.getID());
+            if (node.isLeaf()) {
+                if (node.getHeight() == 0 && !node.isDirectAncestor()) hasLivingSample = true;
+                if (node.getHeight() > 0) {
+                    hasFossils = true;
+                    if (!node.isDirectAncestor()) hasTerminalFossils = true;
+                }
+                if (node.isDirectAncestor() && node.getHeight() == 0)
+                    throw new IllegalArgumentException("Ancestor observations must have positive age: " + node.getID());
+                if (q2dInput.get() instanceof NormalCenteredAtObservedLinkFn normal
+                        && !normal.quTraitsInput.get().getKeysList().contains(node.getID()))
+                    throw new IllegalArgumentException("Missing trait observation for sample " + node.getID());
+            } else {
+                if (node.getChildCount() != 2)
+                    throw new IllegalArgumentException("QuaSSE requires binary nodes: " + node.getID());
+                if (node.getLeft().isDirectAncestor() && node.getRight().isDirectAncestor())
+                    throw new IllegalArgumentException("Ambiguous pair of ancestor leaves at node " + node.getID());
+            }
+        }
+        if (tree.getRoot().isLeaf() || tree.getRoot().isFake())
+            throw new IllegalArgumentException("QuaSSE requires an ordinary bifurcating root, without a stem.");
+        if (!hasLivingSample)
+            throw new IllegalArgumentException("QuaSSE requires a living sample at age zero; fossil-only trees "
+                    + "need a present-age offset and are not supported.");
+        if (!dynamicallyAdjustDt && (hasFossils || fossilSamplingRateInput.get() != null
+                || presentSamplingProbabilityInput.get() != null))
+            throw new IllegalArgumentException("QuaSSE fossil events and explicit sampling inputs require dynDt=true.");
+    }
+
     // Own only the generated grid; explicit grids retain caller-controlled initialization.
     // Attaching through Input registers it for ordinary BEAST dependency discovery before MCMC starts.
     private void initializeGrid() {
@@ -110,7 +184,10 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     public void close() {
         if (nativeLo != null) nativeLo.close();
         if (nativeHi != null) nativeHi.close();
-        nativeLo = nativeHi = null;
+        if (nativeELo != null) nativeELo.close();
+        if (nativeEHi != null) nativeEHi.close();
+        nativeLo = nativeHi = nativeELo = nativeEHi = null;
+        fossilELo = fossilEHi = scratchELo = scratchEHi = fftBufferELo = fftBufferEHi = null;
         super.close();
     }
 
@@ -144,11 +221,16 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             for (int i=0; i < nDimensionsFFT; i++) {
                 // E's
                 if (i == 0) {
-                    // high res
-                    for (int j=0; j < nXbinsHi; j++) esDsHi[nodeIdx][i][j] = 0.0; // E's = 1.0 - sampling.f
-
-                    // low res (just for debugging)
-                    for (int j=0; j < nXbinsLo; j++) esDsLo[nodeIdx][i][j] = 0.0; // E's = 1.0 - sampling.f
+                    // Living boundary E(x,0) = 1 − ρ; fossil boundaries are set during evaluation.
+                    Arrays.fill(esDsHi[nodeIdx][i], 0);
+                    Arrays.fill(esDsLo[nodeIdx][i], 0);
+                    if (tip.getHeight() == 0) {
+                        int stride = jtransforms ? 1 : 2;
+                        for (int j = 0; j < nUsefulXbinsHi; j++)
+                            esDsHi[nodeIdx][i][stride * j] = 1 - presentSamplingProbability;
+                        for (int j = 0; j < nUsefulXbinsLo; j++)
+                            esDsLo[nodeIdx][i][stride * j] = 1 - presentSamplingProbability;
+                    }
                 }
 
                 // D's (initialize both just in case tip is non-contemporaneous and t > tc)
@@ -166,16 +248,52 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                 }
             }
 
-            double dsSumLo = 0.0;
-            double dsSumHi = 0.0;
-            for (double d: esDsHi[nodeIdx][1]) dsSumHi += d;
-            for (double d: esDsLo[nodeIdx][1]) dsSumLo += d;
-            if (dsSumHi == 0.0 || dsSumLo == 0.0)
-                throw new RuntimeException("ERROR: Initial D's were all 0.0 for species " + tipName + ". " +
-                        "This can happen when the trait value standard deviation" +
-                        "(of the normal centered at the observed trait value)" +
-                        "is too small relative to trait value bin sizes." +
-                        " Try increasing the standard deviation.");
+            // Only the grid at the observation's age is used; an unused coarse density may underflow.
+            boolean lowRes = tip.getHeight() >= tc;
+            double dsSum = 0;
+            for (double d : (lowRes ? esDsLo : esDsHi)[nodeIdx][1]) dsSum += d;
+            if (!(dsSum > 0) || !Double.isFinite(dsSum))
+                throw new ArithmeticException("Invalid observation density for " + tipName
+                        + " on the " + (lowRes ? "coarse" : "fine")
+                        + " grid; check observation SD and trait spacing.");
+        }
+    }
+
+    // Initialize actual sample events after support checks, keeping scalar factors in log space.
+    // Virtual leaves store only g; their ψ factor and continuing D are handled at the parent event.
+    private void initializeSampleEvents() {
+        for (Node tip : tree.getExternalNodes()) {
+            if (tip.isDirectAncestor()) continue;
+            int nodeIdx = tip.getNr();
+            if (tip.getHeight() == 0) {
+                logNormalizationFactors[nodeIdx] = Math.log(presentSamplingProbability);
+                continue;
+            }
+            // E is independent of the observed subtree. Restart at the present for every fossil,
+            // using the same steps and transport as pruning, but without likelihood normalization.
+            Arrays.fill(fossilELo[0], 0);
+            Arrays.fill(fossilEHi[0], 0);
+            boolean lowRes = tip.getHeight() >= tc;
+            double[][] initial = tc == 0 ? fossilELo : fossilEHi;
+            int useful = tc == 0 ? nUsefulXbinsLo : nUsefulXbinsHi;
+            for (int i = 0; i < useful; ++i) initial[0][2 * i] = 1 - presentSamplingProbability;
+            if (tc > 0) {
+                integrateSegment(fossilEHi, scratchEHi, fftBufferEHi, Math.min(tip.getHeight(), tc),
+                        true, dtMax, false, false, nativeEHi);
+                // Even an event exactly at tc uses the transferred coarse E and coarse observation.
+                if (lowRes)
+                    SSEUtils.hiToLoTransferInPlace(fossilEHi[0], fossilELo[0], hiLoIdxs4Transfer, false);
+            }
+            if (lowRes)
+                integrateSegment(fossilELo, scratchELo, fftBufferELo, tip.getHeight() - tc,
+                        true, dtMax, true, false, nativeELo);
+            double[][] rows = (lowRes ? esDsLo : esDsHi)[nodeIdx];
+            double[] e = (lowRes ? fossilELo : fossilEHi)[0];
+            System.arraycopy(e, 0, rows[0], 0, e.length);
+            // A terminal non-removing fossil contributes ψ g E: its continuation is unobserved.
+            for (int i = 0; i < (lowRes ? nUsefulXbinsLo : nUsefulXbinsHi); ++i)
+                rows[1][2 * i] *= e[2 * i];
+            logNormalizationFactors[nodeIdx] = Math.log(fossilSamplingRate);
         }
     }
 
@@ -219,12 +337,29 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         // recur if internal node or sampled ancestor
         if (!aNode.isLeaf()) {
-            for (Node childNode: aNode.getChildren()) {
-                processInternalNode(childNode, forceRecalcKernel, jtransforms); // recur
-            }
+            if (aNode.isFake()) {
+                Node continuing = aNode.getNonDirectAncestorChild();
+                processInternalNode(continuing, forceRecalcKernel, jtransforms);
+                double[][][] rows = aNode.getHeight() >= tc ? esDsLo : esDsHi;
+                int useful = aNode.getHeight() >= tc ? nUsefulXbinsLo : nUsefulXbinsHi;
+                double[][] parent = rows[aNode.getNr()], child = rows[continuing.getNr()];
+                double[] observation = rows[aNode.getDirectAncestorChild().getNr()][1];
+                // An ancestor contributes ψ g Dcontinuing, with no λ or extra E factor.
+                // Copy E unchanged; the virtual leaf has no branch calculation or likelihood scale.
+                for (int i = 0; i < useful; ++i) {
+                    int j = jtransforms ? i : 2 * i;
+                    parent[0][j] = child[0][j];
+                    parent[1][j] = child[1][j] * observation[j];
+                }
+                logNormalizationFactors[aNode.getNr()] += Math.log(fossilSamplingRate);
+            } else {
+                for (Node childNode: aNode.getChildren()) {
+                    processInternalNode(childNode, forceRecalcKernel, jtransforms); // recur
+                }
 
-            // after recursion, prepare initial conditions for integrating this node
-            mergeChildrenNodes(aNode, jtransforms);
+                // after recursion, prepare initial conditions for integrating this node
+                mergeChildrenNodes(aNode, jtransforms);
+            }
         }
 
         // unless we're at the root, now we integrate this branch
@@ -273,7 +408,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
             // normalize and record normalization factor before integration
             // logNormalizationFactors[nodeIdx] = normalizeDs(esDsAtNode[1], dXbin); // normalize D's and returns factor, which we record
-            logNormalizationFactors[nodeIdx] = normalizeDs(nodeIdx, true, jtransforms); // normalize D's and returns factor, which we record
+            logNormalizationFactors[nodeIdx] += normalizeDs(nodeIdx, true, jtransforms); // normalize D's and returns factor, which we record
 
             // now integrate whole branch
             integrateLength(nodeIdx, esDsAtNode, scratchAtNode, branchLength2Integrate, dynamicallyAdjustDt, dtMax, true, forceRecalcKernel, jtransforms);
@@ -290,7 +425,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
             // normalize and record normalization factor before integration
             // logNormalizationFactors[nodeIdx] = normalizeDs(esDsAtNode[1], dXbin/hiLoRatio); // normalize D's and returns factor, which we record
-            logNormalizationFactors[nodeIdx] = normalizeDs(nodeIdx, false, jtransforms); // normalize D's and returns factor, which we record
+            logNormalizationFactors[nodeIdx] += normalizeDs(nodeIdx, false, jtransforms); // normalize D's and returns factor, which we record
 
             // now integrate whole branch (again, normalization and adding to logNormalizationFactors inside)
             integrateLength(nodeIdx, esDsAtNode, scratchAtNode, branchLength2Integrate, dynamicallyAdjustDt, dtMax, false, forceRecalcKernel, jtransforms);
@@ -309,7 +444,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             // logNormalizationFactors[nodeIdx] = normalizeDs(esDsAtNode[1], dXbin/hiLoRatio); // normalize D's and returns factor, which we record
 
             // System.out.println("calling normalize before integration");
-            logNormalizationFactors[nodeIdx] = normalizeDs(nodeIdx, false, jtransforms); // normalize D's and returns factor, which we record
+            logNormalizationFactors[nodeIdx] += normalizeDs(nodeIdx, false, jtransforms); // normalize D's and returns factor, which we record
 
             // high res part
             double lenHi = tc - startTime;
@@ -386,9 +521,13 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             dx = dXbin / hiLoRatio;
         }
 
-        double normalizationFactorFromDs;
+        double normalizationFactorFromDs = jtransforms
+                ? SSEUtils.calculateNormalizationFactorJTransforms(dsAtNode, dx)
+                : SSEUtils.calculateNormalizationFactor(dsAtNode, dx);
+        if (!(normalizationFactorFromDs > 0) || !Double.isFinite(normalizationFactorFromDs))
+            throw new ArithmeticException("Invalid D normalization at node " + nodeIdx
+                    + " on the " + (lowRes ? "coarse" : "fine") + " grid.");
         if (!jtransforms) {
-            normalizationFactorFromDs = SSEUtils.calculateNormalizationFactor(dsAtNode, dx);
 
             // debugging
             // System.out.println("D's prior to normalization inside normalizeDs = " + Arrays.toString(dsAtNode));
@@ -397,7 +536,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                 dsAtNode[i] /= normalizationFactorFromDs;
             }
         } else {
-            normalizationFactorFromDs = SSEUtils.calculateNormalizationFactorJTransforms(dsAtNode, dx);
 
             // debugging
             // System.out.println("D's prior to normalization inside normalizeDs = " + Arrays.toString(dsAtNode));
@@ -553,7 +691,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         int[] flanks = lowRes ? nLeftNRightFlanksLo : nLeftNRightFlanksHi;
         owner.integrateSegment(rows, lowRes ? birthRatesLo : birthRatesHi,
                 lowRes ? deathRatesLo : deathRatesHi, lowRes ? fftFYLo : fftFYHi,
-                0.0, dt, steps, flanks[0], flanks[1]);
+                fossilSamplingRate, dt, steps, flanks[0], flanks[1]);
     }
 
     // Single-step entry point retained for callers using node storage and a prepared full-dt kernel.
@@ -579,17 +717,17 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     public void propagateTInPlace(double[][] esDsAtNode, double[][] scratchAtNode, double dt, boolean lowRes, boolean jtranforms) {
         if (jtranforms) {
             // grab scratch, dt and nDimensions from QuaSSEDistribution state
-            // if (lowRes) SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, esDsAtNode.length - 1);
-            // else SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, esDsAtNode.length - 1);
+            // if (lowRes) SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, fossilSamplingRate, dt, nUsefulXbinsLo, esDsAtNode.length - 1);
+            // else SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, fossilSamplingRate, dt, nUsefulXbinsHi, esDsAtNode.length - 1);
             if (lowRes)
-                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, esDsAtNode.length - 1);
+                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, fossilSamplingRate, dt, nUsefulXbinsLo, esDsAtNode.length - 1);
             else
-                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, esDsAtNode.length - 1);
+                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, fossilSamplingRate, dt, nUsefulXbinsHi, esDsAtNode.length - 1);
         } else {
             if (lowRes)
-                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, esDsAtNode.length - 1);
+                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, fossilSamplingRate, dt, nUsefulXbinsLo, esDsAtNode.length - 1);
             else
-                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, esDsAtNode.length - 1);
+                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, fossilSamplingRate, dt, nUsefulXbinsHi, esDsAtNode.length - 1);
         }
     }
 
@@ -674,6 +812,9 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         // Root-prior values are densities: the conditioning integral is the sum times dx.
         // Integrate before dividing D; multiplying D by dx afterwards adds an erroneous dx^2.
         denomSumForConditioning *= dXAtRightRes;
+        if (!(denomSumForConditioning > 0) || !Double.isFinite(denomSumForConditioning))
+            throw new ArithmeticException("Invalid root-conditioning integral on the "
+                    + (got2LowRes ? "coarse" : "fine") + " grid.");
         for (int i=0, j=0; i<priorProbsAtRoot.length; ++i, j+=2) {
             if (jtransforms) dsAtRoot[i] /= denomSumForConditioning;
             else dsAtRoot[j] /= denomSumForConditioning;
@@ -698,10 +839,20 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     @Override
     public double calculateLogP() {
 
-        if (!refreshGrid()) return logP = Double.NEGATIVE_INFINITY;
+        if (!refreshSamplingParameters() || !refreshGrid()) return logP = Double.NEGATIVE_INFINITY;
+        if ((hasFossils && fossilSamplingRate == 0) || presentSamplingProbability == 0)
+            return logP = Double.NEGATIVE_INFINITY;
 
         // refreshing parameters
         populateMacroevolParams();
+
+        // Identifiable mathematical zeros precede any observation/product normalization.
+        if ((Arrays.stream(birthRatesLo).allMatch(x -> x == 0)
+                && Arrays.stream(birthRatesHi).allMatch(x -> x == 0))
+                || (hasTerminalFossils && presentSamplingProbability == 1
+                && Arrays.stream(deathRatesLo).allMatch(x -> x == 0)
+                && Arrays.stream(deathRatesHi).allMatch(x -> x == 0)))
+            return logP = Double.NEGATIVE_INFINITY;
 
         // refreshing tree and root
         tree = treeInput.get();
@@ -719,6 +870,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         // Refresh q2d's cached inputs; the forced call then repopulates arrays that were just cleared.
         q2d.refreshParams();
         populateTipsEsDs(nDimensions, nXbinsHi, true, false);
+        initializeSampleEvents();
         
         boolean forceRecalcKernel = false;
         // Kernel keys track actual parameter values, including clean restored values after rejection.
