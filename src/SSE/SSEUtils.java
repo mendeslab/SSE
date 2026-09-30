@@ -42,173 +42,108 @@ public class SSEUtils {
 
     private static final double SQRT2PI = Math.sqrt(2 * Math.PI);
 
-    /*
-     * Propagates E's and D's, leaving the result in esDs.
-     * At fixed trait x and constant rates λ and μ, exactly integrates the reaction ODEs
-     * E′ = μ − (λ + μ)E + λE² and D′ = [2λE − (λ + μ)]D, without trait transport.
-     * E is the probability of no sampled descendants; D is the descendant-subtree likelihood.
-     * Trait drift and diffusion are handled separately; the combined calculation is not exact.
+    /**
+     * Propagate E and D through a reaction step in the contiguous real layout used by JTransforms.
+     * Row zero holds E; each subsequent row holds a D component. The shared reaction calculation
+     * below explains the equations and their numerical evaluation. A zero duration is a no-op.
      *
-     * For λ ≠ μ, starting values E₀, D₀, duration h = dt, and z = exp[(λ − μ)h]:
-     * E₁ = [μ − λE₀ + μz(E₀ − 1)] / [μ − λE₀ + λz(E₀ − 1)]
-     * D₁ = D₀ z [(λ − μ) / (zλ − μ + (1 − z)λE₀)]².
-     * Factoring E′ = (1 − E)(μ − λE) and separating variables gives the E update.
-     * Its derivative with respect to E₀ is the D multiplier. Both updates use the OLD E₀.
-     *
-     * Equivalent to Fitzjohn's fftR.propagate.t (R/model-quasse-fftR.R) and propagate_t (src/quasse-eqs-fftC.c)
-     *
-     * Note: only the first nUsefulTraitBins elements in each row of esDs are used (and in birthRate and deathRate);
-     * This method is to be used whenever FFTing when propagating over x is carried out with JTransforms
-     *
-     * @param   esDs    2D-array containing E's followed by D's (e.g., for QuaSSE, esDs[0]=Es, esDs[1]=Ds)
-     * @param   scratchAtNode 2D-array for storing/restoring flanking values and other math terms
-     * @param   birthRate   birth rates (lambdas), one per quantitative ch useful bin
-     * @param   deathRate   death rates (mus), one per quantitative ch useful bin
-     * @param   dt  length of time slice over which to propagate
-     * @param   nUsefulTraitBins number of useful bins (i.e., excluding the # of flanking bins = npad = nLeftFlankBins + nRightFlankbins) in discretized pdf over change in quantitative ch values
-     * @param   nDimensionsD number of D equations (dimensions in plan) to solve for each quantitative ch
-     * @return  no return, leaves result in 'esDs' and 'scratch'
+     * @param esDsAtNode E/D rows updated in place, with useful real bins at consecutive indices
+     * @param scratchAtNode workspace; row 1 holds one D multiplier per useful bin when D is present
+     * @param birthRate speciation rates λ, one per useful trait bin
+     * @param deathRate extinction rates μ, one per useful trait bin
+     * @param psi nonnegative fossil sampling rate, constant across bins
+     * @param dt reaction duration, increasing backward from the present
+     * @param nUsefulTraitBins number of real bins to update, excluding the zero-padded tail
+     * @param nDimensionsD number of D rows after E; zero permits E-only rows and workspace
      */
-    public static void propagateEandDinTQuaSSEInPlace(double[][] esDsAtNode, double[][] scratchAtNode, double[] birthRate, double[] deathRate, double dt, int nUsefulTraitBins, int nDimensionsD) {
-        // iterating over all continuous character bins (total # = nx), to update E and D for each of those bins
-        for (int i=0; i < nUsefulTraitBins; ++i) {
-            double ithLambda = birthRate[i];
-            double ithMu = deathRate[i];
-            double netDivRate = ithLambda - ithMu;
-            double ithZ = Math.exp(dt * netDivRate);
-            double ithE = esDsAtNode[0][i]; // Ask Xia: note that because i starts at 0, we're grabbing E values in left-padding
-
-            double tmp1 = ithMu - ithLambda * ithE;
-            double tmp2 = ithZ * (ithE - 1);
-
-            /* Updating E's */
-            esDsAtNode[0][i] = (tmp1 + tmp2 * ithMu) / (tmp1 + tmp2 * ithLambda);
-
-            // checking against R
-            // System.out.println("ithMu = " + ithMu + " ithLambda = " + ithLambda + " ithE = " + ithE + " ithZ = " + ithZ);
-            // System.out.println("esDsAtNode[0][i] = " + esDsAtNode[0][i]);
-
-            // Compute the D multiplier from saved ithE = E₀; scratchAtNode[1] stores it below.
-            tmp1 = (ithLambda - ithMu) / (ithZ * ithLambda - ithMu + (1 - ithZ) * ithLambda * ithE);
-
-            // checking against R
-            // System.out.println("i = " + i + " numerator (z * r * r) = " + (ithZ * Math.pow((ithLambda - ithMu), 2)));
-            // System.out.println("i = " + i + " denominator (z * lambda - mu + (1-z) * lambda * e0) = " + (ithZ * ithLambda - ithMu + (1 - ithZ) * ithLambda * ithE));
-
-            scratchAtNode[1][i] = ithZ * tmp1 * tmp1;
-
-            // checking against R
-            // System.out.println("i = " + i + " (numerator/denominator^2) = " + scratchAtNode[1][i]);
-        }
-
-        /* Updating D's */
-        // iterating over dimensions in plan to transform (total # = nd = number of equations for D, say, 4 if A C G and T)
-        // one quantitative ch: nd = 2 for QuaSSE (one eq for E, one for D), nd=5 for MoSSE (4 eqs for D, one for E)
-        // ithDim starts at 1 because esDs[0] are the E's
-
-        for (int ithDim=1; ithDim <= nDimensionsD; ithDim++) {
-            // int ithDimStartIdx = nUsefulTraitBins * ithDim; // skipping E's
-
-            // iterating over bins of this dimension
-            for (int j=0; j < nUsefulTraitBins; j++) {
-                if (esDsAtNode[ithDim][j] < 0) esDsAtNode[ithDim][j] = 0;
-                else {
-                    // checking against R
-                    // System.out.println("Scr j=" + j + " scratchAtNode[0][j] = " + scratchAtNode[0][j] + " scratchAtNode[1][j] = " + scratchAtNode[1][j]);
-                    // System.out.println("Bef j=" + j + " esDsAtNode[0][j] = " + esDsAtNode[0][j] + " esDsAtNode[1][j] = " + esDsAtNode[1][j]);
-                    esDsAtNode[ithDim][j] *= scratchAtNode[1][j];
-
-                    // checking against R
-                    // System.out.println("Aft j=" + j + " esDsAtNode[0][j] = " + esDsAtNode[0][j] + " esDsAtNode[1][j] = " + esDsAtNode[1][j]);
-                }
-            }
-        }
+    public static void propagateEandDinTQuaSSEInPlace(double[][] esDsAtNode, double[][] scratchAtNode,
+            double[] birthRate, double[] deathRate, double psi, double dt, int nUsefulTraitBins, int nDimensionsD) {
+        propagateReaction(esDsAtNode, scratchAtNode, birthRate, deathRate, psi, dt, nUsefulTraitBins, nDimensionsD, 1);
     }
 
-    /*
-     * Propagates E's and D's, leaving the result in esDs.
-     * At fixed trait x and constant rates λ and μ, exactly integrates the reaction ODEs
-     * E′ = μ − (λ + μ)E + λE² and D′ = [2λE − (λ + μ)]D, without trait transport.
-     * E is the probability of no sampled descendants; D is the descendant-subtree likelihood.
-     * Trait drift and diffusion are handled separately; the combined calculation is not exact.
+    /**
+     * Propagate E and D through a reaction step in the interleaved complex FFT layout.
+     * Row zero holds E; each subsequent row holds a D component. Real values occupy even indices;
+     * imaginary values and the padded tail are unchanged. A zero duration is a no-op.
      *
-     * For λ ≠ μ, starting values E₀, D₀, duration h = dt, and z = exp[(λ − μ)h]:
-     * E₁ = [μ − λE₀ + μz(E₀ − 1)] / [μ − λE₀ + λz(E₀ − 1)]
-     * D₁ = D₀ z [(λ − μ) / (zλ − μ + (1 − z)λE₀)]².
-     * Factoring E′ = (1 − E)(μ − λE) and separating variables gives the E update.
-     * Its derivative with respect to E₀ is the D multiplier. Both updates use the OLD E₀.
-     *
-     * Equivalent to Fitzjohn's fftR.propagate.t (R/model-quasse-fftR.R) and propagate_t (src/quasse-eqs-fftC.c)
-     *
-     * Note: only the first nUsefulTraitBins elements in each row of esDs are used (and in birthRate and deathRate);
-     * This method is to be used whenever FFTing when propagating over x is carried out with SST's library
-     * class JavaFftService (which requires that elements are placed on every other index of the input array)
-     *
-     * @param   esDs    2D-array containing E's followed by D's (e.g., for QuaSSE, esDs[0]=Es, esDs[1]=Ds)
-     * @param   scratchAtNode 2D-array for storing/restoring flanking values and other math terms
-     * @param   birthRate   birth rates (lambdas), one per quantitative ch useful bin
-     * @param   deathRate   death rates (mus), one per quantitative ch useful bin
-     * @param   dt  length of time slice over which to propagate
-     * @param   nUsefulTraitBins number of useful bins (i.e., excluding the # of flanking bins = npad = nLeftFlankBins + nRightFlankbins) in discretized pdf over change in quantitative ch values
-     * @param   nDimensionsD number of D equations (dimensions in plan) to solve for each quantitative ch
-     * @return  no return, leaves result in 'esDs' and 'scratch'
+     * @param esDsAtNode E/D rows updated in place, alternating real and imaginary entries
+     * @param scratchAtNode workspace; D factors in row 1 are contiguous, not interleaved
+     * @param birthRate speciation rates λ, one per useful trait bin
+     * @param deathRate extinction rates μ, one per useful trait bin
+     * @param psi nonnegative fossil sampling rate, constant across bins
+     * @param dt reaction duration, increasing backward from the present
+     * @param nUsefulTraitBins number of real bins to update, excluding the zero-padded tail
+     * @param nDimensionsD number of D rows after E; zero permits E-only rows and workspace
      */
-    public static void propagateEandDinTQuaSSEInPlaceSSTJavaFftService(double[][] esDsAtNode, double[][] scratchAtNode, double[] birthRate, double[] deathRate, double dt, int nUsefulTraitBins, int nDimensionsD) {
-        // iterating over all continuous character bins (total # = nx), to update E and D for each of those bins
-        for (int i=0, j=0; i < nUsefulTraitBins; ++i, j+=2) {
+    public static void propagateEandDinTQuaSSEInPlaceSSTJavaFftService(double[][] esDsAtNode, double[][] scratchAtNode,
+            double[] birthRate, double[] deathRate, double psi, double dt, int nUsefulTraitBins, int nDimensionsD) {
+        propagateReaction(esDsAtNode, scratchAtNode, birthRate, deathRate, psi, dt, nUsefulTraitBins, nDimensionsD, 2);
+    }
+
+    // At fixed trait x, λ is speciation, μ is extinction, and ψ is non-removing fossil sampling.
+    // E is the probability of no sampled descendants; D is the descendant-subtree likelihood.
+    // With constant nonnegative rates, this exactly solves the reaction ODEs backward in time:
+    //     E′ = μ − (λ + μ + ψ)E + λE²
+    //     D′ = [2λE − (λ + μ + ψ)]D.
+    // Trait drift/diffusion is handled separately; the combined Strang calculation is not exact.
+    // This extends Fitzjohn's fftR.propagate.t (R/model-quasse-fftR.R) and propagate_t
+    // (src/quasse-eqs-fftC.c), whose reaction equations have ψ = 0.
+    //
+    // Rate coefficients: v = λ − μ − ψ, κ = sqrt(v² + 4λψ), β = (λ + μ + ψ + κ)/2.
+    // For λ > 0, r₋ and r₊ are the lower and upper roots of the reaction polynomial E′ = 0.
+    // β = λr₊ and s = μ/β = r₋. The code calls these
+    // upperRootRate and lowerRoot. The rootOffsetRate η = β − λ = λ(r₊ − 1).
+    // These coefficients also give the linear flow when λ = 0; all-zero rates use s = 0.
+    //
+    // For duration h = dt, define w = exp(−κh) and q = ∫₀ʰ exp(−κt) dt = (1 − w)/κ.
+    // The code calls them decayFactor and decayIntegral. With the OLD E value E₀ = ithE:
+    //     A = η + λ(1 − E₀), B = w + Aq
+    //     Enew = (wE₀ + sAq)/B, Dnew = Dold * w/B².
+    // Here Aq is denominatorTerm and B is denominator. Differentiating Enew in E₀ gives
+    // J = w/B²; J′ = [2λE − (λ + μ + ψ)]J, J(0) = 1, so J is exactly the D multiplier.
+    // Both updates must therefore use the same old E, even though E is overwritten first.
+    //
+    // Evaluate q with expm1; its κ = 0 limit is h (including λ = μ with ψ = 0).
+    // For positive v, rationalize η as 2λψ/(κ + v) to avoid subtracting nearly equal rates.
+    // See LSU/TODO/AnalyticSolution.tex and AnalyticSolution2.tex for the Riccati derivation.
+    //
+    // stride is 1 for contiguous real data and 2 for interleaved complex data. Only real useful
+    // bins are updated. D multipliers are contiguous in scratchAtNode[1], regardless of stride;
+    // E-only calls neither calculate those multipliers nor access a D workspace row.
+    private static void propagateReaction(double[][] esDsAtNode, double[][] scratchAtNode, double[] birthRate,
+            double[] deathRate, double psi, double dt, int nUsefulTraitBins, int nDimensionsD, int stride) {
+        if (dt == 0) return;
+        for (int i = 0; i < nUsefulTraitBins; ++i) {
             double ithLambda = birthRate[i];
             double ithMu = deathRate[i];
-            double netDivRate = ithLambda - ithMu;
-            double ithZ = Math.exp(dt * netDivRate);
-            double ithE = esDsAtNode[0][j]; // Ask Xia: note that because i starts at 0, we're grabbing E values in left-padding
-
-            double tmp1 = ithMu - ithLambda * ithE;
-            double tmp2 = ithZ * (ithE - 1);
-
-            /* Updating E's */
-            esDsAtNode[0][j] = (tmp1 + tmp2 * ithMu) / (tmp1 + tmp2 * ithLambda);
-
-            // checking against R
-            // System.out.println("ithMu = " + ithMu + " ithLambda = " + ithLambda + " ithE = " + ithE + " ithZ = " + ithZ);
-            // System.out.println("esDsAtNode[0][i] = " + esDsAtNode[0][i]);
-
-            // Compute the D multiplier from saved ithE = E₀; scratchAtNode[1] stores it below.
-            tmp1 = (ithLambda - ithMu) / (ithZ * ithLambda - ithMu + (1 - ithZ) * ithLambda * ithE);
-
-            // checking against R
-            // System.out.println("i = " + i + " numerator (z * r * r) = " + (ithZ * Math.pow((ithLambda - ithMu), 2)));
-            // System.out.println("i = " + i + " denominator (z * lambda - mu + (1-z) * lambda * e0) = " + (ithZ * ithLambda - ithMu + (1 - ithZ) * ithLambda * ithE));
-
-            // NOTE: we're not skipping even-numbered indices when just caching things here in scratch!
-            // (so below, we use index i instead of j)
-            scratchAtNode[1][i] = ithZ * tmp1 * tmp1;
-
-            // checking against R
-            // System.out.println("i = " + i + " (numerator/denominator^2) = " + scratchAtNode[1][i]);
+            double ithE = esDsAtNode[0][stride * i];
+            double netRateMinusSampling = ithLambda - ithMu - psi;
+            double kappa = Math.hypot(netRateMinusSampling, 2 * Math.sqrt(ithLambda) * Math.sqrt(psi));
+            double upperRootRate = (ithLambda + ithMu + psi + kappa) / 2;
+            double lowerRoot = upperRootRate > 0 ? ithMu / upperRootRate : 0;
+            double rootOffsetRate = netRateMinusSampling > 0
+                    ? 2 * ithLambda * psi / (kappa + netRateMinusSampling)
+                    : (kappa - netRateMinusSampling) / 2;
+            double decayFactor = Math.exp(-kappa * dt);
+            double decayIntegral = kappa > 0 ? -Math.expm1(-kappa * dt) / kappa : dt;
+            double denominatorTerm = (rootOffsetRate + ithLambda * (1 - ithE)) * decayIntegral;
+            double denominator = decayFactor + denominatorTerm;
+            double nextE = (decayFactor * ithE + lowerRoot * denominatorTerm) / denominator;
+            double dFactor = nDimensionsD > 0 ? (decayFactor / denominator) / denominator : 1;
+            if (!(denominator > 0) || !Double.isFinite(denominator) || !Double.isFinite(nextE)
+                    || !(dFactor > 0) || !Double.isFinite(dFactor))
+                throw new ArithmeticException("Invalid QuaSSE reaction at bin " + i + ": lambda=" + ithLambda
+                        + ", mu=" + ithMu + ", psi=" + psi + ", dt=" + dt + ", old E=" + ithE);
+            esDsAtNode[0][stride * i] = nextE;
+            if (nDimensionsD > 0) scratchAtNode[1][i] = dFactor;
         }
-
-        /* Updating D's */
-        // iterating over dimensions in plan to transform (total # = nd = number of equations for D, say, 4 if A C G and T)
-        // one quantitative ch: nd = 2 for QuaSSE (one eq for E, one for D), nd=5 for MoSSE (4 eqs for D, one for E)
-        // ithDim starts at 1 because esDs[0] are the E's
-
-        for (int ithDim=1; ithDim <= nDimensionsD; ithDim++) {
-            // int ithDimStartIdx = nUsefulTraitBins * ithDim; // skipping E's
-
-            // iterating over bins of this dimension
-            for (int i=0, j=0; i < nUsefulTraitBins; i++, j+=2) {
-                if (esDsAtNode[ithDim][j] < 0) esDsAtNode[ithDim][j] = 0;
-                else {
-                    // checking against R
-                    // System.out.println("Scr j=" + j + " scratchAtNode[0][j] = " + scratchAtNode[0][j] + " scratchAtNode[1][j] = " + scratchAtNode[1][j]);
-                    // System.out.println("Bef j=" + j + " esDsAtNode[0][j] = " + esDsAtNode[0][j] + " esDsAtNode[1][j] = " + esDsAtNode[1][j]);
-                    esDsAtNode[ithDim][j] *= scratchAtNode[1][i]; // have to use scratch's i-th element, not j-th!
-
-                    // checking against R
-                    // System.out.println("Aft j=" + j + " esDsAtNode[0][j] = " + esDsAtNode[0][j] + " esDsAtNode[1][j] = " + esDsAtNode[1][j]);
-                }
+        // Preserve existing negative-D roundoff treatment; padding and imaginary entries are untouched.
+        for (int d = 1; d <= nDimensionsD; ++d)
+            for (int i = 0; i < nUsefulTraitBins; ++i) {
+                int j = stride * i;
+                if (esDsAtNode[d][j] < 0) esDsAtNode[d][j] = 0;
+                else esDsAtNode[d][j] *= scratchAtNode[1][i];
             }
-        }
     }
 
     /*

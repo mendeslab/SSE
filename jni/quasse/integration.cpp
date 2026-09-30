@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <sstream>
 
 using namespace quasse_native;
 
@@ -15,38 +16,53 @@ public:
     ComplexFFT fft;
     const int dimensions;
     std::vector<double> original, result, kernel;
-    std::vector<double> birth, death, dFactors, expDtNetRates, expHalfDtNetRates;
+    std::vector<double> birth, death, dFactors, lowerRoot, rootOffsetRate;
+    std::vector<double> decayFullStep, decayIntegralFullStep, decayHalfStep, decayIntegralHalfStep;
 
     // Caller holds preparation_mutex, including destruction if an allocation fails.
     Integration(int size, int dims) : fft(size), dimensions(dims),
         original(std::size_t(2) * size * dims), result(original.size()), kernel(2 * size),
-        birth(size), death(size), dFactors(size), expDtNetRates(size), expHalfDtNetRates(size) {}
+        birth(size), death(size), dFactors(size), lowerRoot(size), rootOffsetRate(size),
+        decayFullStep(size), decayIntegralFullStep(size), decayHalfStep(size), decayIntegralHalfStep(size) {}
 
-    // At fixed trait x and constant rates λ and μ, exactly integrates the reaction ODEs
-    // E′ = μ − (λ + μ)E + λE² and D′ = [2λE − (λ + μ)]D, without trait transport.
+    // At fixed trait x, λ is speciation, μ is extinction, and ψ is non-removing fossil sampling.
     // E is the probability of no sampled descendants; D is the descendant-subtree likelihood.
-    // Trait drift and diffusion are handled separately; the combined calculation is not exact.
+    // Exactly solves E′ = μ − (λ + μ + ψ)E + λE² and D′ = [2λE − (λ + μ + ψ)]D backward
+    // in time, without trait transport. The combined Strang calculation remains approximate.
+    // This extends Fitzjohn's propagate_t (src/quasse-eqs-fftC.c) and fftR.propagate.t
+    // (R/model-quasse-fftR.R), whose reaction equations have ψ = 0.
     //
-    // For λ ≠ μ, starting values E₀, D₀, and reaction duration h, the supplied rateExponentials
-    // contain z = exp[(λ − μ)h] for each bin (h is a half or full step, chosen by integrate()).
-    // E₁ = [μ − λE₀ + μz(E₀ − 1)] / [μ − λE₀ + λz(E₀ − 1)]
-    // D₁ = D₀ z [(λ − μ) / (zλ − μ + (1 − z)λE₀)]².
-    // Factoring E′ = (1 − E)(μ − λE) and separating variables gives the E update.
-    // Its derivative with respect to E₀ is the D multiplier saved in dFactors.
+    // integrate() prepares v = λ − μ − ψ, κ = sqrt(v² + 4λψ), β = (λ + μ + ψ + κ)/2.
+    // For λ > 0, r₋ and r₊ are the lower and upper roots of the reaction polynomial E′ = 0.
+    // β = λr₊ and s = μ/β = r₋; the latter is stored in lowerRoot.
+    // rootOffsetRate stores η = β − λ = λ(r₊ − 1). The same coefficients cover λ = 0;
+    // all-zero rates use s = 0. For reaction duration h, the supplied arrays contain
+    // w = exp(−κh) and q = ∫₀ʰ exp(−κt) dt, named decayFactor and decayIntegral.
     //
-    // Literal Java T update: real useful bins only, E first then all D rows.
-    // Both E and the saved D factor use OLD E. Preserve singular cases and expression order;
-    // in particular, negative D is cleared without multiplying, while NaN follows the else branch.
-    void propagateT(int useful, const std::vector<double>& rateExponentials) {
+    // For OLD E = e, A = η + λ(1 − e), B = w + Aq, and Enew = (we + sAq)/B.
+    // Aq is denominatorTerm and B is denominator. Differentiating Enew in e gives J = w/B².
+    // J satisfies J′ = [2λE − (λ + μ + ψ)]J, J(0) = 1, so Dnew = Dold * J is exact too.
+    // Both updates use old E. Real useful bins are updated first; saved dFactors then update D.
+    // E-only execution needs no D factor. Negative D is cleared without multiplying;
+    // NaN follows the multiplication branch, as before. Padding/imaginary entries are unchanged.
+    void propagateT(int useful, const std::vector<double>& decayFactor,
+                    const std::vector<double>& decayIntegral,
+                    double psi, double duration) {
         for (int i = 0; i < useful; ++i) {
-            const double lambda = birth[i], mu = death[i];
-            const double z = rateExponentials[i];
             const double e = original[2 * i];
-            double tmp1 = mu - lambda * e;
-            const double tmp2 = z * (e - 1);
-            original[2 * i] = (tmp1 + tmp2 * mu) / (tmp1 + tmp2 * lambda);
-            tmp1 = (lambda - mu) / (z * lambda - mu + (1 - z) * lambda * e);
-            dFactors[i] = z * tmp1 * tmp1;
+            const double denominatorTerm = (rootOffsetRate[i] + birth[i] * (1 - e)) * decayIntegral[i];
+            const double denominator = decayFactor[i] + denominatorTerm;
+            const double nextE = (decayFactor[i] * e + lowerRoot[i] * denominatorTerm) / denominator;
+            const double dFactor = dimensions > 1 ? (decayFactor[i] / denominator) / denominator : 1;
+            if (!(denominator > 0) || !std::isfinite(denominator) || !std::isfinite(nextE)
+                    || !(dFactor > 0) || !std::isfinite(dFactor)) {
+                std::ostringstream message;
+                message << "Invalid QuaSSE reaction at bin " << i << ": lambda=" << birth[i]
+                        << ", mu=" << death[i] << ", psi=" << psi << ", dt=" << duration << ", old E=" << e;
+                throw std::runtime_error(message.str());
+            }
+            original[2 * i] = nextE;
+            if (dimensions > 1) dFactors[i] = dFactor;
         }
         for (int d = 1; d < dimensions; ++d) {
             auto* values = original.data() + std::size_t(d) * 2 * fft.size;
@@ -60,20 +76,36 @@ public:
     // Adjacent Strang half-Ts compose to T(dt) for fixed rates: T/2, X, T, ..., X, T/2.
     // X still restores its input boundaries. Combine only within this fixed-resolution segment;
     // zero steps remain the identity and final values reside in original after each swap and T.
-    void integrate(double dt, int steps, int left, int right) {
-        if (steps == 0) return;
+    void integrate(double psi, double dt, int steps, int left, int right) {
+        if (steps == 0 || dt == 0) return;
         const int useful = fft.size - left - right - 1;
-        // Rates and dt stay fixed within this segment; E-dependent factors still change each step.
-        // Refresh every segment, including when only dt changed since the previous call.
+        // Prepare coefficients once per segment: rates and dt stay fixed in the loop below,
+        // but each reaction step still calculates its E-dependent denominator and D multiplier.
+        // For positive v, η = (κ − v)/2 would cancel; use η = 2λψ/(κ + v) instead.
+        // q = (1 − w)/κ uses expm1, with q = h at κ = 0 (including λ = μ, ψ = 0).
+        // Full-step coefficients follow w(2h) = w(h)² and q(2h) = q(h)(1 + w(h)).
+        // Refresh every segment, even when only dt or ψ changes; no exponentials or square
+        // roots occur inside the timestep loop. These arrays cache storage, not model state.
         for (int i = 0; i < useful; ++i) {
-            expHalfDtNetRates[i] = std::exp((dt / 2) * (birth[i] - death[i]));
-            if (steps > 1) expDtNetRates[i] = std::exp(dt * (birth[i] - death[i]));
+            const double netRateMinusSampling = birth[i] - death[i] - psi;
+            const double kappa = std::hypot(netRateMinusSampling, 2 * std::sqrt(birth[i]) * std::sqrt(psi));
+            const double upperRootRate = (birth[i] + death[i] + psi + kappa) / 2;
+            lowerRoot[i] = upperRootRate > 0 ? death[i] / upperRootRate : 0;
+            rootOffsetRate[i] = netRateMinusSampling > 0
+                ? 2 * birth[i] * psi / (kappa + netRateMinusSampling)
+                : (kappa - netRateMinusSampling) / 2;
+            decayHalfStep[i] = std::exp(-kappa * (dt / 2));
+            decayIntegralHalfStep[i] = kappa > 0 ? -std::expm1(-kappa * (dt / 2)) / kappa : dt / 2;
+            decayFullStep[i] = decayHalfStep[i] * decayHalfStep[i];
+            decayIntegralFullStep[i] = decayIntegralHalfStep[i] * (1 + decayHalfStep[i]);
         }
-        propagateT(useful, expHalfDtNetRates);
+        propagateT(useful, decayHalfStep, decayIntegralHalfStep, psi, dt / 2);
         for (int step = 0; step < steps; ++step) {
             propagate(left, right);
             original.swap(result);
-            propagateT(useful, step == steps - 1 ? expHalfDtNetRates : expDtNetRates);
+            const bool last = step == steps - 1;
+            propagateT(useful, last ? decayHalfStep : decayFullStep,
+                       last ? decayIntegralHalfStep : decayIntegralFullStep, psi, last ? dt / 2 : dt);
         }
     }
 
@@ -192,7 +224,7 @@ JNIEXPORT void JNICALL Java_SSE_QuaSSENativeIntegrator_propagateXNative(JNIEnv* 
 // Copy rates once per segment; no JNI calls or allocation occur in the repeated T/X loop.
 JNIEXPORT void JNICALL Java_SSE_QuaSSENativeIntegrator_integrateSegmentNative(JNIEnv* env, jclass, jlong handle,
         jobjectArray rows, jdoubleArray birth, jdoubleArray death, jdoubleArray kernel,
-        jdouble dt, jint steps, jint left, jint right) {
+        jdouble psi, jdouble dt, jint steps, jint left, jint right) {
     try {
         auto* integration = reinterpret_cast<Integration*>(static_cast<std::intptr_t>(handle));
         if (!integration) {
@@ -201,17 +233,17 @@ JNIEXPORT void JNICALL Java_SSE_QuaSSENativeIntegrator_integrateSegmentNative(JN
         }
         if (!integration->readInputs(env, rows, kernel, left, right)) return;
         const int useful = integration->fft.size - left - right - 1;
-        if (steps < 0 || integration->dimensions < 2 || !birth || !death
+        if (steps < 0 || integration->dimensions < 1 || !birth || !death
                 || env->GetArrayLength(birth) != useful || env->GetArrayLength(death) != useful) {
-            throw_java(env, "java/lang/IllegalArgumentException", "Segment requires E/D, useful-bin rates and nonnegative steps.");
+            throw_java(env, "java/lang/IllegalArgumentException", "Segment requires E with optional D, useful-bin rates and nonnegative steps.");
             return;
         }
-        if (steps == 0) return;
+        if (steps == 0 || dt == 0) return;
         env->GetDoubleArrayRegion(birth, 0, useful, integration->birth.data());
         if (env->ExceptionCheck()) return;
         env->GetDoubleArrayRegion(death, 0, useful, integration->death.data());
         if (env->ExceptionCheck()) return;
-        integration->integrate(dt, steps, left, right);
+        integration->integrate(psi, dt, steps, left, right);
         integration->writeOutput(env, rows, integration->original);
     } catch (...) {
         translate_exception(env);

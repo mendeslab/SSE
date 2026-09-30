@@ -580,7 +580,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         int[] flanks = lowRes ? nLeftNRightFlanksLo : nLeftNRightFlanksHi;
         integrator.integrateSegment((lowRes ? esDsLo : esDsHi)[nodeIdx],
                 lowRes ? birthRatesLo : birthRatesHi, lowRes ? deathRatesLo : deathRatesHi,
-                lowRes ? fftFYLo : fftFYHi, dt, steps, flanks[0], flanks[1]);
+                lowRes ? fftFYLo : fftFYHi, 0.0, dt, steps, flanks[0], flanks[1]);
     }
 
     @Override
@@ -639,17 +639,17 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     public void propagateTInPlace(double[][] esDsAtNode, double[][] scratchAtNode, double dt, boolean lowRes, boolean jtranforms) {
         if (jtranforms) {
             // grab scratch, dt and nDimensions from QuaSSEDistribution state
-            // if (lowRes) SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, dt, nUsefulXbinsLo, nDimensionsD);
-            // else SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, dt, nUsefulXbinsHi, nDimensionsD);
+            // if (lowRes) SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, nDimensionsD);
+            // else SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, nDimensionsD);
             if (lowRes)
-                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, dt, nUsefulXbinsLo, nDimensionsD);
+                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, nDimensionsD);
             else
-                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, dt, nUsefulXbinsHi, nDimensionsD);
+                SSEUtils.propagateEandDinTQuaSSEInPlace(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, nDimensionsD);
         } else {
             if (lowRes)
-                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, dt, nUsefulXbinsLo, nDimensionsD);
+                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesLo, deathRatesLo, 0.0, dt, nUsefulXbinsLo, nDimensionsD);
             else
-                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, dt, nUsefulXbinsHi, nDimensionsD);
+                SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDsAtNode, scratchAtNode, birthRatesHi, deathRatesHi, 0.0, dt, nUsefulXbinsHi, nDimensionsD);
         }
     }
 

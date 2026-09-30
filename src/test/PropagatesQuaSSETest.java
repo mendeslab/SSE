@@ -31,6 +31,64 @@ import java.util.Arrays;
  */
 public class PropagatesQuaSSETest {
 
+    // Independent matrix-exponential references cover sampling and removable singularities that
+    // extant-only R references miss. Exercise both layouts and E-only storage; keep while using this flow.
+    @Test
+    public void samplingReactionReferences() {
+        double[][] references = {
+            // mpmath 1.4.1, 70 digits: λ, μ, ψ, E₀, h, E(h), J(h). J multiplies D.
+            {0.3, 0.1, 0, 0.2, 0.5, 0.21494163617873924, 0.8713536755456986},
+            {0.3, 0.1, 0.08, 0.2, 0.5, 0.20732400232876125, 0.8362157165424663},
+            {0.2, 0.2, 0, 0.8, 2, 0.8148148148148148, 0.8573388203017832},
+            {0.2, 0.2, 0.1, 0, 2, 0.2614684081719198, 0.4146947080421582},
+            {0, 0.2, 0.1, 0.4, 2, 0.5203168970415929, 0.5488116360940264},
+            {0.2, 0, 0.1, 0.4, 2, 0.24954969999917126, 0.7092034027933648},
+            {0, 0, 0, 0.4, 2, 0.4, 1.0},
+            {0.3, 0.1, 1e-18, 1, 2, 1.0, 1.4918246976412703},
+            {0.1, 0.3, 0, 1, 2, 1.0, 0.6703200460356393},
+            {0.2, 0.20000000000100002, 1e-12, 0.8, 2, 0.8148148148136726, 0.8573388202979559},
+            {0.3, 0.1, 0.08, 0, 0, 0.0, 1.0},
+            {0.3, 0.1, 0.08, 1, 2, 0.8254288934074654, 1.1475751426752692},
+        };
+        for (double[] reference : references) {
+            double lambda = reference[0], mu = reference[1], psi = reference[2];
+            double initialE = reference[3], duration = reference[4];
+            double expectedE = reference[5], expectedDFactor = reference[6];
+            double[] birthRate = {lambda}, deathRate = {mu};
+            for (int stride : new int[]{1, 2}) {
+                for (int nDimensions : new int[]{1, 2}) {
+                    double[][] fullStep = new double[nDimensions][4];
+                    double[][] twoHalfSteps = new double[nDimensions][4];
+                    double[][] scratch = new double[nDimensions][4];
+                    fullStep[0][0] = twoHalfSteps[0][0] = initialE;
+                    if (nDimensions > 1) fullStep[1][0] = twoHalfSteps[1][0] = 1;
+
+                    applyReaction(fullStep, scratch, birthRate, deathRate, psi, duration, stride);
+                    applyReaction(twoHalfSteps, scratch, birthRate, deathRate, psi, duration / 2, stride);
+                    applyReaction(twoHalfSteps, scratch, birthRate, deathRate, psi, duration / 2, stride);
+
+                    assertEquals(expectedE, fullStep[0][0], 1e-12 + 1e-11 * Math.abs(expectedE));
+                    if (nDimensions > 1)
+                        assertEquals(expectedDFactor, fullStep[1][0], 1e-12 + 1e-11 * Math.abs(expectedDFactor));
+                    for (int d = 0; d < nDimensions; ++d)
+                        assertArrayEquals(fullStep[d], twoHalfSteps[d], 1e-12);
+                }
+            }
+        }
+    }
+
+    // Dispatch the explicit full/half steps through each public layout entry point.
+    // One row exercises E alone; additional rows exercise the same reaction's D multiplier.
+    private static void applyReaction(double[][] esDs, double[][] scratch, double[] birthRate,
+            double[] deathRate, double psi, double dt, int stride) {
+        if (stride == 1)
+            propagateEandDinTQuaSSEInPlace(esDs, scratch, birthRate, deathRate,
+                    psi, dt, birthRate.length, esDs.length - 1);
+        else
+            propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDs, scratch, birthRate, deathRate,
+                    psi, dt, birthRate.length, esDs.length - 1);
+    }
+
     final static double EPSILON = 1e-5;
     final static double EPSILON2 = 1e-15;
 
@@ -71,7 +129,7 @@ public class PropagatesQuaSSETest {
         nUsefulTraitBins = 32 - 2 - 2;
 
         // propagating in place, result left in esDs
-        propagateEandDinTQuaSSEInPlace(esDs, scratch, birthRate, deathRate, dt, nUsefulTraitBins, nDimensionsD);
+        propagateEandDinTQuaSSEInPlace(esDs, scratch, birthRate, deathRate, 0.0, dt, nUsefulTraitBins, nDimensionsD);
 
         // System.out.println(Arrays.toString(esDs[0]));
         // System.out.println(Arrays.toString(esDs[1]));
@@ -108,7 +166,7 @@ public class PropagatesQuaSSETest {
         nUsefulTraitBins = 32 - 2 - 2;
 
         // propagating in place, result left in esDs
-        propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDs, scratch, birthRate, deathRate, dt, nUsefulTraitBins, nDimensionsD);
+        propagateEandDinTQuaSSEInPlaceSSTJavaFftService(esDs, scratch, birthRate, deathRate, 0.0, dt, nUsefulTraitBins, nDimensionsD);
 
         double[] expectedEs = new double[] { 0.00506128508712536, 0, 0.00506128508712536, 0, 0.00506128508712536, 0, 0.00506128508712536, 0, 0.00506128508712536, 0, 0.00506128508712536, 0, 0.00506128508712536, 0, 0.00506128508712536, 0, 0.00506128508712536, 0, 0.00506128508712536, 0 };
         double[] expectedDs = new double[] { 8.38350785732404, 0, 9.95388205964182, 0, 8.95489525699789, 0, 11.6719355960008, 0, 8.38624599824343, 0, 9.7693737019512, 0, 8.8174042516822, 0, 9.16801929024715, 0, 10.913191003709, 0, 10.604197912398, 0 };

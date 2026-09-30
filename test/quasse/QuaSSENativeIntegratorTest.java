@@ -14,9 +14,9 @@ public class QuaSSENativeIntegratorTest {
     @Test
     public void matchesJavaSegments() {
         Random random = new Random(128);
-        for (int size : new int[]{32, 128}) {
+        for (int size : new int[]{32, 128}) for (int dims : new int[]{1, 2, 3}) {
             try (FftwFFT fft = new FftwFFT(size);
-                 QuaSSENativeIntegrator nativeT = new QuaSSENativeIntegrator(size, 3)) {
+                 QuaSSENativeIntegrator nativeT = new QuaSSENativeIntegrator(size, dims)) {
                 for (int steps : new int[]{0, 1, 2, 7}) {
                     int left = steps % 3, right = 3 - left, useful = size - 4;
                     double[] birth = new double[useful], death = new double[useful];
@@ -25,35 +25,35 @@ public class QuaSSENativeIntegratorTest {
                     kernel[2] = .2;
                     kernel[2 * size - 2] = .1;
                     fft.forward(kernel, spectrum);
-                    double[][] initial = new double[3][2 * size];
+                    double[][] initial = new double[dims][2 * size];
                     for (int i = 0; i < useful; ++i) {
                         birth[i] = .15 + .1 * random.nextDouble();
                         death[i] = .01 + .05 * random.nextDouble();
                     }
-                    for (int d = 0; d < 3; ++d) {
+                    for (int d = 0; d < dims; ++d) {
                         for (int i = 0; i < 2 * size; ++i)
                             initial[d][i] = random.nextDouble() - (d == 0 ? 0 : .2);
                     }
                     double[] savedBirth = birth.clone(), savedDeath = death.clone(), savedKernel = spectrum.clone();
-                    for (double dt : new double[]{.005, .02}) {
-                        double[][] expected = new double[3][], actual = new double[3][], singleSteps = new double[3][];
-                        for (int d = 0; d < 3; ++d) {
+                    for (double dt : new double[]{.005, .02}) for (double psi : new double[]{0, .07, .01}) {
+                        double[][] expected = new double[dims][], actual = new double[dims][], singleSteps = new double[dims][];
+                        for (int d = 0; d < dims; ++d) {
                             expected[d] = initial[d].clone();
                             actual[d] = initial[d].clone();
                             singleSteps[d] = initial[d].clone();
                         }
-                        double[][] scratch = new double[3][2 * size], transformed = new double[3][2 * size];
-                        nativeT.integrateSegment(actual, birth, death, spectrum, dt, steps, left, right);
+                        double[][] scratch = new double[dims][2 * size], transformed = new double[dims][2 * size];
+                        nativeT.integrateSegment(actual, birth, death, spectrum, psi, dt, steps, left, right);
                         for (int step = 0; step < steps; ++step) {
                             SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(
-                                    expected, scratch, birth, death, dt / 2, useful, 2);
+                                    expected, scratch, birth, death, psi, dt / 2, useful, dims - 1);
                             SSEUtils.propagateEandDinXQuaSSE(expected, transformed, spectrum, scratch,
-                                    size, left, right, 1, 2, fft);
+                                    size, left, right, 1, dims - 1, fft);
                             SSEUtils.propagateEandDinTQuaSSEInPlaceSSTJavaFftService(
-                                    expected, scratch, birth, death, dt / 2, useful, 2);
-                            nativeT.integrateSegment(singleSteps, birth, death, spectrum, dt, 1, left, right);
+                                    expected, scratch, birth, death, psi, dt / 2, useful, dims - 1);
+                            nativeT.integrateSegment(singleSteps, birth, death, spectrum, psi, dt, 1, left, right);
                         }
-                        for (int d = 0; d < 3; ++d) {
+                        for (int d = 0; d < dims; ++d) {
                             assertArrayEquals(expected[d], actual[d], steps == 0 ? 0 : 1e-12);
                             // Combined reaction halves differ only by floating-point rounding.
                             assertArrayEquals(singleSteps[d], actual[d], steps == 0 ? 0 : 1e-12);
@@ -122,23 +122,22 @@ public class QuaSSENativeIntegratorTest {
             double[] rates = new double[12];
             for (double[] bad : new double[][]{null, new double[11], new double[13]}) {
                 assertThrows(IllegalArgumentException.class,
-                        () -> nativeX.integrateSegment(valid, bad, rates, kernel, .01, 1, 1, 2));
+                        () -> nativeX.integrateSegment(valid, bad, rates, kernel, 0.0, .01, 1, 1, 2));
                 assertThrows(IllegalArgumentException.class,
-                        () -> nativeX.integrateSegment(valid, rates, bad, kernel, .01, 1, 1, 2));
+                        () -> nativeX.integrateSegment(valid, rates, bad, kernel, 0.0, .01, 1, 1, 2));
                 assertEquals(7, first[0], 0);
             }
             assertThrows(IllegalArgumentException.class,
-                    () -> nativeX.integrateSegment(valid, rates, rates, kernel, .01, -1, 1, 2));
-            nativeX.integrateSegment(valid, rates, rates, kernel, Double.NaN, 0, 1, 2);
+                    () -> nativeX.integrateSegment(valid, rates, rates, kernel, 0.0, .01, -1, 1, 2));
+            nativeX.integrateSegment(valid, rates, rates, kernel, 0.0, Double.NaN, 0, 1, 2);
             assertEquals(7, first[0], 0);
             try (QuaSSENativeIntegrator onlyE = new QuaSSENativeIntegrator(16, 1)) {
-                assertThrows(IllegalArgumentException.class,
-                        () -> onlyE.integrateSegment(new double[][]{first}, rates, rates, kernel, .01, 0, 1, 2));
+                onlyE.integrateSegment(new double[][]{first}, rates, rates, kernel, 0.0, .01, 0, 1, 2);
             }
         }
         nativeX.close();
         assertThrows(IllegalStateException.class, () -> nativeX.propagateX(null, null, 0, 0));
         assertThrows(IllegalStateException.class,
-                () -> nativeX.integrateSegment(null, null, null, null, .01, 1, 0, 0));
+                () -> nativeX.integrateSegment(null, null, null, null, 0.0, .01, 1, 0, 0));
     }
 }
