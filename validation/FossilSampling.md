@@ -1,8 +1,10 @@
 # Fossil sampling implementation: interim validation
 
-2026-09-30. Implementation is paused at the numerical-design review required by
-`../TODO/FossilSampling2.md`, section 9.3. No final Gaussian reference or XML example has been
-established. Performance measurements and the remaining lifecycle/structure checks are deferred.
+2026-09-30. The corrected spatial study passes the numerical acceptance criteria in
+`../TODO/FossilSampling2.md`, section 9.3. The user chose to retain equal-weight integration and
+hold useful bin boundaries fixed during refinement. The initial study and its diagnosis are
+preserved below. Fossil implementation remains incomplete: the permanent Gaussian/lifecycle
+checks, XML example, legacy tip-age correction, and performance measurements remain to be done.
 
 ## Implementation state
 
@@ -41,7 +43,71 @@ Observation density g=1; trees and grid are those in plan section 9.2.
 All match within the planned 1e−8 tolerance on both backends, for both child orders and
 for tc=0, 0.25, 0.5, 1.25. The parsed fossil and ancestor ages and ancestor flags are checked.
 
-## Gaussian observation refinement: acceptance criterion failed
+## Corrected Gaussian refinement: fixed bin boundaries
+
+Keep the biological inputs from the initial Gaussian study below. Only validation grid settings
+change; the production Java/C++ integration, root weights, and acceptance tolerances are unchanged.
+The useful points represent bin centers. For N useful bins, dX = 7.5/N makes their bins cover
+[−3.75, +3.75]; the first and last centers are −3.75+dX/2 and +3.75−dX/2.
+Here N = nX − leftPadding − rightPadding − 1. Padding is still computed by production code.
+
+| nX | useful bins N | dX | dtMax | support multiplier | padding per side | log likelihood (native) |
+| ---: | ---: | --- | --- | --- | ---: | ---: |
+| 2048 | 1919 | 7.5/1919 | 1/64 | sqrt(80) | 64 | −11.075528783765982 |
+| 4096 | 3839 | 7.5/3839 | 1/128 | sqrt(160) | 128 | −11.075528796726125 |
+| 8192 | 7679 | 7.5/7679 | 1/256 | sqrt(320) | 256 | −11.075528805735900 |
+
+All 24 evaluations (both backends, both child orders, joint/temporal/domain settings) completed
+with the ordinary kernel variance guard and `-Xcheck:jni`. The driver asserts expected padding
+and useful-bin counts, finite likelihoods, and the outer bin boundaries for every fixed-domain
+run. Boundary deviations from ±3.75 were at most 4.29e−13 (tolerance 1e−10).
+
+- Finest joint refinement difference: **9.01e−9**, below the unchanged 1e−4 target.
+- Finest temporal refinement difference on the 8192-bin grid: **9.04e−9**, below 1e−4.
+- Spatial difference between 4096 and 8192 bins at the same dtMax=1/128: **3.46e−11**.
+- Maximum Java/native difference: **1.19e−13**, below 1e−8.
+- Maximum child-order difference: **3.55e−15**, below 1e−4.
+
+At 8192 bins, temporal refinement gives −11.075528783718724 at dtMax=1/64,
+−11.075528796691480 at 1/128, and −11.075528805735900 at 1/256. Support multipliers are
+sqrt(80), sqrt(160), and sqrt(320), keeping the physical kernel support and grid geometry fixed.
+The joint-refinement difference is consequently mostly temporal in this experiment.
+
+The separate domain-sensitivity run doubles nX to 16384 at the finest dX, dtMax, and support.
+It has outer bin boundaries approximately ±7.750520901159 and log likelihood
+−11.803652070174213. This deliberately changes the Flat domain, so it is not a convergence test.
+
+[Raw measurements](fossil-sampling-bin-boundaries.csv) retain all runs, root numerator and
+conditioning integral, actual bin centers and boundaries, Fourier width, and elapsed time.
+Times are single evaluations, not a warmed performance comparison. The numerator and denominator
+include the existing Flat density 1/((nX−1)*dX); its grid-dependent scalar cancels in their ratio.
+
+The local driver is `build/fossil-validation/FossilStudy.java`; its previous version and measurements
+are preserved under `build/fossil-validation/fixed-center-endpoints/`. The corrected output is
+`build/fossil-validation/continuous-study-bin-boundaries.csv`. Compile/run with:
+
+```sh
+export BEAST2_HOME=/home/bredelings/Applications/beast2/beast
+ant compile-test native
+study_cp="build/fossil-validation:build:build-test:lib/*"
+study_cp="$study_cp:$BEAST2_HOME/lib/packages/BEAST.base.jar:$BEAST2_HOME/lib/launcher.jar"
+study_cp="$study_cp:build/test-libs/junit-platform-console-standalone-1.8.2.jar"
+javac -cp "$study_cp" -d build/fossil-validation build/fossil-validation/FossilStudy.java
+java --enable-native-access=ALL-UNNAMED -Xcheck:jni -Djava.library.path=build/native \
+    -cp "$study_cp" test.FossilStudy > build/fossil-validation/continuous-study-bin-boundaries.csv
+python3 build/fossil-validation/check-bin-boundaries.py
+```
+
+The study driver and checks are local investigation scripts, not permanent test infrastructure.
+The scalar-tree tests retain their original grid: they do not compare spatial resolutions, and
+their constant-rate/constant-observation likelihood is independent of the trait-domain width.
+
+## Initial Gaussian refinement: fixed outermost centers (superseded)
+
+This initial experiment held the first/last useful centers fixed. With equal weights the covered
+bin boundaries were ±(3.75+dX/2), changing the domain during refinement. Its apparent first-order
+error therefore did not establish a fossil-integration regression. The corrected study above
+supersedes its grid prescription and clears the spatial-validation blocker.
 
 Use the mixed tree `(A:2,(F:0.5,(S:0,B:0.75):0.25):1);`, observations A=−0.2, B=0.1,
 F=0.3, S=0, observation SD=0.1, λ(x)=0.2+0.1/(1+exp(−x)), μ=0.1, ψ=0.08,
@@ -100,14 +166,10 @@ Separately, the existing test for a zero-age root with two zero-length leaves no
 rejection: that tree is ambiguous in BEAST's ancestor encoding and is explicitly excluded by
 the planned tree validation. Positive-height resolution-transition references are unchanged.
 
-## Decisions needed before resuming
+## Remaining implementation work
 
-1. Resolve fossil opt-in versus legacy rounded tip ages. Explicit sampling-mode opt-in would
-   preserve old input semantics; alternatively require old trees to declare contemporaneous
-   tips when parsed. An age tolerance is possible but introduces a scale-dependent cutoff.
-2. Extend the fixed-domain spatial study to a finer grid, or investigate/change spatial
-   quadrature separately. A finer study preserves the numerical method but costs more;
-   changing quadrature may improve convergence but affects existing reference values.
-
-After those decisions: finish lifecycle/tree-structure checks, rerun old and new tests, establish
-an accepted Gaussian reference, add the documented XML example, and measure warmed performance.
+The user resolved the spatial convention by choosing fixed bin boundaries and unchanged
+production quadrature; the rerun passes all planned numerical acceptance criteria. Update the
+legacy tree inputs with the agreed parser treatment of rounded extant tip ages separately.
+Then finish lifecycle/tree-structure checks, rerun old and new tests, retain the accepted Gaussian
+reference, add the documented XML example, and measure warmed performance.
