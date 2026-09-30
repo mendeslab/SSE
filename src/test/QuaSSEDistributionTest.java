@@ -2271,7 +2271,8 @@ public class QuaSSEDistributionTest {
     public void testFossilSamplingScalarTrees() {
         String[] trees = {"(A:2,B:2);", "(A:2,F:1.5);", "(A:2,(S:0,B:0.75):1.25);",
                 "(A:2,(F:0.5,(S:0,B:0.75):0.25):1);"};
-        double[] expected = {-1.30503697077521588852453732830365510993835118579730047, -4.553502530096844596242260350955896024972035398044699016, -3.83076561508347132830882387329785382091405375997408066, -8.94450156751828936041078667050598304991597308940224921};
+        double[] expected = {-1.3050369707752159, -4.5535025300968446,
+                -3.8307656150834713, -8.9445015675182894};
         for (int t = 0; t < trees.length; ++t) {
             for (double tc : new double[]{0, .25, .5, 1.25}) {
                 QuaSSEDistribution distribution = fossilDistribution(trees[t], tc, false,
@@ -2340,6 +2341,89 @@ public class QuaSSEDistributionTest {
         distribution.close();
         distribution.initAndValidate();
         Assert.assertEquals(initial, evaluate(distribution), 1e-12);
+    }
+
+    // A resolved trait-dependent fossil case protects both the spatial reference and BEAST rejection.
+    // Scalar event tests cannot expose stale E workspaces or missing sampling-parameter dependencies.
+    @Test
+    public void testFossilGaussianParameterRoundTrip() {
+        String newick = "(A:2,(F:0.5,(S:0,B:0.75):0.25):1);";
+        QuaSSEDistribution distribution = fossilDistribution(newick, 0, true,
+                8192, 7.5 / 7679, 1.0 / 256, Math.sqrt(320), 1);
+        RealParameter[] parameters = {distribution.fossilSamplingRateInput.get(),
+                distribution.presentSamplingProbabilityInput.get(), distribution.gridInput.get().diffusionInput.get(),
+                ((LogisticFunction) distribution.q2mLambdaInput.get()).curveYBaseValueInput.get()};
+        State state = new State();
+        state.initByName("stateNode", Arrays.asList(parameters));
+        state.initialise();
+        state.setPosterior(distribution);
+        double initial = state.robustlyCalcPosterior(distribution);
+        Assert.assertEquals(-11.075528805735900, initial, 1e-8);
+        double[] changes = {.12, .85, .06, .23};
+        for (int i = 0; i < parameters.length; ++i) {
+            QuaSSEDistribution fresh = fossilDistribution(newick, 0, true,
+                    8192, 7.5 / 7679, 1.0 / 256, Math.sqrt(320), 1);
+            RealParameter[] freshParameters = {fresh.fossilSamplingRateInput.get(),
+                    fresh.presentSamplingProbabilityInput.get(), fresh.gridInput.get().diffusionInput.get(),
+                    ((LogisticFunction) fresh.q2mLambdaInput.get()).curveYBaseValueInput.get()};
+            freshParameters[i].setValue(changes[i]);
+            double expected = evaluate(fresh);
+            fresh.close();
+            state.store(i + 1);
+            parameters[i].setValue(changes[i]);
+            state.storeCalculationNodes();
+            state.checkCalculationNodesDirtiness();
+            Assert.assertTrue(distribution.isDirtyCalculation());
+            Assert.assertEquals(expected, distribution.calculateLogP(), 1e-8);
+            Assert.assertNotEquals(initial, expected, 1e-8);
+            state.restore();
+            state.restoreCalculationNodes();
+            state.setEverythingDirty(false);
+            Assert.assertEquals(initial, distribution.getCurrentLogP(), 0);
+            Assert.assertEquals(initial, distribution.calculateLogP(), 1e-8);
+        }
+        // An out-of-bounds sampling proposal must reject without poisoning the reusable E storage.
+        state.store(5);
+        parameters[0].setValue(-.1);
+        state.storeCalculationNodes();
+        state.checkCalculationNodesDirtiness();
+        Assert.assertEquals(Double.NEGATIVE_INFINITY, distribution.calculateLogP(), 0);
+        state.restore(); state.restoreCalculationNodes(); state.setEverythingDirty(false);
+        Assert.assertEquals(initial, distribution.calculateLogP(), 1e-8);
+    }
+
+    // Invalid tree encodings must fail before pruning; normal likelihood references use valid trees
+    // and cannot catch accidental interpretation of a bifurcation as an ancestor observation.
+    @Test
+    public void testFossilTreeValidation() {
+        QuaSSEDistribution distribution = fossilDistribution("(A:2,F:1.5);", 0, true,
+                2048, 3.75 / 959, 1.0 / 64, Math.sqrt(80), 2);
+        String[] invalidTrees = {"(A:2);", "(A:2,B:2,F:1.5);", "(S:0,A:2);",
+                "(A:2,(F:0,S:0):1);", "(A:2,missing:1.5);"};
+        String[] reasons = {"binary", "binary", "ordinary bifurcating root", "Ambiguous", "Missing trait"};
+        for (int i = 0; i < invalidTrees.length; ++i) {
+            TreeParser tree = new TreeParser();
+            tree.initByName("newick", invalidTrees[i], "IsLabelledNewick", true,
+                    "adjustTipHeights", false, "singlechild", true, "binarizeMultifurcations", false);
+            distribution.treeInput.setValue(tree, distribution);
+            IllegalArgumentException error = Assert.assertThrows(IllegalArgumentException.class,
+                    distribution::initAndValidate);
+            Assert.assertTrue(error.getMessage(), error.getMessage().contains(reasons[i]));
+        }
+        Tree tree = new TreeParser("(A:2,F:1.5);", false, false, true, 0);
+        distribution.treeInput.setValue(tree, distribution);
+        for (double height : new double[]{-1, 3, Double.NaN, Double.POSITIVE_INFINITY}) {
+            tree.getNode(0).setHeight(height);
+            Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
+        }
+        tree.getNode(0).setHeight(0);
+        for (Node node : tree.getNodesAsArray()) node.setHeight(node.getHeight() + 1);
+        IllegalArgumentException error = Assert.assertThrows(IllegalArgumentException.class,
+                distribution::initAndValidate);
+        Assert.assertTrue(error.getMessage().contains("living sample"));
+        for (Node node : tree.getNodesAsArray()) node.setHeight(node.getHeight() - 1);
+        distribution.initAndValidate();
+        Assert.assertTrue(Double.isFinite(evaluate(distribution)));
     }
 
     // Independent R Strang reference checks pruning, normalization and integration together.
