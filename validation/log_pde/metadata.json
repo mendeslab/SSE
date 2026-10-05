@@ -1,0 +1,12 @@
+{
+  "python": "3.14.8",
+  "numpy": "2.4.6",
+  "scipy": "1.17.1",
+  "platform": "Linux-7.2.8+deb14-amd64-x86_64-with-glibc2.43",
+  "rtol": 1e-12,
+  "max_evaluations_per_branch": 20000,
+  "source_sha256": {
+    "solver.py": "0e5b156e580f94a69c714e2e33cc41e3fb4b76474afe1605d5d3b77fe7c8192c",
+    "run.py": "6982592d1781a2c468bf2c0bd5da7c73db8f4d86e94dfd8bd2c4906e26e103e7"
+  }
+}

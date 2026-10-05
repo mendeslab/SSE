@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.11" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>README</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+</head>
+<body>
+<h1
+id="experimental-high-order-transport-of-log-likelihoods">Experimental
+high-order transport of log likelihoods</h1>
+<p>2026-10-05. Separate development bookmark:
+<code>log-pde-experiment</code>.</p>
+<p>This is a standalone numerical experiment, not a production QuaSSE
+integrator. It tests whether high-order finite differences on <strong>h
+= log D</strong> can reduce spatial resolution and computational work.
+Production sources and defaults are unchanged.</p>
+<p><strong>Result:</strong> high spatial order survives non-Gaussian
+shapes and a node merge in these tests. It substantially reduces the
+grid size needed for some accuracy targets. Explicit time integration is
+still expensive for narrow initial Gaussians and large trait domains.
+Practical boundaries, E propagation, reactions and full-tree likelihoods
+remain untested.</p>
+<h2 id="findings">Findings</h2>
+<p>All <strong>183 runs completed</strong>, including the tighter
+time-tolerance and domain checks. They took about 11.5 seconds of summed
+propagation time on this machine in the saved run; setup, error
+calculations and plotting are outside that measurement.</p>
+<h3 id="spatial-order-is-realized-beyond-gaussians">Spatial order is
+realized beyond Gaussians</h3>
+<p>Observed grid-point L2 orders on refinement from Δx = 0.125 to
+0.0625:</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 26%" />
+<col style="width: 26%" />
+<col style="width: 26%" />
+</colgroup>
+<thead>
+<tr>
+<th>Problem</th>
+<th style="text-align: right;">Second-order formula</th>
+<th style="text-align: right;">Fourth-order formula</th>
+<th style="text-align: right;">Sixth-order formula</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Overlapping mixture</td>
+<td style="text-align: right;">2.01</td>
+<td style="text-align: right;">3.94</td>
+<td style="text-align: right;">5.83</td>
+</tr>
+<tr>
+<td>Separated mixture</td>
+<td style="text-align: right;">2.00</td>
+<td style="text-align: right;">3.99</td>
+<td style="text-align: right;">5.70</td>
+</tr>
+<tr>
+<td>Mixture node merge, then propagation</td>
+<td style="text-align: right;">1.99</td>
+<td style="text-align: right;">3.91</td>
+<td style="text-align: right;">5.71</td>
+</tr>
+</tbody>
+</table>
+<p>Single Gaussians are special: their logs are quadratic, so all three
+derivative formulas are spatially exact in exact arithmetic with the
+supplied exterior values. Their small errors here measure time
+integration and rounding, not a spatial convergence order.</p>
+<figure>
+<img src="spatial-error.png" alt="Error versus spatial spacing" />
+<figcaption aria-hidden="true">Error versus spatial spacing</figcaption>
+</figure>
+<p>The figures use <strong>off-grid reconstruction error</strong>,
+integrating the squared discrepancy between the exponentiated log
+interpolant and the analytic reference. The table above uses stored grid
+values to isolate the propagation error. Both metrics are saved. All
+curves in these two figures use atol = 10⁻⁹, rtol = 10⁻¹² and domain
+[−4,4].</p>
+<p>Higher order is not automatically better on a coarse grid. For the
+separated mixture at Δx = 0.5, sixth-order grid-point relative L2 error
+is about 0.214, versus 0.0391 for second order. Sixth-order
+reconstruction error there is still larger, about 0.429. Refinement is
+needed before the high-order approximation delivers its advantage.</p>
+<h3 id="benefits-at-matched-accuracy">Benefits at matched accuracy</h3>
+<p>For the overlapping mixture with a relative reconstructed-L2 target
+of 10⁻⁵:</p>
+<table>
+<colgroup>
+<col style="width: 13%" />
+<col style="width: 17%" />
+<col style="width: 17%" />
+<col style="width: 17%" />
+<col style="width: 17%" />
+<col style="width: 17%" />
+</colgroup>
+<thead>
+<tr>
+<th>Order</th>
+<th style="text-align: right;">Δx</th>
+<th style="text-align: right;">Stored points</th>
+<th style="text-align: right;">Measured error</th>
+<th style="text-align: right;">Derivative evaluations</th>
+<th style="text-align: right;">Seconds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td style="text-align: right;">0.0078125</td>
+<td style="text-align: right;">1025</td>
+<td style="text-align: right;">5.86 × 10⁻⁶</td>
+<td style="text-align: right;">3350</td>
+<td style="text-align: right;">0.221</td>
+</tr>
+<tr>
+<td>4</td>
+<td style="text-align: right;">0.0625</td>
+<td style="text-align: right;">129</td>
+<td style="text-align: right;">3.63 × 10⁻⁶</td>
+<td style="text-align: right;">278</td>
+<td style="text-align: right;">0.018</td>
+</tr>
+<tr>
+<td>6</td>
+<td style="text-align: right;">0.125</td>
+<td style="text-align: right;">65</td>
+<td style="text-align: right;">7.95 × 10⁻⁶</td>
+<td style="text-align: right;">212</td>
+<td style="text-align: right;">0.014</td>
+</tr>
+</tbody>
+</table>
+<p>These are the fastest qualifying settings among the measured grids at
+the stated tolerance, not optimized parameters or precise speedup
+estimates. Each timing is a single Python solve, including evaluations
+of analytic exterior data. The derivative-evaluation and grid-size
+differences are more reproducible evidence than small timing
+differences.</p>
+<p>The node-merge example also benefits: at target 10⁻⁴, second order
+used 1025 points and 11892 evaluations across the three branches; fourth
+order used 129 points and 1386 evaluations. Fourth order was faster than
+sixth order at that target. At target 10⁻⁵, sixth order reached the
+target on 129 points, while fourth order used 257.</p>
+<figure>
+<img src="cost-error.png" alt="Propagation cost versus error" />
+<figcaption aria-hidden="true">Propagation cost versus
+error</figcaption>
+</figure>
+<p>There is no native SSE timing comparison and no ordinary-scale
+finite-difference control. Thus this establishes a benefit of increasing
+order <strong>within this log solver</strong>, not that the log solver
+outperforms existing Gaussian convolution or that logging alone caused
+the gain.</p>
+<h3 id="narrow-tips-still-cost-time">Narrow tips still cost time</h3>
+<p>At Δx = 0.125 with sixth-order derivatives and atol = 10⁻⁹:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Initial Gaussian SD</th>
+<th style="text-align: right;">Derivative evaluations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0.08</td>
+<td style="text-align: right;">3548</td>
+</tr>
+<tr>
+<td style="text-align: right;">0.16</td>
+<td style="text-align: right;">1466</td>
+</tr>
+<tr>
+<td style="text-align: right;">0.32</td>
+<td style="text-align: right;">410</td>
+</tr>
+<tr>
+<td style="text-align: right;">0.80</td>
+<td style="text-align: right;">74</td>
+</tr>
+</tbody>
+</table>
+<p>These cases all have mean 0.137, drift 0.3 and diffusion variance
+rate 0.2. The narrowest Gaussian is spatially easy in log form but much
+more expensive to integrate in time. Accepted timesteps grow as it
+broadens. A small final step often just lands on the endpoint.</p>
+<figure>
+<img src="timesteps.png"
+alt="Accepted timesteps and width dependence" />
+<figcaption aria-hidden="true">Accepted timesteps and width
+dependence</figcaption>
+</figure>
+<p>Increasing domain extent from 2 to 8 at the same spacing raises the
+narrow-Gaussian evaluation count from 2018 to 5804. The separated
+mixture similarly rises from 194 to 1238, while its grid-point L2 error
+remains about 0.000549. Exact exterior data are used in all these
+comparisons; this does not test approximate boundary conditions.</p>
+<p>The log equation linearized about h contains (v + q hₓ) times the
+perturbation gradient. Large tail slopes can restrict explicit
+integration. The measurements establish cost sensitivity to width and
+extent; they do not separate stability restrictions from the cost of
+satisfying the error controller throughout the tails.</p>
+<h3 id="temporal-and-quadrature-checks">Temporal and quadrature
+checks</h3>
+<p>The main sweep uses absolute log tolerances 10⁻⁶ and 10⁻⁹; selected
+sixth-order runs also use 10⁻¹¹. Relative tolerance remains 10⁻¹², so
+the component error scale is atol + rtol × |shifted h|, rather than a
+pure absolute tolerance in far tails.</p>
+<p>For example, at Δx = 0.125 the separated mixture’s sixth-order
+grid-point error remains about 0.000549 across those tolerances; the
+merge error remains about 0.000153. Tightening time integration does not
+remove those spatial errors. Durations 0.02, 0.2 and 1.0 are also
+compared for the narrow offset Gaussian and separated mixture. See <a
+href="results.md">results.md</a>.</p>
+<p>Integrals use a degree 3, 5 or 7 interpolant of h for derivative
+orders 2, 4 or 6, followed by Gauss-Legendre integration on each grid
+interval. This interpolation is postprocessing; the solver still stores
+only one value per point. Comparing 16 and 32 quadrature nodes per
+interval changes the integral by less than 10⁻¹⁴ relatively in the saved
+cases. That checks quadrature of the interpolant, not its agreement with
+the true function. Integral error against the analytic finite-domain
+Gaussian-mixture integral is reported separately.</p>
+<h2 id="mathematical-and-implementation-details">Mathematical and
+implementation details</h2>
+<p>The equation is</p>
+<pre class="text"><code>h_t = v h_x + (q/2) (h_xx + h_x²),   h = log D.</code></pre>
+<p>Each Gaussian component stores log integrated weight, mean and
+variance. Under the backward transport convention, its mean becomes m −
+vt and variance becomes s² + qt. A log-sum-exp of the component
+densities gives the analytic log reference without underflow.</p>
+<p><code>solver.py</code> computes centered first and second derivatives
+of orders 2, 4 or 6 and uses SciPy RK45 with adaptive timesteps. Each
+solve subtracts one fixed initial log offset and restores it on output.
+The offset has zero space and time derivatives; there is no hidden
+normalization or continuously changing scale. Neither h nor D is clipped
+or floored.</p>
+<p>All stored points, including the interval endpoints, are evolved. The
+required exterior points beyond both endpoints are supplied from the
+analytic solution at every RK stage. That isolates the interior
+approximation but provides information unavailable in a general
+likelihood calculation. RK stages are capped at 20000 derivative
+evaluations per branch; failures are recorded and omitted from error
+curves, not assigned a finite error.</p>
+<p>In the merge case, two mixtures evolve on separate branches. Their
+<strong>numerical</strong> logs are added along with log(0.15), and that
+result is propagated along a parent branch. The analytic reference is
+the full pairwise Gaussian product, including overlap amplitudes. No
+components are discarded, and child numerical errors are retained in the
+parent’s initial state. All three branches have the stated duration. The
+factor 0.15 is only a node factor here: birth/death reaction evolution
+is deliberately absent.</p>
+<p>The main grid has domain [−4,4], spacings 0.5, 0.25, 0.125 and
+0.0625, and duration 0.2. Finer second-order grids down to 0.0078125 and
+fourth/sixth-order grids at 0.03125 allow matched-error comparisons.
+Domain, width and duration checks change one of those settings. Case
+definitions and every setting are in <code>run.py</code> and the
+measurement table.</p>
+<p>Saved metrics distinguish:</p>
+<ul>
+<li>Grid-point relative L1/L2 errors, using trapezoidal weights on the
+finite interval.</li>
+<li>Maximum log error at all points, and at points with reference D at
+least 10⁻⁸ times the maximum sampled reference D; also mean signed log
+error on that latter set.</li>
+<li>Relative L2 error of the exponentiated log interpolant, using
+32-point quadrature.</li>
+<li>Relative integral error against the analytic finite-domain integral,
+and quadrature changes on increasing the per-interval node count from 8
+to 16 to 32.</li>
+<li>Propagation seconds, derivative evaluations and accepted steps.
+Timesteps themselves are saved for each branch, with time measured from
+that branch’s start.</li>
+</ul>
+<h2 id="reproduction-and-files">Reproduction and files</h2>
+<p>From the SSE repository root, using Python with NumPy, SciPy and
+Matplotlib:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="va">MPLCONFIGDIR</span><span class="op">=</span>/tmp/sse-matplotlib <span class="va">OPENBLAS_NUM_THREADS</span><span class="op">=</span>1 <span class="dt">\</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="ex">python3</span> <span class="at">-B</span> validation/log_pde/run.py</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Regenerate figures and numerical tables without solving again:</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="va">MPLCONFIGDIR</span><span class="op">=</span>/tmp/sse-matplotlib <span class="dt">\</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="ex">python3</span> <span class="at">-B</span> validation/log_pde/run.py <span class="at">--plot-only</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Regenerate this HTML report after editing this Markdown file:</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="ex">pandoc</span> <span class="at">--standalone</span> validation/log_pde/README.md <span class="at">-o</span> validation/log_pde/README.html</span></code></pre></div>
+<p>The full command replaces this experiment’s measurements and outputs.
+It requires no Java, BEAST, native SSE library, or network access. It
+starts with small polynomial-derivative and Gaussian-product checks. <a
+href="metadata.json">metadata.json</a> records dependency versions and
+source hashes; <a href="measurements.csv">measurements.csv</a> contains
+all final metrics and statuses. <a href="steps.csv.gz">steps.csv.gz</a>
+is the compressed accepted-timestep table. <a
+href="results.md">results.md</a> is regenerated from measurements; this
+README is the interpretation.</p>
+<h2 id="what-this-suggests-next">What this suggests next</h2>
+<p>The measured spatial improvement justifies further investigation. A
+useful next comparison would assess explicit versus implicit stepping on
+these same cases, and develop practical boundary conditions. Those
+decisions should precede local spatial adaptivity or full SSE
+integration. Uniform-grid refinement checks already provide a basis for
+investigating an adaptive spatial error estimate; this experiment does
+not implement grid selection.</p>
+<p>No production claim follows yet: the experiment omits E, branch
+reactions, variable rates, fossil events, real root priors, resolution
+transfers, arbitrary observation models and exact zeros. It also does
+not test an MCMC chain or establish a full-likelihood error
+tolerance.</p>
+</body>
+</html>
