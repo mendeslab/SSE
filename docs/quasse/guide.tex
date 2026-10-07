@@ -5,14 +5,13 @@
 \maketitle
 
 This guide introduces the meaning of the model and its likelihood quantities. It is intentionally
-selective. The companion \href{theory.pdf}{mathematical reference} supplies conventions and a worked
-derivation; \href{explorations.pdf}{explorations} discusses possible numerical improvements.
+selective. The companion \href{theory.pdf}{mathematical reference} supplies conventions and derivations; \href{explorations.pdf}{explorations} discusses possible numerical improvements.
 
 \section{Trait-dependent diversification}
 QuaSSE connects a continuously evolving trait to diversification \cite{fitzjohn2010}. A lineage
 with trait value $x$ splits at rate $\lambda(x)$ and dies at rate $\mu(x)$. The rates have units of
 inverse time. Trait dependence means that two lineages with different current traits can have
- different instantaneous diversification rates.
+different instantaneous diversification rates.
 
 For the constant-coefficient Brownian trait model, drift $v$ gives the mean trait change per unit
 time and diffusion $q$ gives its variance per unit time. Over a forward interval of length $s$,
@@ -47,6 +46,39 @@ Calculations proceed from observations toward ancestors, combining descendant co
 events. The final likelihood also depends on how the process starts and what sampling success is
 conditioned on.
 
+\section{Branches and observed nodes}
+The calculation works backward from the sampled tips. Along a branch, it propagates both the
+subtree contribution $D$ and the no-sample probability $E$, accounting for trait change and
+unobserved diversification. At each observed node it applies the corresponding event factor,
+then continues along the ancestral branch.
+
+A living tip contributes its sampling probability $\rho$ times its trait-observation density.
+A terminal fossil contributes the sampling rate $\psi$, its trait-observation density, and $E$
+at the fossil's age. The last factor sums over the unobserved continuation after that fossil:
+the lineage may die later or survive without producing another sample. Terminal in the
+sampled tree does not mean dead at the moment it was sampled.
+
+A sampled-ancestor fossil instead multiplies the contribution from its observed continuing
+subtree by $\psi$ and the observation density. There is no extra $E$ factor and no birth event.
+At an ordinary bifurcation, the two descendant contributions, propagated to the split age,
+are multiplied together and by the birth rate $\lambda(x)$. The theory document's
+node-calculation table states these rules and their density conventions precisely.
+BEAST represents a sampled ancestor with a zero-length observation leaf beside the continuing
+lineage; this representation still denotes just one sampling event.
+
+Although $E$ is mathematically the same function of trait and age throughout the tree, the
+implementation advances a separate copy alongside $D$ on each branch. One benefit is that $E$
+is available at the same integration times as $D$, without looking it up by interpolation in
+a separate trajectory. Living tips initialize $E$ at the present; terminal fossils obtain it
+from a separate calculation from the present to their age. Internal branches inherit a
+descendant's copy. The \href{theory.pdf}{theory document}, in its subsection on how branches
+carry the no-sample probability, describes the copying rules and their numerical consequences.
+
+This repeats some computation. Different branch histories can lead to slightly different
+numerical approximations to $E$ at the same age because their integration steps differ.
+These differences are numerical, not a dependence of the mathematical $E$ on which subtree
+was observed. Unlike $D$, $E$ is not multiplied by node observation factors.
+
 \section{Root, origin, and sampling conditions}
 Root conditioning starts at an ordinary split and requires the selected kind of sample on each
 side. Origin conditioning starts with one lineage at an earlier age and propagates the observed
@@ -80,7 +112,11 @@ priors, and a short run that varies origin and internal tree ages while preservi
 The continuous-trait model does not itself specify a finite trait grid or a timestep. The package
 approximates its likelihood using discretized trait space and numerical propagation. Domain width,
 spatial spacing, timestep, and boundary treatment can each affect the answer. Refining one does not
-eliminate errors due to the others.
+eliminate errors due to the others. The local birth--death--sampling reaction is solved
+analytically at each trait bin. Branch steps alternate half a reaction step, a full trait-transport
+step, and half a reaction step (Strang splitting). An exact reaction update does not make the
+combined numerical propagation exact; the theory document's section on reaction flow gives
+its derivation and limiting cases.
 
 The log-space exploration asks whether a different representation can support higher spatial order
 without negative represented likelihoods or no-sample probabilities. It is an investigation, not a
