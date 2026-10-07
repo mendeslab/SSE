@@ -1906,48 +1906,59 @@ public class QuaSSEDistributionTest {
         Assert.assertEquals(evaluate(distribution), evaluate(restored), 1e-12);
     }
 
-    // Reference likelihoods do not detect finite kernels that suppress diffusion. Check both
-    // layouts and cached thresholds; retain while diffusion is represented by sampled Gaussians.
+    // Underresolved but finite kernels must remain usable without flooding output. Existing
+    // likelihood references do not cover warning limits; keep while sampled kernels emit warnings.
     @Test
-    public void testKernelVarianceGuard() {
-        QuaSSEDistribution distribution = smallDistribution(0, .01, .005, "(sp1:0.1,sp2:0.1);", "Observed");
-        for (boolean jtransforms : new boolean[] {false, true}) {
-            for (boolean low : new boolean[] {false, true}) {
-                double dt = low ? .001 : .001 / 16;
-                distribution.minimumKernelVarianceRatioInput.setValue(.95, distribution);
-                distribution.populatefY(.005, false, true, low, jtransforms);
-                QuaSSEKernelException error = Assert.assertThrows(QuaSSEKernelException.class,
-                        () -> distribution.populatefY(dt, false, true, low, jtransforms));
-                Assert.assertTrue(error.getMessage().contains("ratio="));
-                Assert.assertTrue(error.getMessage().contains("resolution=" + (low ? "coarse" : "fine")));
-                Assert.assertTrue(error.getMessage().contains("dt=" + dt));
-                Assert.assertNotNull(error.getCause());
-                distribution.minimumKernelVarianceRatioInput.setValue(.1, distribution);
-                distribution.populatefY(dt, false, true, low, jtransforms);
-                distribution.minimumKernelVarianceRatioInput.setValue(.95, distribution);
-                Assert.assertThrows(QuaSSEKernelException.class,
-                        () -> distribution.populatefY(dt, false, true, low, jtransforms));
-                distribution.populatefY(.005, false, true, low, jtransforms);
+    public void testKernelVarianceWarning() {
+        java.io.ByteArrayOutputStream messages = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream previous = beast.base.core.Log.warning;
+        try (java.io.PrintStream capture = new java.io.PrintStream(messages)) {
+            beast.base.core.Log.warning = capture;
+            QuaSSEDistribution distribution = smallDistribution(0, .01, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+            for (boolean jtransforms : new boolean[] {false, true}) {
+                for (boolean low : new boolean[] {false, true}) {
+                    double dt = low ? .001 : .001 / 16;
+                    distribution.minimumKernelVarianceRatioInput.setValue(.95, distribution);
+                    distribution.populatefY(.005, false, true, low, jtransforms);
+                    distribution.populatefY(dt, false, true, low, jtransforms);
+                    distribution.minimumKernelVarianceRatioInput.setValue(.1, distribution);
+                    distribution.populatefY(dt, false, true, low, jtransforms);
+                    distribution.minimumKernelVarianceRatioInput.setValue(.95, distribution);
+                    distribution.populatefY(dt, false, true, low, jtransforms);
+                }
             }
+            Assert.assertEquals(3, messages.toString().lines()
+                    .filter(line -> line.startsWith("QuaSSE kernel-resolution warning:")).count());
+            Assert.assertTrue(messages.toString().contains("dt=0.001"));
+            Assert.assertTrue(messages.toString().contains("resolution=coarse"));
+            Assert.assertTrue(messages.toString().contains("suppressed"));
+            int length = messages.size();
+            distribution.initAndValidate();
+            distribution.populatefY(.001, true, true, true, false);
+            Assert.assertEquals("reinitialization must not reset the warning budget", length, messages.size());
+            for (double threshold : new double[] {0, -1, 1.01, Double.NaN, Double.POSITIVE_INFINITY}) {
+                distribution.minimumKernelVarianceRatioInput.setValue(threshold, distribution);
+                Assert.assertThrows(IllegalArgumentException.class,
+                        () -> distribution.populatefY(.005, false, true, true, false));
+            }
+            messages.reset();
+            QuaSSEDistribution shifted = smallDistribution(2, .002, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+            for (boolean jtransforms : new boolean[] {false, true}) {
+                // Mean -0.01 is a grid point; its squared displacement must not count as variance.
+                shifted.populatefY(.005, false, true, true, jtransforms);
+            }
+            Assert.assertEquals(2, messages.toString().lines()
+                    .filter(line -> line.startsWith("QuaSSE kernel-resolution warning:")).count());
+            QuaSSEDistribution unresolved = smallDistribution(0, .00001, .005,
+                    "(sp1:0.1,sp2:0.1);", "Observed");
+            Assert.assertTrue(Double.isFinite(evaluate(unresolved)));
+        } finally {
+            beast.base.core.Log.warning = previous;
         }
-        for (double threshold : new double[] {0, -1, 1.01, Double.NaN, Double.POSITIVE_INFINITY}) {
-            distribution.minimumKernelVarianceRatioInput.setValue(threshold, distribution);
-            Assert.assertThrows(IllegalArgumentException.class,
-                    () -> distribution.populatefY(.005, false, true, true, false));
-        }
-        QuaSSEDistribution shifted = smallDistribution(2, .002, .005, "(sp1:0.1,sp2:0.1);", "Observed");
-        for (boolean jtransforms : new boolean[] {false, true}) {
-            // Mean -0.01 lies on a grid point: its squared displacement must not count as variance.
-            Assert.assertThrows(QuaSSEKernelException.class,
-                    () -> shifted.populatefY(.005, false, true, true, jtransforms));
-        }
-        QuaSSEDistribution unresolved = smallDistribution(0, .00001, .005,
-                "(sp1:0.1,sp2:0.1);", "Observed");
-        Assert.assertThrows(QuaSSEKernelException.class, () -> evaluate(unresolved));
     }
 
     // Failed normalization must be diagnosed before division, even for direct utility callers.
-    // This complements the finite-variance guard and can go if kernel construction is replaced.
+    // This complements the variance warning and can go if kernel construction is replaced.
     @Test
     public void testKernelNormalizationFailure() {
         for (boolean jtransforms : new boolean[] {false, true}) {

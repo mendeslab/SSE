@@ -81,12 +81,13 @@ after editing these configuration values. Parameter proposals use BEAST's invali
 standalone callers should likewise notify through `State` before evaluating changed inputs.
 If drift/diffusion are supplied both on the likelihood and grid, they must reference the same objects.
 
-QuaSSE requires each sampled Gaussian kernel to retain at least 95% of its intended variance.
-Set `minimumKernelVarianceRatio` on the distribution to change this threshold (finite, in (0, 1]).
-Insufficient variance or invalid normalization throws `QuaSSEKernelException`, stopping evaluation
-rather than rejecting an MCMC proposal. Its message identifies the timestep and grid; finer spacing
-may help. Short branch segments can fail even with a large `dtMax`. This checks variance deficiency,
-not drift accuracy or total likelihood error. There is no automatic grid refinement or retry.
+QuaSSE warns when a sampled Gaussian kernel retains less than 95% of its intended variance,
+but continues with the same kernel. At most three kernel-resolution warnings are printed per
+likelihood instance, including across reinitialization. Set `minimumKernelVarianceRatio` to change
+the warning threshold (finite, in (0, 1]). Messages identify the timestep and grid; finer spacing
+may help. Short segments can be underresolved even with a large `dtMax`. This checks variance
+deficiency, not drift accuracy or total likelihood error. Invalid normalization or nonfinite kernel
+variance still throws `QuaSSEKernelException`. There is no automatic grid refinement or retry.
 
 ## Optional QuaSSE FFTW transforms (Linux)
 

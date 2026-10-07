@@ -7,6 +7,7 @@ import SSE.fft.FftwFFT;
 import beast.base.core.Description;
 import beast.base.inference.Distribution;
 import beast.base.core.Input;
+import beast.base.core.Log;
 import beast.base.inference.parameter.BooleanParameter;
 import beast.base.inference.parameter.IntegerParameter;
 import beast.base.inference.parameter.RealParameter;
@@ -31,10 +32,12 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
 
     public final Input<QuaSSEGrid> gridInput = new Input<>("grid", "Fine/coarse grid; omit for observation-derived defaults.");
     public final Input<Double> minimumKernelVarianceRatioInput = new Input<>("minimumKernelVarianceRatio",
-            "Minimum sampled/expected Gaussian variance, in (0, 1]; failure stops evaluation, not a proposal rejection.",
+            "Sampled/expected Gaussian variance warning threshold, in (0, 1]; underresolution does not stop evaluation.",
             0.95);
     protected QuaSSEGrid grid;
     private int gridRevision = -1;
+    // Limit diagnostics over this likelihood instance's lifetime, including reinitialization.
+    private int kernelResolutionWarnings;
 
     protected Tree tree;
     protected RealParameter quTraits;
@@ -195,8 +198,20 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
                 SSEUtils.makeNormalKernelInPlaceSSTJavaFftService(raw, changeInXNormalMean, changeInXNormalSd,
                         size, padding[0], padding[1], dx);
             }
-            checkKernelVariance(raw, size, padding, dx, jtransforms ? 1 : 2,
-                    currentDiffusion * aDt, minimumRatio);
+            double ratio = kernelVarianceRatio(raw, size, padding, dx, jtransforms ? 1 : 2,
+                    currentDiffusion * aDt);
+            // A finite normalized kernel remains usable even when spatial sampling loses variance.
+            // Warn without changing its weights or treating numerical accuracy as model support.
+            if (ratio < minimumRatio && kernelResolutionWarnings < 3) {
+                ++kernelResolutionWarnings;
+                Log.warning("QuaSSE kernel-resolution warning: sampled/expected variance=" + ratio
+                        + " < " + minimumRatio + "; dt=" + aDt + ", dx=" + dx
+                        + ", drift=" + currentDrift + ", diffusion=" + currentDiffusion
+                        + ", resolution=" + (lowRes ? "coarse" : "fine")
+                        + ". Continuing with this kernel; finer trait spacing may improve accuracy."
+                        + (kernelResolutionWarnings == 3
+                        ? " Further kernel-resolution warnings for this likelihood are suppressed." : ""));
+            }
         } catch (QuaSSEKernelException failure) {
             throw new QuaSSEKernelException(failure.getMessage() + "; minimumRatio=" + minimumRatio
                     + ", dt=" + aDt + ", dx=" + dx + ", drift=" + currentDrift
@@ -229,8 +244,8 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
 
     // Normalization preserves mass, not variance. Use signed offsets across the wrapped support,
     // then a second pass about the sampled mean to avoid cancellation in E[x²] - E[x]².
-    private void checkKernelVariance(double[] weights, int size, int[] padding, double dx, int stride,
-                                     double expectedVariance, double minimumRatio) {
+    private double kernelVarianceRatio(double[] weights, int size, int[] padding, double dx, int stride,
+                                     double expectedVariance) {
         if (!Double.isFinite(expectedVariance) || expectedVariance <= 0)
             throw new QuaSSEKernelException("Expected Gaussian variance must be positive and finite: "
                     + expectedVariance);
@@ -246,9 +261,10 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
             variance += weights[index] * delta * delta;
         }
         double ratio = variance / expectedVariance;
-        if (!Double.isFinite(variance) || !Double.isFinite(ratio) || ratio < minimumRatio)
-            throw new QuaSSEKernelException("Gaussian kernel has insufficient or non-finite variance: ratio="
+        if (!Double.isFinite(variance) || !Double.isFinite(ratio))
+            throw new QuaSSEKernelException("Gaussian kernel has non-finite variance: ratio="
                     + ratio + ", sampledVariance=" + variance + ", expectedVariance=" + expectedVariance);
+        return ratio;
     }
 
     /*

@@ -86,7 +86,7 @@ root. E is never normalized. Each terminal fossil independently integrates E fro
 to its age, reusing one workspace per resolution; no shared trajectory or interpolation is used.
 Work therefore grows with the sum of terminal-fossil ages divided by dtMax. Ancestor observations
 use E from the continuing subtree. All integrations use the same resolution switch and kernel
-guard; events exactly at tc use the coarse grid after transfer from the fine grid.
+checks; events exactly at tc use the coarse grid after transfer from the fine grid.
 
 For this default root/any-sample setting, the likelihood is L = ∫πDroot dx / ∫πλ(1−Eroot)² dx, with
 Droot including the ordinary root split and restored scales. The [mathematical
@@ -103,6 +103,9 @@ reaction/transport calculation remains approximate. Derivations are in
 [AnalyticSolution.tex](../../TODO/AnalyticSolution.tex) and
 [AnalyticSolution2.tex](../../TODO/AnalyticSolution2.tex).
 Invalid sampling proposals and identifiable zero-support states return −∞. Numerical failures
-(including underresolved Gaussian kernels, nonfinite reaction results, or lost normalization)
+(including invalid kernel normalization, nonfinite reaction results, or lost normalization)
 still stop evaluation with a diagnostic; they are not silently converted to rejected proposals.
 See [the validation report](../validation/FossilSampling.md) for numerical references and limits.
+
+Underresolved but finite Gaussian kernels produce at most three warnings per likelihood instance;
+evaluation continues without changing the kernel.
