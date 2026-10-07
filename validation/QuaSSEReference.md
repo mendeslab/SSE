@@ -1,18 +1,21 @@
 # Corrected diversitree reference
 
-The nonconstant-extinction references use diversitree 0.10-1 from the sibling checkout
-`LSU/diversitree`, commit `6e991378c226e4a3b283236f15c78fe51496a2a4`. This is a local
-correction, not an upstream diversitree release. It changes:
+The FFT references use diversitree 0.10-1 from the public
+[bredelings/diversitree fork](https://github.com/bredelings/diversitree),
+commit `7efd65f73068cb32fef3f5966a0e6b297fe2c893` on `strang`.
+This is not an upstream release. The stacked `fixes` bookmark supplies:
 
-- Kernel support to match the backward mean −drift × dt.
-- Boundary restoration to preserve nkr bins on the left and nkl on the right: convolution
-  reads input[i − offset]. C still restores only E; R restores E and D. The reference cases
+- Kernel support matching the backward mean −drift × dt.
+- Boundary restoration preserving nkr bins on the left and nkl on the right: convolution
+  reads input[i − offset]. C restores only E; R restores E and D. The reference cases
   have negligible boundary D, and both backends must agree before a value is used.
-- Padding to cover every 0 < dt ≤ dtMax, including the opposing-drift side's interior maximum.
-  Split-model extents still maximise over all parameter regimes.
-- Root conditioning divides D by the integral `sum(root.p * lambda * (1-E)^2) * dx`.
-  The old expression multiplied D by dx after division and introduced an extra dx² factor.
-  Conditioned log likelihoods increase by −2 log(dx); unconditioned values are unchanged.
+- Padding covering every 0 < dt ≤ dtMax, including the opposing-drift side's interior maximum.
+- Root conditioning using the integral `sum(root.p * lambda * (1-E)^2) * dx` as denominator.
+
+The child `strang` bookmark changes both FFT integrators to half-reaction / diffusion /
+half-reaction steps, matching SSE. The `fixes` version retains the original full-reaction /
+diffusion sequence. Comparisons with SSE must use `strang`; matching results establish
+implementation agreement at the selected discretization, not numerical convergence.
 
 Independent direct-convolution and support tests are in
 `diversitree/inst/tests/test-quasse-internal.R`. They fail against the unmodified installed
@@ -23,28 +26,24 @@ package and pass against the corrected package. These tests do not use Java as t
 From the SSE repository, with R, FFTW and GSL development dependencies available:
 
 ```sh
-mkdir -p build/diversitree-root-reference/library build/diversitree-root-reference/source
-git -C ../diversitree archive 6e991378c226e4a3b283236f15c78fe51496a2a4 | tar -x -C build/diversitree-root-reference/source
-R CMD INSTALL --library=build/diversitree-root-reference/library build/diversitree-root-reference/source
-Rscript validation/r_scripts/QuaSSENonconstantMuReference.R build/diversitree-root-reference/library
+git clone https://github.com/bredelings/diversitree.git build/diversitree-reference-repo
+mkdir -p build/diversitree-strang-reference/library build/diversitree-strang-reference/source
+git -C build/diversitree-reference-repo archive 7efd65f73068cb32fef3f5966a0e6b297fe2c893 | tar -x -C build/diversitree-strang-reference/source
+R CMD INSTALL --library=build/diversitree-strang-reference/library build/diversitree-strang-reference/source
+Rscript validation/r_scripts/QuaSSENonconstantMuReference.R build/diversitree-strang-reference/library
 ```
 
-The Git archive command only reads a jj-created commit; all change management remains in jj.
-Building from the archive keeps generated native files out of the source checkout. Installation
-does not replace the ordinary R package. The generator requires an explicit library path and
-prints the loaded package path, version, and a separately labelled expected source revision.
-Before calculating reference likelihoods, it checks that conditioning with constant lambda and
-zero extinction changes log likelihood by −log(lambda), independently of dx. This rejects the
-previous locally corrected package as well as ordinary installations with the normalization bug.
-It also checks asymmetric/all-timestep padding and compares
-both FFT backends with direct convolution at asymmetric boundaries. These checks reject an ordinary
-uncorrected installation even when its end-to-end likelihood comparisons would pass. The checks use
-the generator's existing dependencies, not the broader R test suite.
+An existing sibling checkout may replace the clone as the archive source. The exact commit,
+rather than the movable bookmark name, pins the source. Building the archive keeps generated
+files out of the checkout; the isolated library does not replace the ordinary R installation.
 
-Passing the preflight qualifies the checked behavior; it does not verify the installed package's
-exact source revision. Use the archive/build commands to obtain the expected revision. The printed
-commit is documented provenance for the reference build, not a detected property of an arbitrary
-installed package. The preflight preserves the C/R boundary-policy distinction described above.
+The generator requires an explicit library path. Its preflight checks root normalization,
+asymmetric/all-timestep padding, and Strang composition against independent pure-birth reaction
+formulas and direct convolution. It retains the C/R boundary-policy distinction. A package
+containing only `fixes`, without Strang splitting, must fail this preflight.
+
+The printed expected source revision documents provenance; it does not detect the revision
+of an arbitrary installed package. Use the pinned archive/build commands to obtain that revision.
 
 The generator retains the original zero-drift check and adds diffusion 0.004 and drift ±0.1,
 ±1 (diffusion 0.001). Every case uses constant λ and logistic μ, checks C/R agreement within
@@ -54,35 +53,26 @@ reused objects against these values within 10⁻⁹, and checks the grid coordin
 
 ## Strang reference
 
-QuaSSE now uses half-T/X/half-T rather than diversitree's original T/X sequence. Regenerate
-the 15-species test with:
+Regenerate the 15-species test with:
 
 ```sh
-Rscript validation/r_scripts/QuaSSEStrangReference.R build/diversitree-root-reference/library
+Rscript validation/r_scripts/QuaSSEStrangReference.R build/diversitree-strang-reference/library
 ```
 
-This uses the Java test's rounded tree/traits and original grid. It replaces only the R
-integrator in that R process with an explicit Strang composition of diversitree's existing
-T and X routines; neither the package installation nor its checkout is modified. The result
-is −52.116649459550381, compared with −52.116547992841099 for the original C T/X calculation
-on these inputs. This is an independent implementation comparison at fixed discretization,
-not a claim that the grid or timestep is converged. The old rounded −61.27245 reference also
-contained the historical root-normalization factor described above.
-
-The fossil implementation explicitly applies TreeParser `threshold="1e-5"` to the supplied
-QuaSSE examples and the rounded 15-species test. The generator now also extends the rounded
-terminal edges by their tiny implied ages, leaving internal ages fixed, and reports the adjusted
-reference **−52.116649450126559**. The Java test uses that value with the unchanged 1e−9 tolerance;
-the generator retains the historical unadjusted result above. This is a change to the input tree,
-not to the Strang method or its root conditioning.
+The generator uses both installed FFT implementations directly, without replacing R functions.
+It uses the Java test's rounded tree/traits and grid. TreeParser's `threshold="1e-5"`
+extends terminal edges by their tiny implied ages, leaving internal ages fixed; the generator
+applies the same adjustment. The adjusted R value is **−52.116649450126559**, used by Java
+with a 1e−9 tolerance. The script also prints the unadjusted value to distinguish input-tree
+rounding from integration differences.
 
 ## R tests
 
 Install missing test dependencies into the isolated library, without replacing normal packages:
 
 ```sh
-Rscript -e 'install.packages(c("testthat", "expm", "caper", "lubridate", "minqa"), lib="build/diversitree-root-reference/library", repos="https://cloud.r-project.org")'
-Rscript -e '.libPaths(c("build/diversitree-root-reference/library", .libPaths())); testthat::test_dir("../diversitree/inst/tests", filter="quasse", reporter="summary")'
+Rscript -e 'install.packages(c("testthat", "expm", "caper", "lubridate", "minqa"), lib="build/diversitree-strang-reference/library", repos="https://cloud.r-project.org")'
+Rscript -e '.libPaths(c("build/diversitree-strang-reference/library", .libPaths())); testthat::test_dir("../diversitree/inst/tests", filter="quasse", reporter="summary")'
 ```
 
 Omit `filter="quasse"` to run the full package suite. On the September 2026 R environment,

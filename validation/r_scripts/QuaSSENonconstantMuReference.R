@@ -1,7 +1,6 @@
-## Generate the diversitree reference value used by
-## QuaSSEDistributionTest.testTraitDependentExtinctionLikelihoodAgainstDiversitree.
-## Nonzero-drift references require the locally corrected diversitree, not the ordinary installation.
-## Expected source: ../diversitree, commit 6e991378c226e4a3b283236f15c78fe51496a2a4, version 0.10-1.
+## Generate references for QuaSSEDistributionTest.testTraitDependentExtinctionLikelihoodAgainstDiversitree.
+## Requires the fixes + Strang version at https://github.com/bredelings/diversitree (strang bookmark).
+## Expected source commit: 7efd65f73068cb32fef3f5966a0e6b297fe2c893, version 0.10-1.
 ## See validation/QuaSSEReference.md for the isolated build and exact invocation.
 
 args <- commandArgs(trailingOnly=TRUE)
@@ -61,26 +60,31 @@ for (padding in list(c(5L, 2L), c(2L, 5L))) {
   vars <- cbind(c(seq_len(ndat) / ndat, rep(0, nx-ndat)),
                 c(rev(seq_len(ndat)) / ndat, rep(0, nx-ndat)))
 
-  ## The C entry first propagates time. For pure birth, E'=E/h and D'=z*D/h^2,
-  ## with z=exp(lambda*dt), h=z*(1-E)+E. Convolve that result, zero unused bins,
-  ## then restore the dependency strips: nkr on the left, nkl on the right.
-  z <- exp(.1 * .1)
+  ## Pure birth has E'=E/h and D'=z*D/h^2, where h=z*(1-E)+E.
+  ## Independently compose half reaction / direct convolution / half reaction.
+  ## Restore nkr bins on the left and nkl on the right during convolution.
+  z <- exp(.1 * .1/2)
   h <- z * (1-vars[,1]) + vars[,1]
   vars.t <- cbind(vars[,1] / h, z * vars[,2] / h^2)
   expected <- apply(vars.t, 2, quasse.direct.convolution, kernel=kernel)
   boundary <- c(seq_len(nkr), ndat-seq_len(nkl)+1L)
   expected[(ndat+1L):nx,] <- 0
   expected[boundary,1] <- vars.t[boundary,1]
+  h <- z * (1-expected[,1]) + expected[,1]
+  expected.c <- cbind(expected[,1] / h, z * expected[,2] / h^2)
   actual.c <- .Call(diversitree:::r_do_integrate, ptr, vars, rep(.1, ndat),
                     rep(0, ndat), drift, .01, 1L, .1, padding)
-  if (!all(is.finite(actual.c)) || max(abs(actual.c-expected)) > 1e-12)
-    stop("Reference preflight: fftC lacks corrected asymmetric E boundary restoration.")
+  if (!all(is.finite(actual.c)) || max(abs(actual.c-expected.c)) > 1e-12)
+    stop("Reference preflight: fftC lacks Strang splitting or corrected asymmetric E boundaries.")
 
   ## Preserve the existing backend distinction: fftR restores both E and D, fftC only E.
   expected[boundary,2] <- vars.t[boundary,2]
-  actual.r <- diversitree:::fftR.propagate.x(vars.t, nx, fft(kernel), nkl, nkr)
-  if (!all(is.finite(actual.r)) || max(abs(actual.r-expected)) > 1e-12)
-    stop("Reference preflight: fftR lacks corrected asymmetric E/D boundary restoration.")
+  h <- z * (1-expected[,1]) + expected[,1]
+  expected.r <- cbind(expected[,1] / h, z * expected[,2] / h^2)
+  actual.r <- diversitree:::quasse.integrate.fftR(vars, rep(.1, ndat), rep(0, ndat),
+                                               drift, .01, 1L, .1, nx, ndat, dx, nkl, nkr)
+  if (!all(is.finite(actual.r)) || max(abs(actual.r-expected.r)) > 1e-12)
+    stop("Reference preflight: fftR lacks Strang splitting or corrected asymmetric E/D boundaries.")
 }
 
 tree <- ape::read.tree(text="(sp1:0.1,sp2:0.1);")
@@ -128,7 +132,7 @@ cat("constant mu(0) log likelihood:", format(log.likelihood.constant.mu, digits=
 ## This guards against legitimising a shared boundary artefact by comparing only Java with one backend.
 cases <- rbind(c(0, .001), c(0, .004), c(-.1, .001), c(.1, .001), c(-1, .001), c(1, .001))
 cat("reference library:", find.package("diversitree"), "\n")
-cat("expected reference source commit: 6e991378c226e4a3b283236f15c78fe51496a2a4\n")
+cat("expected reference source commit: 7efd65f73068cb32fef3f5966a0e6b297fe2c893\n")
 cat("reference preflight: passed; installed source revision is not verified\n")
 cat("drift diffusion left right xLoMin xHiMin logP\n")
 for (i in seq_len(nrow(cases))) {

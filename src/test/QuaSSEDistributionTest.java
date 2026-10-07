@@ -1580,19 +1580,22 @@ public class QuaSSEDistributionTest {
     /*
      * The full likelihood must support trait-dependent extinction, beyond merely populating its
      * rate arrays. The reference comes from validation/r_scripts/QuaSSENonconstantMuReference.R.
-     * Corrected diversitree commit 5af1bf7bef1742512f3bc84beaf0e6115fc08e42; C/R and wider grids agree.
+     * Uses https://github.com/bredelings/diversitree, fixes + strang (not upstream),
+     * commit 7efd65f73068cb32fef3f5966a0e6b297fe2c893: corrected padding, boundaries,
+     * root quadrature, and half-T/X/half-T integration. R/C and wider grids agree.
+     * This compares implementations at matched discretization, not convergence to the exact likelihood.
      */
     @Test
     public void testTraitDependentExtinctionLikelihoodAgainstDiversitree() {
         QuaSSEDistribution distribution = smallDistribution(0.0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
         // drift, diffusion, left, right, xLo minimum, log likelihood (Observed prior).
         double[][] references = {
-                {0, .001, 3, 3, -.60, 2.7770738626454392},
-                {0, .004, 5, 5, -.58, 2.7709935261296716},
-                {-.1, .001, 3, 3, -.60, 2.7770706614684051},
-                {.1, .001, 3, 3, -.60, 2.7770763257023154},
-                {-1, .001, 2, 3, -.61, 2.7626916689257088},
-                {1, .001, 3, 2, -.61, 2.7631155125293141}
+                {0, .001, 3, 3, -.60, 2.777073862651771},
+                {0, .004, 5, 5, -.58, 2.7709935250385511},
+                {-.1, .001, 3, 3, -.60, 2.7770705919307579},
+                {.1, .001, 3, 3, -.60, 2.7770763952570698},
+                {-1, .001, 2, 3, -.61, 2.7626852535280668},
+                {1, .001, 3, 2, -.61, 2.7631220925249735}
         };
         for (double[] reference : references) {
             QuaSSEDistribution fresh = smallDistribution(reference[0], reference[1], .005,
@@ -2031,7 +2034,7 @@ public class QuaSSEDistributionTest {
             Assert.assertSame(ruler, distribution.getX(true));
         }
         distribution.gridInput.get().diffusionInput.get().setValue(.001);
-        Assert.assertEquals(2.7770738626454392, evaluate(distribution), 1e-9);
+        Assert.assertEquals(2.777073862651771, evaluate(distribution), 1e-9);
         distribution.gridInput.get().dtMaxInput.setValue(.01, distribution.gridInput.get());
         // Configuration overrides take effect on explicit grid reinitialization, not during MCMC.
         Assert.assertEquals(.005, distribution.gridInput.get().getDtMax(), 0.0);

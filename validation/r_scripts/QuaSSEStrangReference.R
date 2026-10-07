@@ -1,4 +1,5 @@
-## Reproduce the rounded 15-species Java test with Strang composition of corrected diversitree.
+## Reproduce the rounded 15-species Java test with the fixes + Strang diversitree fork.
+## https://github.com/bredelings/diversitree, commit 7efd65f73068cb32fef3f5966a0e6b297fe2c893.
 ## Usage: Rscript validation/r_scripts/QuaSSEStrangReference.R ISOLATED_LIBRARY
 ## Build the corrected package as documented in validation/QuaSSEReference.md.
 args <- commandArgs(trailingOnly=TRUE)
@@ -17,21 +18,12 @@ traits <- setNames(c(-.05384594,-.37091896,.59169195,.14947513,.46156791,
                   c("sp1","sp2","sp5","sp6","sp7","sp8","sp9","sp10","sp11",
                     "sp12","sp13","sp14","sp15","sp16","sp17"))
 pars <- c(.1,.2,0,2.5,.03,0,.01)
-## Override only this process's R integrator; do not modify the installed package or checkout.
-strang <- function(vars,lambda,mu,drift,diffusion,nstep,dt,nx,ndat,dx,nkl,nkr) {
-  fy <- fft(diversitree:::fftR.make.kern(-dt*drift,sqrt(dt*diffusion),nx,dx,nkl,nkr))
-  for (i in seq_len(nstep)) {
-    vars <- diversitree:::fftR.propagate.t(vars,lambda,mu,dt/2,ndat)
-    vars <- diversitree:::fftR.propagate.x(vars,nx,fy,nkl,nkr)
-    vars <- diversitree:::fftR.propagate.t(vars,lambda,mu,dt/2,ndat)
-  }
-  vars
+for (method in c("fftR", "fftC")) {
+  lik <- make.quasse(tr,traits,.02,sigmoid.x,constant.x,
+                    list(nx=1024L,dx=.01027592,xmid=.6813353,tc=1.37732,
+                         dt.max=.005,r=4L,w=5,method=method))
+  cat(method, "Strang log likelihood:",format(lik(pars),digits=17),"\n")
 }
-assignInNamespace("quasse.integrate.fftR",strang,"diversitree")
-lik <- make.quasse(tr,traits,.02,sigmoid.x,constant.x,
-                  list(nx=1024L,dx=.01027592,xmid=.6813353,tc=1.37732,
-                       dt.max=.005,r=4L,w=5,method="fftR"))
-cat("Strang log likelihood:",format(lik(pars),digits=17),"\n")
 
 ## Match TreeParser threshold=1e-5: extend terminal edges to the latest tip without moving
 ## internal nodes. Keep the unadjusted result above as the historical rounded-tree reference.
@@ -40,7 +32,9 @@ ages <- max(depths[seq_len(length(tr$tip.label))]) - depths[seq_len(length(tr$ti
 stopifnot(all(ages >= 0), all(ages < 1e-5))
 terminal <- which(tr$edge[,2] <= length(tr$tip.label))
 tr$edge.length[terminal] <- tr$edge.length[terminal] + ages[tr$edge[terminal,2]]
-lik <- make.quasse(tr,traits,.02,sigmoid.x,constant.x,
-                  list(nx=1024L,dx=.01027592,xmid=.6813353,tc=1.37732,
-                       dt.max=.005,r=4L,w=5,method="fftR"))
-cat("Strang log likelihood, threshold-adjusted tips:",format(lik(pars),digits=17),"\n")
+for (method in c("fftR", "fftC")) {
+  lik <- make.quasse(tr,traits,.02,sigmoid.x,constant.x,
+                    list(nx=1024L,dx=.01027592,xmid=.6813353,tc=1.37732,
+                         dt.max=.005,r=4L,w=5,method=method))
+  cat(method, "Strang log likelihood, threshold-adjusted tips:",format(lik(pars),digits=17),"\n")
+}
