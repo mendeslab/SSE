@@ -2111,8 +2111,10 @@ public class QuaSSEDistributionTest {
                 Assert.assertEquals(expected, evaluate(distribution), 1e-12);
             }
             // Two zero-length leaves are ambiguous ancestor observations in BEAST's encoding.
-            Assert.assertThrows(IllegalArgumentException.class,
+            // BEAST's initByName wraps validation exceptions in RuntimeException.
+            RuntimeException error = Assert.assertThrows(RuntimeException.class,
                     () -> smallDistribution(0, .001, 0, "(sp1:0.0,sp2:0.0);", prior));
+            Assert.assertTrue(error.getMessage().contains("Ancestor observations must have positive age"));
         }
     }
 
