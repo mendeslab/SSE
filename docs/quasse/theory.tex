@@ -1,0 +1,90 @@
+\documentclass[11pt]{article}
+\input{quasse/shared/preamble}
+\title{QuaSSE: mathematical conventions and derivations}
+\begin{document}
+\maketitle
+
+This selective reference records mathematical reasoning that can be consulted and extended during
+development. Its initial worked result is the trait generator, not a complete derivation of the
+QuaSSE likelihood. The \href{guide.pdf}{guide} gives an introductory account of the model.
+
+\section{Conventions and conditional quantities}\label{sec:conventions}
+The latent trait is $x\in\mathbb{R}$. Forward elapsed time is $s$; age before the present is $t$.
+Birth and death rates are $\lambda(x)$ and $\mu(x)$. Fossil sampling is non-removing with scalar
+rate $\psi\geq0$, and present sampling has scalar probability $\rho\in[0,1]$. Sampling events
+and trait observations are distinct: $g(y\mid x)$ denotes the observation density.
+
+Conditional on a single lineage at age $t$ with trait $x$, define $E(x,t)$ as the probability of no
+sampled descendants between that time and the present, including no fossil samples. Consequently
+$0\leq E\leq1$ and $E(x,0)=1-\rho$. Define $D(x,t)$, for a specified observed descendant subtree,
+as its likelihood contribution conditional on that lineage and trait, before any whole-tree root
+conditioning. This contribution integrates over unobserved events and trait histories. It is
+nonnegative but need not be at most one. Node ordering and whole-tree conditioning conventions
+must additionally be specified when deriving a full likelihood; they are not fixed by this local
+definition alone.
+
+These meanings and the living-tip boundary $D(x,0)=\rho g(y\mid x)$ follow the conventions described
+in the \href{../../examples/QuaSSE_fossils_fixed_tree.md}{package fossil guide}. They concern the
+unscaled mathematical quantities: numerical normalization of $D$ does not change its definition,
+and $E$ is a probability rather than a freely rescalable likelihood.
+
+\section{Brownian trait generator}\label{sec:generator}
+Assume constant drift $v\in\mathbb{R}$ and constant variance rate $q>0$, on the unbounded trait line.
+The forward process, conditional on $X_0=x$, is
+\begin{equation}\label{eq:trait-process}
+ X_s=x+vs+\sqrt{q}\,W_s,
+\end{equation}
+where $W_s$ is standard Brownian motion. Drift has units trait/time and $q$ has units
+trait$^2$/time. In the package, the input named \texttt{diffusion} is $q$.
+
+For a smooth function $f$, define the backward transition operator
+$P_s f(x)=\expect[f(X_s)\mid X_0=x]$. For the following elementary derivation, it suffices to take
+$f$ three times continuously differentiable with bounded derivatives. For a small interval
+$\delta>0$, write $Z=v\delta+\sqrt{q\delta}\,\xi$ with $\xi$ standard normal. Taylor expansion gives
+\begin{align*}
+ \expect[f(x+Z)]&=f(x)+f'(x)\expect[Z]
+                   +\tfrac12 f''(x)\expect[Z^2]+O(\expect[|Z|^3]),\\
+ \expect[Z]&=v\delta,\qquad
+ \expect[Z^2]=q\delta+v^2\delta^2,\qquad
+ \expect[|Z|^3]=O(\delta^{3/2}).
+\end{align*}
+Subtracting $f(x)$, dividing by $\delta$, and taking the limit proves
+\begin{equation}\label{eq:generator}
+ \traitop f:=\lim_{\delta\downarrow0}\frac{P_\delta f-f}{\delta}
+       =v f_x+\frac q2 f_{xx}.
+\end{equation}
+This is an infinitesimal identity under the stated assumptions, not a numerical error bound.
+
+\section{Backward likelihood transport and forward densities}
+For trait-only propagation of a descendant contribution $f$, let $u(x,t)=P_t f(x)$. Extending the
+ancestral-to-descendant interval increases $t$; the Markov property and
+Equation~\eqref{eq:generator} give
+\begin{equation}\label{eq:backward-transport}
+ u_t=\traitop u=v u_x+\frac q2 u_{xx},\qquad u(x,0)=f(x).
+\end{equation}
+For an already positive-aged descendant, $t$ in this trait-only formula may be replaced by the
+elapsed branch duration. The time-homogeneous operator is unchanged. Full likelihood propagation
+also includes diversification and sampling terms, which are outside this derivation.
+
+By contrast, the forward density $p(x,s)$ of the evolving trait obeys the adjoint equation
+\begin{equation}\label{eq:forward-density}
+ p_s=-v p_x+\frac q2 p_{xx}.
+\end{equation}
+Indeed, integration by parts in $\int p\traitop f\,dx$, with vanishing boundary terms, moves the
+first derivative with a minus sign and the second derivative with a plus sign. The different drift
+signs reflect different quantities, not conflicting conventions for Brownian motion.
+
+As a check, take $f(x)$ to be a Gaussian profile with center $m$ and variance $a>0$. Then $P_t f$
+has center $m-vt$ and variance $a+qt$, with the same integrated weight. A forward Gaussian density
+instead moves its center to $m+vs$. The former convention is used in the
+\href{../../validation/log_pde/README.md}{log-space transport experiments}.
+
+The unbounded-domain calculation does not justify any particular finite-grid boundary rule.
+Spatial discretization, time integration, and boundary truncation require their own analysis.
+The original QuaSSE model is described by FitzJohn~\cite{fitzjohn2010}; the derivation here states
+its constant-coefficient trait convention explicitly rather than attributing fossil extensions to
+that paper.
+
+\bibliographystyle{plain}
+\bibliography{references}
+\end{document}

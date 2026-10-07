@@ -1,0 +1,86 @@
+\documentclass[11pt]{article}
+\input{quasse/shared/preamble}
+\title{QuaSSE: mathematical and numerical explorations}
+\begin{document}
+\maketitle
+
+This document holds developing ideas and reasoning worth revisiting. Its first topic is an
+experimental representation for trait transport; it is not an implemented replacement for the
+production QuaSSE integrator. Established conventions are in the \href{theory.pdf}{theory document}.
+
+\section{Higher spatial order through log-space evolution}\label{sec:log-space}
+\subsection{Motivation and status}
+One motivation is to improve spatial order without having to prevent negative $D$ or $E$ values
+produced by an ordinary-scale discretization. High-order spatial formulas need not preserve
+positivity. Evolving a real log value instead represents a positive quantity on exponentiation,
+so spatial formulas can be investigated without imposing positivity on their ordinary-scale output.
+A second motivation is handling likelihoods spanning a large dynamic range.
+
+This is a representation benefit, not a guarantee of stability or accuracy. For $E$, positivity is
+only part of the constraint: $E\leq1$ must also hold. Moreover, exactly zero values are meaningful,
+and a finite real logarithm cannot represent them. Existing experiments concern $\log D$ transport;
+they do not yet demonstrate a method for evolving the complete coupled $D,E$ system.
+
+\subsection{A worked transformation}
+Assume $D(x,t)>0$, once differentiable in time and twice in trait, and suppose for this calculation
+that it obeys trait-only transport on an interval where these assumptions hold:
+\begin{equation}\label{eq:D-transport}
+ D_t=vD_x+\frac q2 D_{xx}.
+\end{equation}
+Here $v$ and $q$ use the backward convention in the theory document. Setting $h=\log D$ gives
+\begin{equation}\label{eq:log-identities}
+ D_t=e^h h_t,\qquad D_x=e^h h_x,\qquad
+ D_{xx}=e^h(h_{xx}+h_x^2).
+\end{equation}
+Substitution and division by $e^h>0$ prove the equivalent equation
+\begin{equation}\label{eq:log-transport}
+ h_t=v h_x+\frac q2\bigl(h_{xx}+h_x^2\bigr).
+\end{equation}
+The transformation makes a linear transport equation nonlinear. It does not introduce an
+approximation at the continuous level; approximations enter when solving it numerically.
+A fixed additive offset in $h$ has no effect on this equation. A time-dependent offset would require
+an extra time-derivative term and cannot be silently discarded.
+
+For any finite computed real value $h$, $e^h$ is positive in exact arithmetic regardless of whether
+the spatial stencil preserves positivity on ordinary-scale inputs. Floating-point exponentiation
+can still underflow or overflow. Oscillations, inaccurate values, or failed time integration remain
+possible. The same chain-rule identities apply to $k=\log E$ where $E>0$, but the full equation for
+$E$ also has reaction terms. In particular, $E(x,0)=0$ when $\rho=1$, and ensuring $k\leq0$ is a
+separate issue. A complete method must address these cases before claiming probability preservation.
+
+\subsection{What the existing experiments establish}
+The \href{../../validation/log_pde/README.md}{spatial study} compares second-, fourth-, and
+sixth-order centered formulas for log transport on Gaussian and non-Gaussian profiles, including
+propagation after a node merge. The tested refinements exhibit higher spatial order for the
+non-Gaussian cases and can reduce the number of grid points needed for measured accuracy targets.
+Gaussian logs alone are inadequate spatial tests: their quadratic form is differentiated exactly
+by these stencils in exact arithmetic.
+
+The experiments supply analytic exterior values at every time-integration stage. That isolates
+interior spatial behavior while leaving practical boundary treatment unresolved. They omit reaction
+and $E$ propagation, and do not establish superiority over the production convolution integrator.
+The \href{../../validation/log_pde/temporal/README.md}{temporal study} compares explicit and implicit
+solvers at measured error targets. Its findings depend on problem, grid, tolerances, and the extent
+of the parameter search; they do not identify one uniformly best solver. Detailed measurements and
+reproduction instructions remain in those reports.
+
+\subsection{Alternatives and questions that remain}
+Ordinary-scale evolution avoids logarithmic singularities but needs a suitable treatment of
+positivity when using higher-order discretizations. Log-space evolution changes that tradeoff:
+positivity of the represented value is automatic for finite logs, while nonlinear evolution and
+zero values need attention. Existing convolution-based transport is another relevant comparison;
+these studies have not made a matched full-likelihood comparison against it.
+
+The remaining questions concern practical boundaries, coupling to diversification and sampling,
+handling exactly zero support, preserving $E\leq1$, and performance on full trees. Narrow profiles
+also raise time-integration costs even when their spatial representation is simple. These are open
+questions, not a prescribed implementation sequence.
+
+\subsection{Development of the question}
+The spatial investigation established useful higher-order behavior in controlled transport tests.
+A subsequent temporal investigation broadened the solver and tolerance comparison; it showed why
+an apparent preference among solvers can depend on search coverage. The retained conclusion is to
+consider spatial and temporal costs together. No production replacement has been selected here.
+As this question settles, its established mathematical treatment belongs in the theory document;
+this exploration can retain a concise account of the choice and meaningful alternatives.
+\end{document}

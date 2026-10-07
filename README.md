@@ -5,6 +5,11 @@ SSE is a [BEAST2](http://beast2.org) package for analyses employing SSE-type mod
 The SSE package currently implements a well calibrated ClaSSE model (Goldberg and Igic, 2012), with support for its submodels BiSSE, MuSSE and GeoSSE.
 We are finalizing the implementation of a stochastic character mapper as in Freyman and Hohna (2018).
 
+## Mathematical documentation
+
+See [the mathematical documentation](docs/README.md) for the QuaSSE guide, derivations,
+and ongoing numerical explorations, including build instructions and contribution conventions.
+
 ## Command-line build with BEAST 2.7
 
 Use JDK 17 or newer and Ant. Point `BEAST2_HOME` at a BEAST 2.7.8 installation

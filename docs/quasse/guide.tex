@@ -1,0 +1,66 @@
+\documentclass[11pt]{article}
+\input{quasse/shared/preamble}
+\title{QuaSSE: a guide to the model}
+\begin{document}
+\maketitle
+
+This guide introduces the meaning of the model and its likelihood quantities. It is intentionally
+selective. The companion \href{theory.pdf}{mathematical reference} supplies conventions and a worked
+derivation; \href{explorations.pdf}{explorations} discusses possible numerical improvements.
+
+\section{Trait-dependent diversification}
+QuaSSE connects a continuously evolving trait to diversification \cite{fitzjohn2010}. A lineage
+with trait value $x$ splits at rate $\lambda(x)$ and dies at rate $\mu(x)$. The rates have units of
+inverse time. Trait dependence means that two lineages with different current traits can have
+ different instantaneous diversification rates.
+
+For the constant-coefficient Brownian trait model, drift $v$ gives the mean trait change per unit
+time and diffusion $q$ gives its variance per unit time. Over a forward interval of length $s$,
+the increment has mean $vs$ and variance $qs$. Thus $q$ is not the increment's standard deviation:
+that is $\sqrt{qs}$. Both daughters inherit the parental trait at a split in this model, then evolve
+independently conditional on that starting value.
+
+\section{What is observed?}
+A living lineage may be sampled at the present with probability $\rho$. Fossil observations occur
+at rate $\psi$ per lineage per unit time. In the package's non-removing sampling model, observation
+does not itself kill the lineage. A \emph{terminal fossil} has no observed continuation, although
+its lineage may continue biologically. A \emph{sampled ancestor} has an observed continuing subtree.
+Neither type should be confused with an ordinary speciation event.
+
+Trait observations need not specify the latent trait exactly. An observation model $g(y\mid x)$
+connects measured value $y$ with trait $x$. The sampling process and observation density contribute
+to the likelihood along with the tree. The existing
+\href{../../examples/QuaSSE_fossils_fixed_tree.md}{fixed-tree fossil example} explains the supported
+BEAST representation and supplies runnable inputs.
+
+\section{Two quantities passed through the calculation}
+With $t$ denoting age before the present, $E(x,t)$ is the probability that a lineage at that age and
+trait leaves no samples under the specified observation process. No samples includes both living
+and fossil observations, so $E$ is not simply the probability of biological extinction.
+
+$D(x,t)$ describes the likelihood contribution of a particular observed descendant subtree,
+conditional on the ancestral lineage's trait and age. Continuous observations make it a density
+contribution rather than a probability bounded by one. At the present, $E(x,0)=1-\rho$; a sampled
+living tip with observed trait $y$ contributes $D(x,0)=\rho g(y\mid x)$.
+
+Calculations proceed from observations toward ancestors, combining descendant contributions at
+events. Converting these contributions into a whole-tree likelihood also requires specifying the
+starting trait treatment and what events are conditioned on. For example, starting at a root split
+is different from starting with a single lineage before that split. This guide does not imply that
+all such alternatives are implemented; the fossil example documents its root-conditioned analysis.
+
+\section{Model versus numerical approximation}
+The continuous-trait model does not itself specify a finite trait grid or a timestep. The package
+approximates its likelihood using discretized trait space and numerical propagation. Domain width,
+spatial spacing, timestep, and boundary treatment can each affect the answer. Refining one does not
+eliminate errors due to the others.
+
+The log-space exploration asks whether a different representation can support higher spatial order
+without negative represented likelihoods or no-sample probabilities. It is an investigation, not a
+new production solver or a general accuracy guarantee. Existing
+\href{../../validation/FossilSampling.md}{fossil validation} and
+\href{../../validation/QuaSSEReference.md}{reference comparisons} contain numerical evidence.
+
+\bibliographystyle{plain}
+\bibliography{references}
+\end{document}
