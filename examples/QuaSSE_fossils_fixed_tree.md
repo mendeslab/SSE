@@ -2,9 +2,11 @@
 
 [QuaSSE_fossils_fixed_tree.xml](QuaSSE_fossils_fixed_tree.xml) evaluates the joint likelihood of
 continuous observations and a fixed dated tree, conditional on the root split having sampled
-descendants on both sides. Samples may be living or fossil on either side. There is no stem
-above the root. The 20-step MCMC illustrates inference of sampling parameters; it is not a
-converged analysis or a demonstration of tree inference.
+descendants on both sides. Samples may be living or fossil on either side. This example uses the
+default `conditionOnRoot=true` and `conditionOnSampling=true`, with no stem above the root. The
+[origin example](QuaSSE_origin.md) shows a single-lineage start and ancestral fossils before the
+first split. The 20-step MCMC illustrates inference of sampling parameters; it is not a converged
+analysis or a demonstration of tree inference.
 
 Build and run from a directory where BEAST may write its log and state files:
 
@@ -40,12 +42,13 @@ The Newick tree is `(A:2,(F:0.5,(S:0,B:0.75):0.25):1);`:
 | Ordinary internal split | 1 |
 | Root split | 2 |
 
-BEAST represents an ancestor observation as a leaf on an exactly zero-length branch from a
-binary sampling-event node. The other child is the continuing lineage. The API calls the parent
-`isFake()` and the observation leaf `isDirectAncestor()`; the observation event is real.
-Every sample label, including S, must have a continuous observation. Unary nodes, multifurcations,
-ambiguous pairs of ancestor leaves, present-day ancestor events, and a sampling-event root are
-not supported. No tree operators should be added to this fixed-tree example.
+BEAST represents an ancestor observation as a leaf on an exactly zero-length branch from a binary
+sampling-event node. The other child is the continuing lineage. The API calls the parent `isFake()`
+and the observation leaf `isDirectAncestor()`; the observation event is real. Every sample label,
+including S, must have a continuous observation. Unary nodes, multifurcations, ambiguous pairs of
+ancestor leaves, and present-day ancestor events are not supported. A sampling-event root is
+supported only in origin mode, not in this example. No tree operators should be added to this
+fixed-tree example.
 
 **At least one genuinely living sample is required.** BEAST measures heights from the youngest
 sample. A fossil-only tree can therefore appear to have a zero-height tip; that does not make
@@ -85,12 +88,15 @@ Work therefore grows with the sum of terminal-fossil ages divided by dtMax. Ance
 use E from the continuing subtree. All integrations use the same resolution switch and kernel
 guard; events exactly at tc use the coarse grid after transfer from the fine grid.
 
-The root likelihood is L = ∫πDroot dx / ∫πλ(1−Eroot)² dx, with Droot including the ordinary
-root split and restored scales. The example uses `Flat`; historical `Observed` weighting remains
-available and is proportional to Droot, making it data-dependent. Equal-weight root sums use
-bin centers. The validation grids keep the outer bin boundaries fixed at ±3.75; grid defaults
-and parameter-dependent padding can otherwise change that domain. Flat does not create a fixed
-biological prior domain across arbitrary parameter changes.
+For this default root/any-sample setting, the likelihood is L = ∫πDroot dx / ∫πλ(1−Eroot)² dx, with
+Droot including the ordinary root split and restored scales. The [mathematical
+reference](../docs/quasse/theory.tex) explains the starting-trait convention and the
+origin/living-sample alternatives; see [build instructions](../docs/README.md) for its PDF. The
+example uses `Flat`; historical `Observed` weighting remains available and is proportional to Droot,
+making it data-dependent. Equal-weight root sums use bin centers. The validation grids keep the
+outer bin boundaries fixed at ±3.75; grid defaults and parameter-dependent padding can otherwise
+change that domain. Flat does not create a fixed biological prior domain across arbitrary parameter
+changes.
 
 The local reaction has an exact analytic solution without trait transport; the combined Strang
 reaction/transport calculation remains approximate. Derivations are in

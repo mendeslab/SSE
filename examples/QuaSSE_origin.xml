@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beast version="2.7"
+       namespace="beast.base.core:beast.base.inference:beast.base.inference.distribution:beast.base.inference.operator:beast.base.evolution.tree:SSE">
+  <!-- Short origin-conditioned example. S at age 2 is a sampled-ancestor root;
+       the ordinary split starts at age 1. Scaling the tree moves only ordinary
+       internal nodes, retaining the fossil date and its zero-length branch. -->
+  <run id="mcmc" spec="MCMC" chainLength="20">
+    <state id="state" storeEvery="10">
+      <stateNode id="origin" spec="parameter.RealParameter" lower="0.0">3.0</stateNode>
+      <stateNode id="tree" spec="TreeParser" IsLabelledNewick="true" adjustTipHeights="false"
+            threshold="1e-5" singlechild="false" binarizeMultifurcations="false"
+            newick="(S:0,(A:1,B:1):1);">
+        <!-- Explicit labels also keep BEAST's stored tree ordering consistent after rejection. -->
+        <taxonset spec="beast.base.evolution.alignment.TaxonSet">
+          <taxon id="A" spec="beast.base.evolution.alignment.Taxon"/>
+          <taxon id="B" spec="beast.base.evolution.alignment.Taxon"/>
+          <taxon id="S" spec="beast.base.evolution.alignment.Taxon"/>
+        </taxonset>
+      </stateNode>
+      <stateNode id="psi" spec="parameter.RealParameter" lower="0.0">0.08</stateNode>
+      <stateNode id="rho" spec="parameter.RealParameter" lower="0.0" upper="1.0">0.7</stateNode>
+    </state>
+    <distribution id="posterior" spec="CompoundDistribution">
+      <distribution id="prior" spec="CompoundDistribution">
+        <distribution spec="Prior" x="@origin"><distr spec="Uniform" lower="0.0" upper="4.0"/></distribution>
+        <distribution spec="Prior" x="@psi"><distr spec="Exponential" mean="0.1"/></distribution>
+        <distribution spec="Prior" x="@rho"><distr spec="Uniform" lower="0.0" upper="1.0"/></distribution>
+      </distribution>
+      <distribution id="likelihood" spec="QuaSSEDistribution" priorProbAtRootType="Flat"
+                    tree="@tree" conditionOnRoot="false" origin="@origin" conditionOnSampling="true"
+                    fossilSamplingRate="@psi" presentSamplingProbability="@rho"
+                    fftBackend="fftw" integrationBackend="native">
+        <q2mLambda spec="LogisticFunction" curveYBaseValue="0.2" curveMaxY="0.3"
+                   sigmoidMidpoint="0.0" logisticGrowthRate="1.0"/>
+        <q2mMu spec="ConstantLinkFn" yV="0.1"/>
+        <q2d spec="NormalCenteredAtObservedLinkFn" sdNormalQuTrValue="0.1">
+          <quTraits id="observations" spec="parameter.RealParameter" keys="A B S" value="-0.2 0.1 0.0"/>
+        </q2d>
+        <!-- 7679 useful bins, including preserved boundary strips, cover [-3.75,3.75].
+             Equal-weight midpoint integration: dX=7.5/7679; padding is 256 bins per side.
+             The integration timestep is 1/256, with physical Gaussian support 0.25 per side. -->
+        <grid spec="QuaSSEGrid" tree="@tree" traits="@observations" drift="0.0" diffusion="0.05"
+              nX="8192" dX="0.0009766896731345227" xMid="0.0" hiLoRatio="1" tc="0.0"
+              dtMax="0.00390625" flankWidthScaler="17.88854381999832"/>
+        <dynDt spec="parameter.BooleanParameter" value="true"/>
+      </distribution>
+    </distribution>
+    <operator spec="RealRandomWalkOperator" parameter="@origin" windowSize="1.5" weight="2"/>
+    <operator spec="beast.base.evolution.operator.ScaleOperator" tree="@tree" scaleFactor="0.9" weight="1"/>
+    <operator spec="beast.base.evolution.operator.ScaleOperator" parameter="@psi" scaleFactor="0.8" weight="1"/>
+    <operator spec="RealRandomWalkOperator" parameter="@rho" windowSize="0.1" weight="1"/>
+    <logger fileName="QuaSSE_origin.log" logEvery="1" model="@posterior">
+      <log idref="posterior"/><log idref="likelihood"/><log idref="prior"/>
+      <log idref="psi"/><log idref="rho"/><log idref="origin"/>
+      <log spec="beast.base.evolution.tree.TreeHeightLogger" tree="@tree"/>
+    </logger>
+    <logger logEvery="10"><log idref="posterior"/><log idref="likelihood"/></logger>
+  </run>
+</beast>

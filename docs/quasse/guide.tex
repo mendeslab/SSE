@@ -44,10 +44,37 @@ contribution rather than a probability bounded by one. At the present, $E(x,0)=1
 living tip with observed trait $y$ contributes $D(x,0)=\rho g(y\mid x)$.
 
 Calculations proceed from observations toward ancestors, combining descendant contributions at
-events. Converting these contributions into a whole-tree likelihood also requires specifying the
-starting trait treatment and what events are conditioned on. For example, starting at a root split
-is different from starting with a single lineage before that split. This guide does not imply that
-all such alternatives are implemented; the fossil example documents its root-conditioned analysis.
+events. The final likelihood also depends on how the process starts and what sampling success is
+conditioned on.
+
+\section{Root, origin, and sampling conditions}
+Root conditioning starts at an ordinary split and requires the selected kind of sample on each
+side. Origin conditioning starts with one lineage at an earlier age and propagates the observed
+root contribution through the intervening stem. It allows fossil ancestors on an unbranched stem,
+including an oldest observed node that is itself a sampled ancestor. No additional event occurs
+at the origin. A zero-length stem is allowed but does not make these two starting models equivalent.
+
+Either starting model can condition on any sampled descendants, on sampled living descendants,
+or on neither sampling-success event. These alternatives distinguish $E$ from $Q$, the probability
+of no sampled living descendants. Fossil sampling affects $E$ but not $Q$ when observation does not
+remove the lineage. The observed-data calculation still includes fossils whichever success event
+is chosen. In root mode a fossil-only daughter does not satisfy living-sample conditioning.
+The implementation retains a living sample at age zero and does not support fossil-only trees
+or a sampled tree consisting of just one leaf.
+
+The default remains root conditioning with any sample on each side. The trait weighting also
+retains the existing convention: at a starting split the effective trait distribution is
+proportional to the specified weights times the birth rate. Flat weights refer to a finite grid
+interval; automatically chosen bounds can depend on the observations. Observed weights are derived
+from the likelihood and retained for comparisons, not as a generative prior. The
+\href{theory.pdf}{mathematical reference} derives these distinctions and the required
+ratios of integrals.
+
+Conditioning on an age does not require fixing it. An origin age can be a parameter with its own
+prior and proposal; a root age belongs to the tree and can receive an all-taxa MRCA prior. QuaSSE
+already supplies the diversification/trait factor, so adding an ordinary FBD tree prior would count
+diversification twice. The \href{../../examples/QuaSSE_origin.md}{origin example} gives the inputs,
+priors, and a short run that varies origin and internal tree ages while preserving fossil dates.
 
 \section{Model versus numerical approximation}
 The continuous-trait model does not itself specify a finite trait grid or a timestep. The package

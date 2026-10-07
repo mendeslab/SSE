@@ -5,8 +5,8 @@
 \maketitle
 
 This selective reference records mathematical reasoning that can be consulted and extended during
-development. Its initial worked result is the trait generator, not a complete derivation of the
-QuaSSE likelihood. The \href{guide.pdf}{guide} gives an introductory account of the model.
+development. It derives the trait generator and the root/origin conditioning normalizations; it is not a
+complete derivation of the QuaSSE likelihood. The \href{guide.pdf}{guide} gives an introductory account of the model.
 
 \section{Conventions and conditional quantities}\label{sec:conventions}
 The latent trait is $x\in\mathbb{R}$. Forward elapsed time is $s$; age before the present is $t$.
@@ -84,6 +84,113 @@ Spatial discretization, time integration, and boundary truncation require their 
 The original QuaSSE model is described by FitzJohn~\cite{fitzjohn2010}; the derivation here states
 its constant-coefficient trait convention explicitly rather than attributing fossil extensions to
 that paper.
+
+\section{Sampling success and starting conditions}\label{sec:conditioning}
+The quantities $E$ and $D$ retain their meanings in Section~\ref{sec:conventions}. Let $Q(x,t)$
+be the probability of no sampled \emph{living} descendants from a lineage at age $t$ and trait $x$.
+For non-removing fossil sampling, the relevant backward equations and boundaries are
+\begin{align}
+ E_t &= \traitop E+\mu-(\lambda+\mu+\psi)E+\lambda E^2,
+       & E(x,0)&=1-\rho,\label{eq:E}\\
+ Q_t &= \traitop Q+\mu-(\lambda+\mu)Q+\lambda Q^2,
+       & Q(x,0)&=1-\rho.\label{eq:Q}
+\end{align}
+The trait operator is the same $\traitop$ as before. To see why fossil sampling drops out of the
+second equation, consider a short forward interval. A fossil observation leaves the lineage alive
+and does not alter the event of having no sampled living descendants. Its contribution
+$\psi\,\delta Q$ cancels the $-\psi\,\delta Q$ term from the probability of no event. Death
+contributes $\mu\,\delta$, and birth contributes $\lambda\,\delta Q^2$ because daughter futures are
+conditionally independent. Taking the infinitesimal limit gives Equation~\eqref{eq:Q}.
+Thus the existing $E$ solver can evaluate $Q$ with sampling rate zero, without changing the
+sampling rate in the data likelihood. The latter still propagates
+\begin{equation}
+ D_t=\traitop D+[2\lambda E-(\lambda+\mu+\psi)]D.
+\end{equation}
+The sample-success choices follow the biological distinctions in the BEAST sampled-ancestors
+inputs~\cite{saInputs}; SSE retains its historical root/any-sample default.
+
+\subsection{A single-lineage origin}
+Let $t_o$ be the origin age, at least the sampled root age $t_r$. Prune the observed tree and
+propagate its root partial to $t_o$ to obtain $D_o(x)$. There is no birth or observation event at
+the origin. For a normalized, data-independent starting-trait density $\pi_o$, write
+\begin{equation}\label{eq:origin-numerator}
+ N_o=\int \pi_o(x)D_o(x)\,dx.
+\end{equation}
+If $S$ is the required sampling-success event and the observed data satisfy $S$, conditional
+probability gives $p(\text{data}\mid S)=p(\text{data})/P(S)$. Marginalizing over the trait yields
+\begin{equation}\label{eq:origin-condition}
+ L_o=\frac{N_o}{Z_o},\qquad
+ Z_o=\begin{cases}
+ \int\pi_o(x)[1-E(x,t_o)]\,dx & \text{any sampled descendant},\\
+ \int\pi_o(x)[1-Q(x,t_o)]\,dx & \text{sampled living descendant},\\
+ 1 & \text{no sample-success condition}.
+ \end{cases}
+\end{equation}
+An average of pointwise ratios using the original $\pi_o$ would condition differently. Indeed,
+after conditioning, the trait density is proportional to $\pi_o(x)P(S\mid x)$; using this density
+to average $D_o(x)/P(S\mid x)$ recovers Equation~\eqref{eq:origin-condition}.
+
+Observed events retain their existing contributions: $\rho g$ at a living tip, $\psi gE$ at a
+terminal fossil, $\psi gD_{\rm continuing}$ at a sampled ancestor, and
+$\lambda D_{\rm left}D_{\rm right}$ at an ordinary bifurcation. Stem fossils are therefore allowed,
+including a sampled-ancestor root. These factors also specify which event densities are being
+conditioned on; a stem does not add a hidden root event.
+
+\subsection{Starting at a bifurcation}
+In SSE's existing convention, the root partial $D_r$ already includes the factor $\lambda$ from
+merging the daughters. Retain the weighting density $\pi$ used with this partial. For a normalized,
+data-independent $\pi$ and $0<C=\int\pi(x)\lambda(x)\,dx<\infty$, the effective starting-trait
+density at the bifurcation is $\pi(x)\lambda(x)/C$. The unconditioned descendant likelihood at
+that starting split is consequently $N_r/C$, where $N_r=\int\pi D_r\,dx$.
+
+Both daughters must satisfy the selected success condition. Conditional on their common starting
+trait, their futures are independent, so their success probabilities multiply. The probability of
+success under the effective trait density is $Z_r/C$, giving
+\begin{equation}\label{eq:root-condition}
+ L_r=\frac{N_r}{Z_r},\qquad
+ Z_r=\begin{cases}
+ \int\pi(x)\lambda(x)[1-E(x,t_r)]^2\,dx & \text{any sample on each side},\\
+ \int\pi(x)\lambda(x)[1-Q(x,t_r)]^2\,dx & \text{living sample on each side},\\
+ \int\pi(x)\lambda(x)\,dx & \text{no sample-success condition}.
+ \end{cases}
+\end{equation}
+The common normalization of $\pi$ cancels in these ratios. This explains why retaining the legacy
+root quadrature convention does not require renormalizing its Flat weights. Root/living conditioning
+assigns zero support to a tree with an all-fossil daughter, even when the denominator is positive.
+A sampled-ancestor root is not a starting bifurcation and is excluded in root mode.
+
+For constant $\lambda$, its factor cancels between numerator and denominator, yielding the usual
+constant-rate root expression. With trait dependence, this convention does not identify $\pi$
+itself as the trait density conditional on a starting split. Removing sample-success conditioning
+still conditions on that split. In particular, this option differs from the raw birth-density
+calculation obtained by disabling survival conditioning in diversitree.
+
+When $t_o=t_r$, origin propagation is the identity and preserves all observed root factors. It
+does not change the single-lineage starting model into a bifurcation-conditioned model; their
+normalizations and support requirements still differ.
+
+\subsection{Trait weights and numerical scales}
+At the origin, useful-bin midpoint quadrature with spacing $\Delta x$ normalizes the Flat density
+as $\pi_i=1/(n\Delta x)$. The compatibility option Observed instead uses
+\begin{equation}\label{eq:observed-weights}
+ \pi_i=\frac{D_i}{\sum_j D_j\Delta x}.
+\end{equation}
+Weights are formed after stem propagation at the endpoint resolution and used unchanged for both
+integrals. A common positive scale in $D$ cancels in Equation~\eqref{eq:observed-weights}. However,
+because these weights depend on the data, their substitution defines a comparison score, not the
+conditional likelihood under an independently specified generative prior.
+
+Flat refers to the finite useful trait interval, not a proper uniform prior on the real line.
+Automatic grid bounds depend on observations, and padding can change useful-bin boundaries.
+Thus Flat on an automatically selected interval should not be described as a wholly
+data-independent scientific prior. Fixed-support comparisons and numerical domain checks are
+needed to separate weighting conventions from discretization effects.
+
+If the final numerical partial is $\widetilde D$ and accumulated normalization is $e^c$, the
+reported log likelihood is $c+\log\int\pi\widetilde D\,dx-\log Z$. Neither $E$ nor $Q$ is
+rescaled as a likelihood. Their numerical calculation, like stem transport, uses the existing
+spatial and temporal approximations; the conditional-probability identities above do not supply
+a global numerical error bound.
 
 \bibliographystyle{plain}
 \bibliography{references}
