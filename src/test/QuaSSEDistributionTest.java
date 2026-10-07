@@ -2228,7 +2228,7 @@ public class QuaSSEDistributionTest {
     // Use independent inputs and the documented fossil grid, with optional real trait observations.
     // Package access allows the temporary refinement study to reuse these model definitions.
     QuaSSEDistribution fossilDistribution(String newick, double tc, boolean gaussian, int nX,
-            double dx, double dt, double support, int ratio) {
+            double dx, double dt, double support, int ratio, Object... options) {
         TreeParser tree = new TreeParser();
         tree.initByName("newick", newick, "IsLabelledNewick", true, "adjustTipHeights", false, "threshold", 1e-5);
         RealParameter traits = new RealParameter();
@@ -2258,11 +2258,208 @@ public class QuaSSEDistributionTest {
                 "diffusion", new RealParameter("0.05"), "nX", nX, "dX", dx, "xMid", 0.0,
                 "dtMax", dt, "tc", tc, "hiLoRatio", ratio, "flankWidthScaler", support);
         QuaSSEDistribution distribution = newDistribution();
-        distribution.initByName("tree", tree, "grid", grid, "q2mLambda", birth, "q2mMu", death,
-                "q2d", observation, "dynDt", new BooleanParameter("true"), "priorProbAtRootType", "Flat",
-                "fossilSamplingRate", new RealParameter("0.08"),
-                "presentSamplingProbability", new RealParameter("0.7"));
+        List<Object> inputs = new ArrayList<>(Arrays.asList("tree", tree, "grid", grid, "q2mLambda", birth,
+                "q2mMu", death, "q2d", observation, "dynDt", new BooleanParameter("true"),
+                "priorProbAtRootType", "Flat", "fossilSamplingRate", new RealParameter("0.08"),
+                "presentSamplingProbability", new RealParameter("0.7")));
+        inputs.addAll(Arrays.asList(options));
+        distribution.initByName(inputs.toArray());
         return distribution;
+    }
+
+    // Closed-form Riccati flow and its derivative provide an independent constant-rate oracle.
+    // The derivative propagates D; this avoids duplicating the production reaction implementation.
+    private double[] scalarFlow(double age, double lambda, double psi) {
+        double mu = .1, e0 = .3, b = lambda + mu + psi;
+        if (lambda == 0) return new double[]{mu / b + (e0 - mu / b) * Math.exp(-b * age), -b * age};
+        double k = Math.sqrt(b * b - 4 * lambda * mu);
+        double r1 = (b - k) / (2 * lambda), r2 = (b + k) / (2 * lambda);
+        double z0 = (e0 - r1) / (e0 - r2), z = z0 * Math.exp(-k * age);
+        return new double[]{(r1 - z * r2) / (1 - z),
+                -k * age + 2 * (Math.log1p(-z0) - Math.log1p(-z))};
+    }
+
+    // Compose observation factors and analytic branch multipliers in log space, without trait grids.
+    private double scalarSubtree(Node node, double lambda, double psi) {
+        double value;
+        if (node.isLeaf()) value = node.getHeight() == 0 ? Math.log(.7)
+                : Math.log(psi * scalarFlow(node.getHeight(), lambda, psi)[0]);
+        else if (node.isFake()) value = Math.log(psi)
+                + scalarSubtree(node.getNonDirectAncestorChild(), lambda, psi);
+        else value = Math.log(lambda) + scalarSubtree(node.getLeft(), lambda, psi)
+                + scalarSubtree(node.getRight(), lambda, psi);
+        if (!node.isRoot()) value += scalarFlow(node.getParent().getHeight(), lambda, psi)[1]
+                - scalarFlow(node.getHeight(), lambda, psi)[1];
+        return value;
+    }
+
+    // Constant observations isolate conditioning, stem factors and tc transfers. Existing fossil
+    // tests have no origin or Q; retain these cases while these public conditioning choices exist.
+    // Independent comparison: BEAST SA v2.1.1 (3f01d8f), SABirthDeathModel with birth=.3,
+    // death=.1, sampling=.08, rho=.7, removal=0, origin=3 and the same sampling flags.
+    // Subtract one log(2) per ordinary bifurcation from SA's oriented-tree log density.
+    @Test
+    public void testOriginAndSamplingConditions() {
+        String[] trees = {"(A:2,B:2);", "(S:0,(A:1,B:1):1);", "(S:0,(F:0,A:1):1);"};
+        for (String newick : trees) for (double tc : new double[]{0, 2, 2.5, 4}) {
+            for (int condition = 0; condition < 3; ++condition) {
+                QuaSSEDistribution d = fossilDistribution(newick, tc, false,
+                        2048, 3.75 / 959, 1.0 / 64, Math.sqrt(80), 2,
+                        "conditionOnRoot", false, "origin", new RealParameter("3"),
+                        "conditionOnSampling", condition == 0, "conditionOnRhoSampling", condition == 1);
+                double lambda = newick.equals(trees[2]) ? 0 : .3;
+                ((ConstantLinkFn) d.q2mLambdaInput.get()).yValueInput.get().setValue(lambda);
+                Node root = d.treeInput.get().getRoot();
+                double numerator = scalarSubtree(root, lambda, .08)
+                        + scalarFlow(3, lambda, .08)[1] - scalarFlow(root.getHeight(), lambda, .08)[1];
+                double denominator = condition == 2 ? 0
+                        : Math.log1p(-scalarFlow(3, lambda, condition == 0 ? .08 : 0)[0]);
+                Assert.assertEquals(numerator - denominator, evaluate(d), 1e-8);
+                d.originInput.get().setValue(root.getHeight());
+                double zeroStemDenom = condition == 2 ? 0 : Math.log1p(-scalarFlow(
+                        root.getHeight(), lambda, condition == 0 ? .08 : 0)[0]);
+                Assert.assertEquals(scalarSubtree(root, lambda, .08) - zeroStemDenom, evaluate(d), 1e-8);
+                d.close();
+            }
+        }
+        for (int condition = 0; condition < 3; ++condition) {
+            QuaSSEDistribution d = fossilDistribution(trees[0], 0, false,
+                    2048, 3.75 / 959, 1.0 / 64, Math.sqrt(80), 2,
+                    "conditionOnSampling", condition == 0, "conditionOnRhoSampling", condition == 1);
+            double denominator = Math.log(.3) + (condition == 2 ? 0
+                    : 2 * Math.log1p(-scalarFlow(2, .3, condition == 0 ? .08 : 0)[0]));
+            Assert.assertEquals(scalarSubtree(d.treeInput.get().getRoot(), .3, .08) - denominator,
+                    evaluate(d), 1e-8);
+            if (condition == 0) {
+                d.fossilSamplingRateInput.get().setValue(0.0);
+                double anySamples = evaluate(d);
+                d.conditionOnSamplingInput.setValue(false, d);
+                d.conditionOnRhoSamplingInput.setValue(true, d);
+                d.initAndValidate();
+                Assert.assertEquals(anySamples, evaluate(d), 1e-10);
+            }
+            d.close();
+        }
+    }
+
+    // Configuration errors differ from rejected age/tree proposals. Exercise live state and
+    // Observed endpoint weighting; old fixed-root tests cannot cover these added inputs.
+    @Test
+    public void testConditioningInputsAndRestoration() {
+        QuaSSEDistribution d = fossilDistribution("(A:2,F:1.5);", 0, false,
+                2048, 3.75 / 959, 1.0 / 64, Math.sqrt(80), 2);
+        d.conditionOnRhoSamplingInput.setValue(true, d);
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        d.conditionOnSamplingInput.setValue(true, d);
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        d.conditionOnRhoSamplingInput.setValue(false, d);
+        d.originInput.setValue(new RealParameter("3"), d);
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        d.conditionOnRootInput.setValue(false, d);
+        d.initAndValidate();
+        double initial = evaluate(d);
+        for (double bad : new double[]{1.9, Double.NaN, Double.POSITIVE_INFINITY}) {
+            d.originInput.get().setValue(bad);
+            Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(d), 0);
+            Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        }
+        d.originInput.get().setValue(3.0);
+        d.initAndValidate();
+        Assert.assertEquals(initial, evaluate(d), 1e-12);
+        d.originInput.setValue(null, d);
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+
+        QuaSSEDistribution origin = fossilDistribution("(A:2,B:2);", 2.5, false,
+                2048, 3.75 / 959, 1.0 / 64, Math.sqrt(80), 2,
+                "conditionOnRoot", false, "origin", new RealParameter("3"));
+        State state = new State();
+        state.initByName("stateNode", Arrays.asList(origin.originInput.get(), origin.treeInput.get()));
+        state.initialise(); state.setPosterior(origin);
+        initial = state.robustlyCalcPosterior(origin);
+        for (double age : new double[]{2.25, 2.5, 3.5, 1.5}) {
+            state.store(1);
+            origin.originInput.get().setValue(age);
+            state.storeCalculationNodes(); state.checkCalculationNodesDirtiness();
+            double expected = age < 2 ? Double.NEGATIVE_INFINITY
+                    : scalarSubtree(origin.treeInput.get().getRoot(), .3, .08)
+                    + scalarFlow(age, .3, .08)[1] - scalarFlow(2, .3, .08)[1]
+                    - Math.log1p(-scalarFlow(age, .3, .08)[0]);
+            Assert.assertEquals(expected, origin.calculateLogP(), 1e-8);
+            state.restore(); state.restoreCalculationNodes(); state.setEverythingDirty(false);
+            Assert.assertEquals(initial, origin.calculateLogP(), 1e-8);
+        }
+    }
+
+    // Trait-dependent endpoint weights must use the propagated origin partial; scalar cases alone
+    // cannot detect root/origin confusion or the incorrect average of pointwise likelihood ratios.
+    @Test
+    public void testOriginWeightsAndLiveTree() {
+        QuaSSEDistribution d = fossilDistribution("(A:2,(S:0,B:1):1);", 0, true,
+                8192, 7.5 / 7679, 1.0 / 256, Math.sqrt(320), 1,
+                "conditionOnRoot", false, "origin", new RealParameter("3"));
+        d.priorProbAtRootTypeInput.setValue("Observed", d);
+        d.initAndValidate();
+        double initial = evaluate(d);
+        double[][] rows = d.getEsDs(true)[d.treeInput.get().getRoot().getNr()];
+        double[] weights = d.getPriorProbsAtRoot("Observed");
+        double dx = d.gridInput.get().getDx(), sum = 0, numerator = 0, denominator = 0;
+        for (int i = 0; i < weights.length; ++i) sum += rows[1][2 * i] * dx;
+        for (int i = 0; i < weights.length; ++i) {
+            Assert.assertEquals(rows[1][2 * i] / sum, weights[i], 1e-12);
+            numerator += weights[i] * rows[1][2 * i] * dx;
+            denominator += weights[i] * (1 - rows[0][2 * i]) * dx;
+        }
+        Assert.assertEquals(Math.log(numerator / denominator),
+                d.getLogPFromRelevantObjects(rows, 0, d.getLambda(true), dx, false), 1e-12);
+        for (int i = 0; i < weights.length; ++i) rows[1][2 * i] *= 7;
+        Assert.assertEquals(Math.log(numerator / denominator) + Math.log(7),
+                d.getLogPFromRelevantObjects(rows, 0, d.getLambda(true), dx, false), 1e-12);
+        Assert.assertEquals(initial, evaluate(d), 1e-10);
+
+        // Initially there are only ancestral fossils. Moving their parent creates a terminal fossil,
+        // so the E-only storage must already exist even though it was not needed at initialization.
+        Tree tree = d.treeInput.get();
+        // BEAST 2.7.8's label-free parser sorts live tips after creating stored nodes. Rebuild
+        // those arrays before testing rejection; the runnable example supplies an explicit taxon set.
+        tree.initArrays();
+        State state = new State();
+        state.initByName("stateNode", Arrays.asList(tree)); state.initialise(); state.setPosterior(d);
+        initial = state.robustlyCalcPosterior(d);
+        for (double age : new double[]{1.25, 2.25}) {
+            state.store(1);
+            tree.startEditing(null); // Match the editable-tree entry used by BEAST operators.
+            if (age < 2) tree.getRoot().getRight().setHeight(age);
+            else tree.getRoot().setHeight(age);
+            state.storeCalculationNodes(); state.checkCalculationNodesDirtiness();
+            QuaSSEDistribution fresh = fossilDistribution(age < 2 ? "(A:2,(S:0.25,B:1.25):0.75);"
+                    : "(A:2.25,(S:0,B:1):1.25);", 0, true,
+                    8192, 7.5 / 7679, 1.0 / 256, Math.sqrt(320), 1,
+                    "conditionOnRoot", false, "origin", new RealParameter("3"));
+            fresh.priorProbAtRootTypeInput.setValue("Observed", fresh); fresh.initAndValidate();
+            Assert.assertEquals("live tree age " + age, evaluate(fresh), d.calculateLogP(), 1e-8);
+            state.restore(); state.restoreCalculationNodes(); state.setEverythingDirty(false);
+            Assert.assertEquals("restored tree " + tree.getRoot().toNewick(), initial, d.calculateLogP(), 1e-8);
+            fresh.close();
+        }
+        state.store(2); tree.startEditing(null);
+        Node root = tree.getRoot(), ancestor = root.getRight();
+        Node a = root.getLeft(), b = ancestor.getNonDirectAncestorChild();
+        ancestor.removeChild(b); root.removeChild(a); root.addChild(b); ancestor.addChild(a);
+        state.storeCalculationNodes(); state.checkCalculationNodesDirtiness();
+        QuaSSEDistribution swapped = fossilDistribution("(B:2,(S:0,A:1):1);", 0, true,
+                8192, 7.5 / 7679, 1.0 / 256, Math.sqrt(320), 1,
+                "conditionOnRoot", false, "origin", new RealParameter("3"));
+        swapped.priorProbAtRootTypeInput.setValue("Observed", swapped); swapped.initAndValidate();
+        Assert.assertEquals("ancestor attachment", evaluate(swapped), d.calculateLogP(), 1e-8);
+        state.restore(); state.restoreCalculationNodes(); state.setEverythingDirty(false);
+        Assert.assertEquals(initial, d.calculateLogP(), 1e-8);
+        swapped.close();
+        d.conditionOnSamplingInput.setValue(false, d); d.initAndValidate();
+        double unconditioned = evaluate(d);
+        d.conditionOnSamplingInput.setValue(true, d); d.initAndValidate();
+        Assert.assertEquals("remove sampling denominator", unconditioned - Math.log(denominator), evaluate(d), 1e-8);
+        d.close(); d.initAndValidate();
+        Assert.assertEquals("reinitialized tree " + tree.getRoot().toNewick(), initial, evaluate(d), 1e-8);
     }
 
     // Independent 70-digit matrix-exponential references protect event factors and normalization;
