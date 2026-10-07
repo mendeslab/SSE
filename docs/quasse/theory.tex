@@ -9,20 +9,34 @@ development. It derives the trait generator, fossil-aware branch and node calcul
 reaction flow, and root/origin conditioning. It does not provide a complete error analysis of the
 numerical likelihood. The \href{guide.pdf}{guide} gives an introductory account of the model.
 
+The argument follows the pruning calculation: define its conditional quantities, derive how
+they change along branches, combine them at observations, and finally integrate over the starting
+trait and impose the chosen sampling condition. Section~\ref{sec:reaction} explains numerical
+propagation; it can be skipped on a first reading of the model likelihood.
+
 \section{Conventions and conditional quantities}\label{sec:conventions}
 The latent trait is $x\in\mathbb{R}$. Forward elapsed time is $s$; age before the present is $t$.
 Birth and death rates are $\lambda(x)$ and $\mu(x)$. Fossil sampling is non-removing with scalar
 rate $\psi\geq0$, and present sampling has scalar probability $\rho\in[0,1]$. Sampling events
-and trait observations are distinct: $g(y\mid x)$ denotes the observation density.
+and trait observations are distinct: $g(y\mid x)$ is the density of measured trait $y$ conditional
+on latent trait $x$. The rates $\lambda,\mu,\psi$ have units of inverse time; $\rho$ is a
+dimensionless probability. In this document, all trait integrals are over the real line unless
+a finite numerical domain is explicitly specified.
 
 Conditional on a single lineage at age $t$ with trait $x$, define $E(x,t)$ as the probability of no
 sampled descendants between that time and the present, including no fossil samples. Consequently
 $0\leq E\leq1$ and $E(x,0)=1-\rho$. Define $D(x,t)$, for a specified observed descendant subtree,
 as its likelihood contribution conditional on that lineage and trait, before any whole-tree root
 conditioning. This contribution integrates over unobserved events and trait histories. It is
-nonnegative but need not be at most one. Node ordering and whole-tree conditioning conventions
-must additionally be specified when deriving a full likelihood; they are not fixed by this local
-definition alone.
+nonnegative but need not be at most one: it is a density in the observed event ages and trait
+measurements. Different observed subtrees have different $D$ functions; the subtree is suppressed
+in the notation. By contrast, $E$ depends only on the model and on $(x,t)$.
+The node and starting-condition sections specify the event-density and conditioning conventions.
+
+Increasing $t$ means moving toward the past in the pruning calculation. It does not reverse
+the biological process: a lineage at age $t+\delta$ evolves \emph{forward} for duration $\delta$
+to age $t$. Its trait at the older end is the argument $x$ of the backward likelihood.
+Subscripts $E_t$ and $E_x$ denote partial derivatives, not different probabilities.
 
 These meanings and the living-tip boundary $D(x,0)=\rho g(y\mid x)$ follow the conventions described
 in the \href{../../examples/QuaSSE_fossils_fixed_tree.md}{package fossil guide}. They concern the
@@ -39,7 +53,10 @@ where $W_s$ is standard Brownian motion. Drift has units trait/time and $q$ has 
 trait$^2$/time. In the package, the input named \texttt{diffusion} is $q$.
 
 For a smooth function $f$, define the backward transition operator
-$P_s f(x)=\expect[f(X_s)\mid X_0=x]$. For the following elementary derivation, it suffices to take
+$P_s f(x)=\expect[f(X_s)\mid X_0=x]$. It averages a contribution at the younger end of a
+branch over the possible descendant traits, conditional on the older trait $x$. The term
+\emph{backward} refers to its action on functions of that starting trait; $X_s$ itself evolves
+forward. For the following elementary derivation, it suffices to take
 $f$ three times continuously differentiable with bounded derivatives. For a small interval
 $\delta>0$, write $Z=v\delta+\sqrt{q\delta}\,\xi$ with $\xi$ standard normal. Taylor expansion gives
 \begin{align*}
@@ -58,8 +75,9 @@ This is an infinitesimal identity under the stated assumptions, not a numerical 
 
 \section{Backward likelihood transport and forward densities}
 For trait-only propagation of a descendant contribution $f$, let $u(x,t)=P_t f(x)$. Extending the
-ancestral-to-descendant interval increases $t$; the Markov property and
-Equation~\eqref{eq:generator} give
+ancestral-to-descendant interval increases $t$. The Markov property gives
+$u(\cdot,t+\delta)=P_\delta u(\cdot,t)$. Thus the difference quotient in $t$ is exactly
+the generator limit applied to the current function $u(\cdot,t)$, yielding
 \begin{equation}\label{eq:backward-transport}
  u_t=\traitop u=v u_x+\frac q2 u_{xx},\qquad u(x,0)=f(x).
 \end{equation}
@@ -71,9 +89,15 @@ By contrast, the forward density $p(x,s)$ of the evolving trait obeys the adjoin
 \begin{equation}\label{eq:forward-density}
  p_s=-v p_x+\frac q2 p_{xx}.
 \end{equation}
-Indeed, integration by parts in $\int p\traitop f\,dx$, with vanishing boundary terms, moves the
-first derivative with a minus sign and the second derivative with a plus sign. The different drift
-signs reflect different quantities, not conflicting conventions for Brownian motion.
+For a smooth test function $f$ and vanishing boundary terms,
+\[
+ \frac{d}{ds}\int p f\,dx=\int p\traitop f\,dx
+ =\int f\left(-v p_x+\frac q2 p_{xx}\right)dx.
+\]
+The first equality follows by averaging the infinitesimal change in $f(X_s)$; integration by
+parts gives the second. Since it holds for all such $f$, it identifies the forward-density
+equation. A density tracks where traits go; a backward likelihood asks how the starting trait
+affects future observations. These different questions account for the different drift signs.
 
 As a check, take $f(x)$ to be a Gaussian profile with center $m$ and variance $a>0$. Then $P_t f$
 has center $m-vt$ and variance $a+qt$, with the same integrated weight. A forward Gaussian density
@@ -97,13 +121,17 @@ calculation; the following short-interval expansions are infinitesimal statement
 Extend a lineage from age $t$ to age $t+\delta$, with initial trait $x$ at the older end.
 For the event of leaving no samples, the possibilities in this short interval are no discrete
 event, death, or birth followed by two unsampled daughter histories. A fossil observation is
-incompatible with no samples. Using $P_\delta$ from Section~\ref{sec:generator},
+incompatible with no samples. The no-event contribution averages over the younger trait using $P_\delta$:
+
 \[
  E(x,t+\delta)
- = [1-(\lambda+\mu+\psi)\delta]P_\delta E(x,t)
+ = [1-(\lambda+\mu+\psi)\delta]P_\delta[E(\cdot,t)](x)
    +\mu\delta+\lambda\delta E(x,t)^2+o(\delta).
 \]
-Here $P_\delta$ acts on the trait argument, and rates without arguments are evaluated at $x$.
+The three displayed terms represent no event, death, and birth, respectively. Death contributes
+$\mu\delta$ times one because a dead lineage has no future samples. Birth contributes
+$\lambda\delta E^2$ because both daughters must leave no samples. Rates without arguments are
+evaluated at $x$. Terms involving two or more discrete events are included in $o(\delta)$.
 Trait changes in the already order-$\delta$ event terms affect only the remainder. Subtracting
 $E(x,t)$, dividing by $\delta$, and taking the limit gives
 \begin{equation}\label{eq:E}
@@ -113,13 +141,14 @@ $E(x,t)$, dividing by $\delta$, and taking the limit gives
 The boundary means that a living lineage at the present is not sampled with probability $1-\rho$.
 
 For a specified nonempty observed subtree, consider an interval containing no observed node.
-Death and fossil sampling cannot occur there: death removes the observed continuation, and
-sampling would introduce another observation. Birth is possible if exactly one daughter supplies
+A death or sampling event on the continuing lineage cannot be the sole event in this short
+interval: death removes the observed continuation, and sampling introduces another observation. Birth is possible if exactly one daughter supplies
 the specified subtree and the other leaves no samples. Either daughter can be the continuing
-one, so the two alternatives contribute $DE+ED$:
+one, so the two alternatives contribute $DE+ED$. A birth with observed descendants on both
+sides would instead be a node of the observed tree, excluded from this interval. Therefore,
 \[
  D(x,t+\delta)
- = [1-(\lambda+\mu+\psi)\delta]P_\delta D(x,t)
+ = [1-(\lambda+\mu+\psi)\delta]P_\delta[D(\cdot,t)](x)
    +2\lambda\delta E(x,t)D(x,t)+o(\delta).
 \]
 Consequently,
@@ -133,6 +162,8 @@ observed events are applied separately at their known ages.
 \subsection{Calculations at observed nodes}\label{sec:node-events}
 For each node, propagate any observed descendant branches to its age $t$ before combining them.
 Write $D^+$ for the contribution immediately ancestral to the event, with no extra elapsed time.
+The plus sign refers to the older side, in the direction of increasing $t$; it is not a time
+derivative. The descendant $D$ values in the table are evaluated just before applying the event.
 Every factor in Table~\ref{tab:node-events} uses the same trait $x$ at the event.
 
 \begin{table}[htbp]
@@ -209,47 +240,69 @@ reaction equations are
 Dots here refer to elapsed backward duration within a reaction step. These equations have an
 exact local flow, even though their composition with trait transport is approximate.
 
-\subsection{An exact update}
-For nonnegative rates and initial $0\leq E_0\leq1$, define
-\begin{align*}
- a&=\lambda-\mu-\psi,&
- \kappa&=\sqrt{a^2+4\lambda\psi},&
- \beta&=\frac{\lambda+\mu+\psi+\kappa}{2},\\
- e_*&=\begin{cases}\mu/\beta,&\beta>0,\\0,&\beta=0,\end{cases}&
- \eta&=\beta-\lambda.
-\end{align*}
-Here $e_*$ is the lower equilibrium of the reaction when it is nondegenerate. For duration $h\geq0$, put
-\begin{align*}
- w&=e^{-\kappa h},&
- I_h&=\begin{cases}(1-w)/\kappa,&\kappa>0,\\h,&\kappa=0,\end{cases}\\
- A&=\eta+\lambda(1-E_0)=\beta-\lambda E_0,&
- B&=w+A I_h.
-\end{align*}
-The updates used by the implementation are
+\subsection{Solving the reaction equation}
+Let $E_0,D_0$ denote the values entering a reaction step, and $E_h,D_h$ its values after
+backward duration $h\geq0$. Assume nonnegative rates and $0\leq E_0\leq1$.
+The quadratic $F(E)$ in Equation~\eqref{eq:reaction} has discriminant
+\[
+ \kappa^2=(\lambda+\mu+\psi)^2-4\lambda\mu
+          =(\lambda-\mu-\psi)^2+4\lambda\psi.
+\]
+Define its nonnegative square root $\kappa$ and the quantities
+\[
+ \beta=\frac{\lambda+\mu+\psi+\kappa}{2},\qquad
+ e_*=\begin{cases}\mu/\beta,&\beta>0,\\0,&\beta=0.\end{cases}
+\]
+For $\lambda>0$, the equilibria are $e_*$ and $\beta/\lambda$. Writing the lower one as
+$\mu/\beta$ also handles $\lambda=0$ without dividing by $\lambda$.
+When all rates vanish, $\beta=0$ and the choice $e_*=0$ simply gives the identity flow.
+In every case,
+\[
+ F(e_*)=0,\qquad 2\lambda e_*-(\lambda+\mu+\psi)=-\kappa.
+\]
+
+Shifting to $y=E-e_*$ therefore removes the constant term:
+$\dot y=-\kappa y+\lambda y^2$. For $y\ne0$, set $z=1/y$. Then
+$\dot z=\kappa z-\lambda$. Multiplying by $e^{-\kappa h}$ and integrating gives
+\[
+ e^{-\kappa h}z_h=z_0-\lambda I_h,\qquad
+ I_h=\int_0^h e^{-\kappa u}\,du
+ =\begin{cases}(1-e^{-\kappa h})/\kappa,&\kappa>0,\\h,&\kappa=0.\end{cases}
+\]
+Inverting and writing $w=e^{-\kappa h}$ yields
+\begin{equation}\label{eq:shifted-reaction}
+ E_h=e_*+\frac{(E_0-e_*)w}{1-\lambda(E_0-e_*)I_h}.
+\end{equation}
+The formula extends continuously to $E_0=e_*$, where the flow stays at equilibrium.
+
+For evaluation, the implementation rewrites the denominator using
+$\beta-\lambda e_*=\kappa$ and $w+\kappa I_h=1$. Put
+\[
+ A=\beta-\lambda E_0,\qquad
+ B=1-\lambda(E_0-e_*)I_h=w+A I_h.
+\]
+Equation~\eqref{eq:shifted-reaction} becomes
 \begin{equation}\label{eq:reaction-update}
  \boxed{\quad E_h=\frac{wE_0+e_* A I_h}{B},\qquad
                D_h=D_0\frac{w}{B^2}.\quad}
 \end{equation}
-All factors use the old $E_0$, even if the stored $E$ is overwritten before $D$ is updated.
-Since $\beta\geq\lambda$, we have $A\geq0$ and $B>0$ for finite $h$ in exact arithmetic.
+To justify the $D$ update, differentiate Equation~\eqref{eq:shifted-reaction} with respect to
+its initial value: $J_h=\partial E_h/\partial E_0=w/B^2$.
+Differentiating $\dot E=F(E)$ with respect to that same initial value gives
+$\dot J=F'(E)J$, $J_0=1$. This is the $D$ equation with initial value one, so its solution
+with initial value $D_0$ is $D_0J_h$. Both updates must use the same old $E_0$.
 
-To derive the result, use $F(e_*)=0$ and $\beta-\lambda e_*=\kappa$. With $y=E-e_*$,
-Equation~\eqref{eq:reaction} becomes
-$\dot y=-\kappa y+\lambda y^2$. Substitution, or solving the linear equation for $1/y$
-when $y\ne0$, gives
+The evaluated denominator is positive in exact arithmetic: $\kappa\geq
+|\lambda-\mu-\psi|$ implies $\beta\geq\lambda$, hence $A\geq0$ and $B=w+A I_h>0$
+for finite $h$. To avoid cancellation, the implementation uses
+$I_h=-\operatorname{expm1}(-\kappa h)/\kappa$ when $\kappa>0$, where
+$\operatorname{expm1}(u)=e^u-1$ is evaluated accurately near zero.
+It also writes $A=\eta+\lambda(1-E_0)$ with $\eta=\beta-\lambda$.
+For $a=\lambda-\mu-\psi>0$, the identity
 \[
- y_h=\frac{y_0w}{1-\lambda y_0 I_h}.
+ \eta=\frac{\kappa-a}{2}=\frac{2\lambda\psi}{\kappa+a}
 \]
-The expression extends continuously to $y_0=0$.
-Because $w+\kappa I_h=1$, its denominator is $B$ and rearrangement yields the first
-formula in Equation~\eqref{eq:reaction-update}. Differentiating the flow with respect to $E_0$
-gives $J_h=\partial E_h/\partial E_0=w/B^2$. Differentiating the ODE itself gives
-$\dot J=F'(E)J$, $J_0=1$; hence $D_h=D_0J_h$, proving the second formula.
-
-The implementation evaluates $I_h$ with \texttt{expm1} to avoid subtracting nearly equal
-numbers. When $a>0$, it computes
-$\eta=(\kappa-a)/2=2\lambda\psi/(\kappa+a)$ using the latter expression to avoid cancellation.
-These are evaluations of the same formula, not different biological assumptions.
+avoids subtracting nearly equal rates. These rearrangements evaluate the same exact flow.
 
 \subsection{Limiting cases and interpretation}
 At $h=0$ the update is the identity. With $\lambda=0$ and $c=\mu+\psi>0$, it reduces to
@@ -277,7 +330,9 @@ and $V=R+T$,
 \[
  U_{\rm step}=U+hV(U)+\tfrac12 h^2 V'(U)V(U)+O(h^3),\qquad h=\Delta t.
 \]
-This matches the exact combined flow through second order. Under regularity and stability
+Here $V'(U)V(U)$ means the derivative of the vector field $V$ in the direction $V(U)$.
+The exact combined flow has the same expansion: $U'=V(U)$ and $U''=V'(U)V(U)$.
+Thus one step differs first at order $h^3$. Under regularity and stability
 assumptions that keep these remainder estimates uniform, the accumulated splitting error over a
 fixed interval is of order $h^2$. For a PDE this argument requires control of the relevant
 operator derivatives on its solution. It does not bound the complete implemented solver:
@@ -312,12 +367,14 @@ The sample-success choices follow the biological distinctions in the BEAST sampl
 inputs~\cite{saInputs}; SSE retains its historical root/any-sample default.
 
 \subsection{A single-lineage origin}
-Let $t_o$ be the origin age, at least the sampled root age $t_r$. Prune the observed tree and
+The age of the oldest observed node is the sampled root age $t_r$. It need not be the age
+when the biological process started. Let $t_o\geq t_r$ be the origin age. Prune the observed tree and
 propagate its root partial to $t_o$ to obtain $D_o(x)$. There is no birth or observation event at
 the origin. For a normalized, data-independent starting-trait density $\pi_o$, write
 \begin{equation}\label{eq:origin-numerator}
  N_o=\int \pi_o(x)D_o(x)\,dx.
 \end{equation}
+Here $N_o$ is the observed-data density before conditioning on sampling success.
 If $S$ is the required sampling-success event and the observed data satisfy $S$, conditional
 probability gives $p(\text{data}\mid S)=p(\text{data})/P(S)$. Marginalizing over the trait yields
 \begin{equation}\label{eq:origin-condition}
@@ -328,23 +385,49 @@ probability gives $p(\text{data}\mid S)=p(\text{data})/P(S)$. Marginalizing over
  1 & \text{no sample-success condition}.
  \end{cases}
 \end{equation}
-An average of pointwise ratios using the original $\pi_o$ would condition differently. Indeed,
-after conditioning, the trait density is proportional to $\pi_o(x)P(S\mid x)$; using this density
-to average $D_o(x)/P(S\mid x)$ recovers Equation~\eqref{eq:origin-condition}.
+These ratios require $Z_o>0$. If $Z_o=0$, the conditional model is undefined; if the observed
+data do not satisfy $S$, their conditional likelihood is zero. Conditional probability here
+concerns densities in the observations, not the probability of one exact continuous dataset.
+
+The trait must also be conditioned on sampling success. Where $P(S\mid x)>0$,
+\[
+ \pi_o(x\mid S)=\frac{\pi_o(x)P(S\mid x)}{Z_o},\qquad
+ p(\mathrm{data}\mid x,S)=\frac{D_o(x)}{P(S\mid x)}.
+\]
+Multiplying these two expressions and integrating cancels $P(S\mid x)$ and gives $N_o/Z_o$.
+Regions with zero success probability have zero conditioned trait mass.
+Averaging the pointwise ratio with the original $\pi_o$ would miss that change of weights.
 
 The observed-event factors remain those in Table~\ref{tab:node-events}. Stem fossils are
 therefore allowed, including a sampled-ancestor root; a stem does not add a hidden root event.
 
 \subsection{Starting at a bifurcation}
-In SSE's existing convention, the root partial $D_r$ already includes the factor $\lambda$ from
-merging the daughters. Retain the weighting density $\pi$ used with this partial. For a normalized,
-data-independent $\pi$ and $0<C=\int\pi(x)\lambda(x)\,dx<\infty$, the effective starting-trait
-density at the bifurcation is $\pi(x)\lambda(x)/C$. The unconditioned descendant likelihood at
-that starting split is consequently $N_r/C$, where $N_r=\int\pi D_r\,dx$.
+Root conditioning starts with two daughters at an ordinary bifurcation of age $t_r$.
+First separate their combined descendant contribution from the density of the split itself:
+\[
+ H_r(x)=D_{\rm left}(x,t_r)D_{\rm right}(x,t_r),\qquad
+ D_r(x)=\lambda(x)H_r(x).
+\]
+The pruning calculation produces $D_r$. SSE retains a weighting density $\pi$ for this
+quantity. Its convention corresponds to a starting-trait density at the split of
+\[
+ \pi_{\rm split}(x)=\frac{\pi(x)\lambda(x)}{C},
+ \qquad C=\int\pi(x)\lambda(x)\,dx,\quad 0<C<\infty.
+\]
+Thus $\pi$ is a pre-split weight, not itself the trait density conditional on starting at a
+bifurcation. The factor $\lambda$ favors trait values at which a split is more likely.
+This is the package's retained convention; a separately specified trait density at a split
+would be averaged against $H_r$ directly.
 
-Both daughters must satisfy the selected success condition. Conditional on their common starting
-trait, their futures are independent, so their success probabilities multiply. The probability of
-success under the effective trait density is $Z_r/C$, giving
+With normalized, data-independent $\pi$, the descendant-data density under this starting model is
+\[
+ \int\pi_{\rm split}(x)H_r(x)\,dx=\frac{N_r}{C},
+ \qquad N_r=\int\pi(x)D_r(x)\,dx.
+\]
+For sample-success conditioning, both daughters must satisfy the chosen event. At fixed $x$
+their futures are independent, so the success probability is $[1-E(x,t_r)]^2$ or
+$[1-Q(x,t_r)]^2$. Integrating against $\pi_{\rm split}$ gives $Z_r/C$.
+Dividing the data density by that success probability cancels $C$:
 \begin{equation}\label{eq:root-condition}
  L_r=\frac{N_r}{Z_r},\qquad
  Z_r=\begin{cases}
@@ -353,13 +436,16 @@ success under the effective trait density is $Z_r/C$, giving
  \int\pi(x)\lambda(x)\,dx & \text{no sample-success condition}.
  \end{cases}
 \end{equation}
+As for the origin, the conditioned cases require a positive denominator and data satisfying
+the selected event. Without a sample-success condition, $Z_r=C$ and $L_r=N_r/C$.
 The common normalization of $\pi$ cancels in these ratios. This explains why retaining the legacy
 root quadrature convention does not require renormalizing its Flat weights. Root/living conditioning
 assigns zero support to a tree with an all-fossil daughter, even when the denominator is positive.
 A sampled-ancestor root is not a starting bifurcation and is excluded in root mode.
 
-For constant $\lambda$, its factor cancels between numerator and denominator, yielding the usual
-constant-rate root expression. With trait dependence, this convention does not identify $\pi$
+For a constant positive $\lambda$, its explicit root factor cancels between numerator and
+denominator. Birth rates still affect propagation on the descendant branches; they do not
+disappear from the likelihood. With trait dependence, this convention does not identify $\pi$
 itself as the trait density conditional on a starting split. Removing sample-success conditioning
 still conditions on that split. In particular, this option differs from the raw birth-density
 calculation obtained by disabling survival conditioning in diversitree.
@@ -370,7 +456,8 @@ normalizations and support requirements still differ.
 
 \subsection{Trait weights and numerical scales}
 At the origin, useful-bin midpoint quadrature with spacing $\Delta x$ normalizes the Flat density
-as $\pi_i=1/(n\Delta x)$. The compatibility option Observed instead uses
+as $\pi_i=1/(n\Delta x)$, where $n$ is the number of useful bins. Write $D_i$ for the
+endpoint partial at bin $i$. The compatibility option Observed instead uses
 \begin{equation}\label{eq:observed-weights}
  \pi_i=\frac{D_i}{\sum_j D_j\Delta x}.
 \end{equation}
@@ -385,8 +472,12 @@ Thus Flat on an automatically selected interval should not be described as a who
 data-independent scientific prior. Fixed-support comparisons and numerical domain checks are
 needed to separate weighting conventions from discretization effects.
 
-If the final numerical partial is $\widetilde D$ and accumulated normalization is $e^c$, the
-reported log likelihood is $c+\log\int\pi\widetilde D\,dx-\log Z$. Neither $E$ nor $Q$ is
+If $D=e^c\widetilde D$, where $\widetilde D$ is the final stored partial and $c$ is the
+accumulated log scale, the reported log likelihood is
+\[
+ \log L=c+\log\int\pi(x)\widetilde D(x)\,dx-\log Z.
+\]
+Here $Z$ is the denominator for the selected starting and sampling conditions. Neither $E$ nor $Q$ is
 rescaled as a likelihood. Their numerical calculation, like stem transport, uses the existing
 spatial and temporal approximations; the conditional-probability identities above do not supply
 a global numerical error bound.
