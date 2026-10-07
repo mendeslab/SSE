@@ -369,11 +369,14 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     // main branch function
     @Override
     public void processBranch(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
-        int nodeIdx = aNode.getNr();
+        processInterval(aNode.getNr(), aNode.getHeight(), aNode.getParent().getHeight(),
+                forceRecalcKernel, jtransforms);
+    }
 
-        // dealing with branch lengths
-        double startTime = aNode.getHeight(); // we're going backwards in time, toward the root
-        double endTime = aNode.getParent().getHeight();
+    // Propagate one node row backwards over an age interval, retaining the existing resolution
+    // transition and accumulating each normalization in that row's scale exactly once.
+    private void processInterval(int nodeIdx, double startTime, double endTime,
+            boolean forceRecalcKernel, boolean jtransforms) {
         double branchLength2Integrate = endTime - startTime;
 
         /*
