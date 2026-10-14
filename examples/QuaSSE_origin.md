@@ -62,6 +62,54 @@ likelihood difference is not solely numerical error. Padding changes can also ch
 keeping `nX` fixed alone does not hold the prior interval fixed. A long stem can require a wider domain. These checks establish numerical adequacy for the
 analysis being run, not a universal accuracy guarantee.
 
+## A specified origin-trait distribution
+
+[QuaSSE_origin_trait.xml](QuaSSE_origin_trait.xml) uses `startTraitDistribution` instead of
+`priorProbAtRootType`. It integrates out the origin trait under a Normal distribution and estimates
+its mean, with a Normal hyperprior and a random-walk operator. The origin age also has a prior.
+Run this short executable example in an output directory with:
+
+```sh
+/path/to/SSE/beast-sse -seed 127 /path/to/SSE/examples/QuaSSE_origin_trait.xml
+```
+
+The 20-step run demonstrates the configuration; it is not sufficient for posterior estimation.
+It conditions on a sampled living descendant (`conditionOnRhoSampling="true"`), matching
+PhyloJunction age stopping with `min_rec_taxa=1` and no additional acceptance restrictions.
+Do not add an independent prior factor for the integrated-out origin trait: the distribution
+belongs inside the QuaSSE likelihood. Hyperparameters can have their own priors.
+
+Supply exactly one of `startTraitDistribution` or `priorProbAtRootType`. The new input currently
+requires `conditionOnRoot="false"`; its future branching-root interpretation is not implemented.
+It accepts proper scalar continuous BEAST distributions. Point masses, discrete distributions,
+and improper Uniform distributions are unsupported. Corresponding PhyloJunction settings are:
+
+| PhyloJunction starting distribution | BEAST distribution settings |
+| --- | --- |
+| `normal_distribution(mean=m, sd=s)` | `Normal mean=m sigma=s`, with s > 0 |
+| `uniform_distribution(min=a, max=b)` | `Uniform lower=a upper=b`, finite a < b |
+| `lognormal_distribution(meanlog=m, sdlog=s)` | `LogNormalDistributionModel M=m S=s meanInRealSpace=false` |
+| Lognormal with `log_space=false`, median c | Same BEAST settings with M=log(c) |
+| Exponential with rate r | `Exponential mean=1/r` |
+| Exponential with scale c | `Exponential mean=c` |
+| Gamma with shape k and scale c | `Gamma alpha=k beta=c mode=ShapeScale` |
+| Gamma with shape k and rate r | `Gamma alpha=k beta=r mode=ShapeRate` |
+
+BEAST's Uniform bounds are fixed inputs. Other distribution parameters can be estimated where
+supported by their BEAST classes. Distribution offsets are respected.
+
+The numerator uses midpoint densities on the useful trait grid and assumes negligible
+π(x)D(x) outside it. The conditioning denominator also includes prior mass beyond the outer
+cell edges, multiplied by the corresponding boundary sampling-success probabilities. Each tail
+therefore assumes constant success probability. The prior is not renormalized to the grid, and
+without sampling conditioning the denominator is exactly one.
+
+Substantial prior mass outside the grid is allowed. Check wider grids and finer spacing: the
+constant-tail approximation, PDE boundary errors and midpoint quadrature can all affect the
+answer. An infinite density at a grid point (for example Gamma shape < 1 at zero), or no positive
+density at any grid point, raises an explicit numerical error. Adjust grid placement or resolution;
+the implementation does not switch quadrature rules or silently reject such parameter proposals.
+
 ## Age priors and the posterior
 
 The XML puts `origin` in `State`, assigns a proper prior, and supplies a random-walk proposal.

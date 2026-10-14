@@ -6,6 +6,9 @@ import SSE.fft.FftwFFT;
 
 import beast.base.core.Description;
 import beast.base.inference.Distribution;
+import beast.base.inference.distribution.ParametricDistribution;
+import beast.base.inference.distribution.Uniform;
+import org.apache.commons.math.distribution.ContinuousDistribution;
 import beast.base.core.Input;
 import beast.base.core.Log;
 import beast.base.inference.parameter.BooleanParameter;
@@ -25,8 +28,10 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
 
     final public Input<Tree> treeInput = new Input<>("tree", "Tree object containing tree.", Input.Validate.REQUIRED);
     final public Input<BooleanParameter> dynamicDtInput = new Input<>("dynDt", "If interval over which to carry out integration should be dynamically adjusted to maximize accuracy.", Input.Validate.REQUIRED);
-    final public Input<String> priorProbAtRootTypeInput = new Input<>("priorProbAtRootType", "Type of root prior probabilities for D's.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> priorProbsAtRootInput = new Input<>("givenPriorProbsAtRoot", "Root prior probabilities for D's at high resolution.", Input.Validate.XOR, priorProbAtRootTypeInput);
+    final public Input<String> priorProbAtRootTypeInput = new Input<>("priorProbAtRootType", "Legacy starting-trait weights: Flat or Observed.");
+    final public Input<RealParameter> priorProbsAtRootInput = new Input<>("givenPriorProbsAtRoot", "Unsupported legacy array of root weights.");
+    public final Input<ParametricDistribution> startTraitDistributionInput = new Input<>("startTraitDistribution",
+            "Proper continuous starting-trait distribution; currently supported only for a single-lineage origin.");
     final public Input<String> fftBackendInput = new Input<>("fftBackend",
             "Fourier transform implementation: sst (Java, default) or fftw (requires native library).", "sst");
 
@@ -90,10 +95,24 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
 
         if (priorProbsAtRootInput.get() != null) {
             throw new IllegalArgumentException("givenPriorProbsAtRoot is not supported: a supplied array "
-                    + "has no defined mapping when the QuaSSE grid changes. Use Flat or Observed.");
+                    + "has no defined mapping when the QuaSSE grid changes. Use startTraitDistribution, Flat or Observed.");
         }
-        if (!FLAT.equals(rootPriorType) && !OBS.equals(rootPriorType))
+        ParametricDistribution starting = startTraitDistributionInput.get();
+        if ((starting == null) == (rootPriorType == null))
+            throw new IllegalArgumentException("Supply exactly one of startTraitDistribution and priorProbAtRootType.");
+        if (starting == null && !FLAT.equals(rootPriorType) && !OBS.equals(rootPriorType))
             throw new IllegalArgumentException("priorProbAtRootType must be Flat or Observed.");
+        if (starting != null) {
+            for (Input<?> input : starting.getInputs().values()) {
+                if (input.get() instanceof beast.base.core.Function parameter && parameter.getDimension() != 1)
+                    throw new IllegalArgumentException("startTraitDistribution parameters must be scalar: " + input.getName());
+            }
+            if (!(starting.getDistribution() instanceof ContinuousDistribution))
+                throw new IllegalArgumentException("startTraitDistribution must be a proper continuous distribution.");
+            if (starting instanceof Uniform uniform && (!Double.isFinite(uniform.lowerInput.get())
+                    || !Double.isFinite(uniform.upperInput.get())))
+                throw new IllegalArgumentException("startTraitDistribution requires finite Uniform bounds.");
+        }
         // quTraits = quTraitsInput.get();
 
         dynamicallyAdjustDt = dynamicDtInput.get().getValue();

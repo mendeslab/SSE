@@ -5,6 +5,12 @@ import beast.base.inference.State;
 import beast.base.inference.CompoundDistribution;
 import beast.base.inference.distribution.Normal;
 import beast.base.inference.distribution.Prior;
+import beast.base.inference.distribution.ParametricDistribution;
+import beast.base.inference.distribution.Uniform;
+import beast.base.inference.distribution.Gamma;
+import beast.base.inference.distribution.Exponential;
+import beast.base.inference.distribution.LogNormalDistributionModel;
+import beast.base.inference.distribution.Poisson;
 import beast.base.inference.parameter.BooleanParameter;
 import beast.base.inference.parameter.IntegerParameter;
 import beast.base.inference.parameter.RealParameter;
@@ -2278,6 +2284,11 @@ public class QuaSSEDistributionTest {
                 "q2mMu", death, "q2d", observation, "dynDt", new BooleanParameter("true"),
                 "priorProbAtRootType", "Flat", "fossilSamplingRate", new RealParameter("0.08"),
                 "presentSamplingProbability", new RealParameter("0.7")));
+        if (Arrays.asList(options).contains("startTraitDistribution")) {
+            int legacy = inputs.indexOf("priorProbAtRootType");
+            inputs.remove(legacy + 1);
+            inputs.remove(legacy);
+        }
         inputs.addAll(Arrays.asList(options));
         distribution.initByName(inputs.toArray());
         return distribution;
@@ -2404,6 +2415,113 @@ public class QuaSSEDistributionTest {
             state.restore(); state.restoreCalculationNodes(); state.setEverythingDirty(false);
             Assert.assertEquals(initial, origin.calculateLogP(), 1e-8);
         }
+    }
+
+    // Explicit priors need absolute density scale and tail contributions, unlike legacy weights.
+    // Independent sums catch truncation/offset mistakes; retain while midpoint/tail integration is supported.
+    @Test
+    public void testStartTraitIntegrals() throws Exception {
+        Normal prior = new Normal();
+        prior.initByName("mean", new RealParameter("1"), "sigma", new RealParameter("3"), "offset", 2.0);
+        org.apache.commons.math.distribution.NormalDistributionImpl oracle =
+                new org.apache.commons.math.distribution.NormalDistributionImpl(3, 3);
+        for (boolean fine : new boolean[]{false, true}) {
+            for (String condition : new String[]{"any", "living", "none"}) {
+                QuaSSEDistribution d = fossilDistribution("(A:2,(S:0,B:1):1);", fine ? 4 : 0, true,
+                        1024, .015625, .01, 5, 2,
+                        "conditionOnRoot", false, "origin", new RealParameter("3"),
+                        "conditionOnSampling", condition.equals("any"),
+                        "conditionOnRhoSampling", condition.equals("living"), "startTraitDistribution", prior);
+                Assert.assertTrue(Double.isFinite(evaluate(d)));
+                double[][] rows = d.getEsDs(!fine)[d.treeInput.get().getRoot().getNr()];
+                double dx = d.gridInput.get().getDx() / (fine ? 2 : 1);
+                double[] x = d.gridInput.get().copyX(!fine);
+                // For living-only success, obtain Q from the same PDE with fossil rate zero.
+                double[] failure = rows[0];
+                if (condition.equals("living")) {
+                    QuaSSEDistribution q = fossilDistribution("(A:2,B:2);", fine ? 4 : 0, false,
+                            1024, .015625, .01, 5, 2, "conditionOnRoot", false,
+                            "origin", new RealParameter("3"));
+                    q.q2mLambdaInput.setValue(d.q2mLambdaInput.get(), q);
+                    q.fossilSamplingRateInput.get().setValue(0.0);
+                    q.initAndValidate();
+                    evaluate(q);
+                    failure = q.getEsDs(!fine)[q.treeInput.get().getRoot().getNr()][0];
+                }
+                double numerator = 0, denominator = 0;
+                for (int i = 0; i < x.length; ++i) {
+                    double weight = oracle.density(x[i]) * dx;
+                    numerator += weight * rows[1][2 * i];
+                    denominator += weight * (1 - failure[2 * i]);
+                }
+                denominator += oracle.cumulativeProbability(x[0] - dx / 2) * (1 - failure[0])
+                        + (1 - oracle.cumulativeProbability(x[x.length - 1] + dx / 2))
+                        * (1 - failure[2 * (x.length - 1)]);
+                if (condition.equals("none")) denominator = 1;
+                Assert.assertEquals(Math.log(numerator / denominator) + 7,
+                        d.getLogPFromRelevantObjects(rows, 7, d.getLambda(!fine), dx, false), 1e-10);
+            }
+        }
+    }
+
+    // Real BEAST proposals exercise dependency invalidation and restoration, not just direct calls.
+    // Family/domain cases cover the new public input without duplicating distribution-library tests.
+    @Test
+    public void testStartTraitInputsAndRestoration() {
+        RealParameter mean = new RealParameter("0");
+        Normal normal = new Normal(); normal.initByName("mean", mean, "sigma", new RealParameter("1"));
+        Uniform uniform = new Uniform(); uniform.initByName("lower", -1.0, "upper", 1.0);
+        Gamma gamma = new Gamma(); gamma.initByName("alpha", new RealParameter("2"), "beta", new RealParameter("1"));
+        Exponential exponential = new Exponential(); exponential.initByName("mean", new RealParameter("1"));
+        LogNormalDistributionModel lognormal = new LogNormalDistributionModel();
+        lognormal.initByName("M", new RealParameter("0"), "S", new RealParameter("1"));
+        for (ParametricDistribution prior : new ParametricDistribution[]{normal, uniform, gamma, exponential, lognormal}) {
+            QuaSSEDistribution d = fossilDistribution("(A:2,B:2);", 0, true,
+                    256, .03125, .01, 5, 1, "conditionOnRoot", false,
+                    "origin", new RealParameter("3"), "startTraitDistribution", prior);
+            Assert.assertTrue(Double.isFinite(evaluate(d)));
+            d.priorProbAtRootTypeInput.setValue("Flat", d);
+            Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        }
+        QuaSSEDistribution d = fossilDistribution("(A:2,B:2);", 0, true,
+                256, .03125, .01, 5, 1, "conditionOnRoot", false,
+                "origin", new RealParameter("3"), "startTraitDistribution", normal);
+        State state = new State(); state.initByName("stateNode", Arrays.asList(mean));
+        state.initialise(); state.setPosterior(d);
+        double initial = state.robustlyCalcPosterior(d);
+        // The distant mean also makes raw grid densities underflow; log-density scaling must survive.
+        for (double candidate : new double[]{2, 100}) {
+            state.store(1); mean.setValue(candidate); state.storeCalculationNodes(); state.checkCalculationNodesDirtiness();
+            double changed = d.calculateLogP();
+            Assert.assertNotEquals(initial, changed, 1e-6);
+            Normal freshPrior = new Normal();
+            freshPrior.initByName("mean", new RealParameter(Double.toString(candidate)),
+                    "sigma", new RealParameter("1"));
+            QuaSSEDistribution fresh = fossilDistribution("(A:2,B:2);", 0, true,
+                    256, .03125, .01, 5, 1, "conditionOnRoot", false,
+                    "origin", new RealParameter("3"), "startTraitDistribution", freshPrior);
+            Assert.assertEquals(evaluate(fresh), changed, 1e-12);
+            state.restore(); state.restoreCalculationNodes(); state.setEverythingDirty(false);
+            Assert.assertEquals(initial, d.calculateLogP(), 1e-12);
+        }
+        d.conditionOnRootInput.setValue(true, d); d.originInput.setValue(null, d);
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        d.conditionOnRootInput.setValue(false, d); d.originInput.setValue(new RealParameter("3"), d);
+        Gamma singular = new Gamma();
+        singular.initByName("alpha", new RealParameter("0.5"), "beta", new RealParameter("1"));
+        d.startTraitDistributionInput.setValue(singular, d); d.initAndValidate();
+        Assert.assertThrows(ArithmeticException.class, () -> evaluate(d));
+        Poisson discrete = new Poisson(); discrete.initByName("lambda", new RealParameter("1"));
+        d.startTraitDistributionInput.setValue(discrete, d);
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        Uniform improper = new Uniform(); improper.initByName("lower", Double.NEGATIVE_INFINITY, "upper", 1.0);
+        d.startTraitDistributionInput.setValue(improper, d);
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        Normal vector = new Normal(); vector.initByName("mean", new RealParameter("0 1"), "sigma", new RealParameter("1"));
+        d.startTraitDistributionInput.setValue(vector, d);
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        d.startTraitDistributionInput.setValue(null, d);
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
     }
 
     // Trait-dependent endpoint weights must use the propagated origin partial; scalar cases alone

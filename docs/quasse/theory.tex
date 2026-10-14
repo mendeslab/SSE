@@ -472,6 +472,44 @@ Thus Flat on an automatically selected interval should not be described as a who
 data-independent scientific prior. Fixed-support comparisons and numerical domain checks are
 needed to separate weighting conventions from discretization effects.
 
+\paragraph{A specified origin-trait distribution.}
+The optional \texttt{startTraitDistribution} supplies a proper, data-independent continuous
+density $\pi_o$ instead of Flat/Observed weights. Its support is independent of the numerical
+grid. This input currently applies only to a single-lineage origin; it does not select a new
+branching-root convention. The parameters of $\pi_o$ may themselves have hyperpriors.
+
+Let $x_0,\ldots,x_{n-1}$ be the useful grid centers, with spacing $h$, and let
+$a=x_0-h/2$, $b=x_{n-1}+h/2$ be their outer cell edges. Write $F_o$ for the prior CDF and
+$s_i=1-E(x_i,t_o)$ or $1-Q(x_i,t_o)$ for the selected success probability. The approximation is
+\begin{align}
+ \widehat N_o &= h\sum_i\pi_o(x_i)D_o(x_i),\\
+ \widehat Z_o &= h\sum_i\pi_o(x_i)s_i
+       +F_o(a)s_0+[1-F_o(b)]s_{n-1}.
+\end{align}
+The numerator assumes negligible $\pi_oD_o$ outside $[a,b]$. The denominator extends success
+probabilities constantly on each side, using the nearest grid value. The two constants need not
+agree. With no sampling-success condition, $Z_o=1$ exactly and no denominator quadrature is used.
+In particular, the prior density is never normalized to its represented grid mass.
+
+The constant-tail approximation is exact for constant success probability, but midpoint
+quadrature of the interior density can still have error. If the maximum differences between the
+true tail success probabilities and the chosen constants are $\epsilon_L,\epsilon_R$, the tail
+contribution to the absolute denominator error is at most
+\[
+ F_o(a)\epsilon_L+[1-F_o(b)]\epsilon_R.
+\]
+This bound excludes interior PDE and quadrature errors. A small absolute denominator error may
+still be important when sampling success is rare. Constant asymptotic rates alone do not make
+success exactly constant outside a finite grid: trait diffusion can return to the interior.
+Check grid extent and resolution separately; small $D$ at the boundaries does not establish
+accuracy of the success denominator.
+
+For stable evaluation, set $m=\max_i\log\pi_o(x_i)$ and store
+$w_i=\exp(\log\pi_o(x_i)-m)$. Restore $m$ to the log interior integrals before combining them
+with unscaled tail contributions by log-sum arithmetic. This computational scaling is distinct
+from prior normalization. Zero density is allowed, but infinite density at a grid point or zero
+density at every grid point raises a numerical error rather than changing the quadrature rule.
+
 If $D=e^c\widetilde D$, where $\widetilde D$ is the final stored partial and $c$ is the
 accumulated log scale, the reported log likelihood is
 \[

@@ -102,6 +102,21 @@ from the likelihood and retained for comparisons, not as a generative prior. The
 \href{theory.pdf}{mathematical reference} derives these distinctions and the required
 ratios of integrals.
 
+For a single-lineage origin, \texttt{startTraitDistribution} instead supplies a proper continuous
+BEAST distribution whose parameters may be fixed or, where supported, estimated. The origin trait
+is integrated out inside the likelihood; its distribution is not a separate prior factor on an
+explicitly sampled trait. Hyperparameters can have their own priors. This input is mutually
+exclusive with Flat/Observed weights and is currently unavailable for branching-root conditioning.
+
+The numerator uses the specified density at grid points and assumes negligible weighted
+likelihood outside the grid. The conditioning denominator also includes the prior probability in
+each tail, multiplied by the sampling-success probability at the corresponding boundary. This
+assumes constant success probability separately in each tail; it does not truncate or renormalize
+the prior. Wider-grid and finer-grid checks are still needed, especially when boundary probabilities
+are inaccurate or vary beyond the grid. The
+\href{../../examples/QuaSSE_origin_trait.xml}{starting-trait example} estimates the mean of a Normal
+origin-trait distribution while conditioning on a sampled living descendant.
+
 Conditioning on an age does not require fixing it. An origin age can be a parameter with its own
 prior and proposal; a root age belongs to the tree and can receive an all-taxa MRCA prior. QuaSSE
 already supplies the diversification/trait factor, so adding an ordinary FBD tree prior would count

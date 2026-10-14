@@ -8,6 +8,10 @@ import beast.base.evolution.tree.Node;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import beast.base.inference.distribution.ParametricDistribution;
+import beast.base.inference.distribution.Uniform;
+import beast.base.inference.distribution.LogNormalDistributionModel;
+import org.apache.commons.math.MathException;
 
 public class QuaSSEDistribution extends QuaSSEProcess {
 
@@ -28,6 +32,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             "Condition on sampled living descendants; mutually exclusive with conditionOnSampling.");
     private boolean conditionOnRoot = true, conditionOnSampling = true, conditionOnRhoSampling;
     private double startingAge;
+    // Rebuilt at every endpoint evaluation, including after rejected MCMC proposals.
+    private double startTraitLogScale, startTraitLeftMass, startTraitRightMass;
     private boolean hasFossils, hasTerminalFossils, hasBifurcations;
     // One reusable probability workspace per resolution: terminal-fossil E, then living-sample Q.
     private double[][] fossilELo, fossilEHi, scratchELo, scratchEHi, fftBufferELo, fftBufferEHi;
@@ -122,6 +128,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     // Supplying only the rho flag must not implicitly enable the other condition.
     private void resolveConditioning() {
         conditionOnRoot = conditionOnRootInput.get();
+        if (conditionOnRoot && startTraitDistributionInput.get() != null)
+            throw new IllegalArgumentException("startTraitDistribution currently requires conditionOnRoot=false.");
         Boolean any = conditionOnSamplingInput.get(), living = conditionOnRhoSamplingInput.get();
         conditionOnSampling = any == null ? living == null : any;
         conditionOnRhoSampling = Boolean.TRUE.equals(living);
@@ -386,7 +394,9 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         if (priorProbsAtRoot == null || priorProbsAtRoot.length != nUsefulXBinsRightRes)
             priorProbsAtRoot = new double[nUsefulXBinsRightRes];
 
-        if (conditionOnRoot)
+        if (startTraitDistributionInput.get() != null)
+            populateStartTraitWeights(got2LowRes ? xLo : xHi, dxAtRightRes);
+        else if (conditionOnRoot)
             populatePriorProbAtRoot(esDsAtRoot[1], dxAtRightRes, nXBinsRightRes, nUsefulXBinsRightRes,
                     rootPriorType, jtransforms);
         else {
@@ -401,6 +411,58 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                 throw new ArithmeticException("Invalid origin trait weights.");
             for (int i = 0; i < nUsefulXBinsRightRes; ++i) priorProbsAtRoot[i] /= sum * dxAtRightRes;
         }
+    }
+
+    // Midpoint densities retain their absolute scale: dividing by their grid sum would
+    // change the prior. Only D's numerator is truncated; success probabilities are extended
+    // constantly beyond the outer cell edges, using the nearest useful-bin value on each side.
+    private void populateStartTraitWeights(double[] x, double dx) {
+        ParametricDistribution prior = startTraitDistributionInput.get();
+        startTraitLogScale = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < x.length; ++i) {
+            double value = prior.logDensity(x[i]);
+            if (Double.isNaN(value) || value == Double.POSITIVE_INFINITY)
+                throw new ArithmeticException("Invalid or infinite startTraitDistribution density at x=" + x[i]
+                        + ". Check distribution parameters and grid placement (including singular support boundaries).");
+            priorProbsAtRoot[i] = value;
+            startTraitLogScale = Math.max(startTraitLogScale, value);
+        }
+        if (!Double.isFinite(startTraitLogScale))
+            throw new ArithmeticException("No positive startTraitDistribution density on the grid; adjust its range/resolution.");
+        for (int i = 0; i < x.length; ++i)
+            priorProbsAtRoot[i] = Math.exp(priorProbsAtRoot[i] - startTraitLogScale);
+        // BEAST's density applies offset, but its CDF does not. Subtract it explicitly
+        // when calling the underlying CDF. Avoid infinite endpoints: some BEAST CDFs fail there.
+        try {
+            startTraitLeftMass = startTraitCDF(prior, x[0] - dx / 2);
+            startTraitRightMass = 1 - startTraitCDF(prior, x[x.length - 1] + dx / 2);
+        } catch (MathException failure) {
+            throw new ArithmeticException("Cannot evaluate startTraitDistribution tails: " + failure.getMessage());
+        }
+        if (!Double.isFinite(startTraitLeftMass) || !Double.isFinite(startTraitRightMass)
+                || startTraitLeftMass < 0 || startTraitLeftMass > 1
+                || startTraitRightMass < 0 || startTraitRightMass > 1)
+            throw new ArithmeticException("Invalid startTraitDistribution tail probabilities.");
+    }
+
+    private static double startTraitCDF(ParametricDistribution prior, double x) throws MathException {
+        x -= prior.getOffset();
+        // BEAST 2.7 compatibility: Uniform's CDF exceeds one above its support, and
+        // LogNormal's CDF takes log(x) even for x<=0. Remove these cases when upstream
+        // handles support boundaries; the formulas here are the exact respective CDFs.
+        if (prior instanceof Uniform uniform)
+            return Math.max(0, Math.min(1, (x - uniform.lowerInput.get())
+                    / (uniform.upperInput.get() - uniform.lowerInput.get())));
+        if (prior instanceof LogNormalDistributionModel && x <= 0) return 0;
+        return prior.getDistribution().cumulativeProbability(x);
+    }
+
+    // Nonnegative contributions arrive in log space; -infinity represents an exact zero.
+    private static double logAdd(double a, double b) {
+        if (a == Double.NEGATIVE_INFINITY) return b;
+        if (b == Double.NEGATIVE_INFINITY) return a;
+        double high = Math.max(a, b);
+        return high + Math.log1p(Math.exp(Math.min(a, b) - high));
     }
 
     @Override
@@ -943,6 +1005,23 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             denominator += priorProbsAtRoot[i] * (conditionOnRoot ? birthRates[i] * success * success : success);
         }
         numerator *= dx;
+        if (startTraitDistributionInput.get() != null) {
+            // Weights are pi/exp(m); restore m before adding unscaled prior-tail masses.
+            // In conditioned ratios the interior scales cancel only after including the tails.
+            double logDenominator = 0;
+            if (conditionOnSampling || conditionOnRhoSampling) {
+                int last = priorProbsAtRoot.length - 1;
+                int stride = conditionOnRhoSampling || !jtransforms ? 2 : 1;
+                logDenominator = startTraitLogScale + Math.log(denominator * dx);
+                logDenominator = logAdd(logDenominator,
+                        Math.log(startTraitLeftMass) + Math.log1p(-failure[0]));
+                logDenominator = logAdd(logDenominator,
+                        Math.log(startTraitRightMass) + Math.log1p(-failure[stride * last]));
+            }
+            if (!(numerator > 0) || !Double.isFinite(numerator) || !Double.isFinite(logDenominator))
+                throw new ArithmeticException("Invalid starting likelihood or conditioning integral.");
+            return scales + startTraitLogScale + Math.log(numerator) - logDenominator;
+        }
         denominator = !conditionOnRoot && !conditionOnSampling && !conditionOnRhoSampling ? 1 : denominator * dx;
         if (!(numerator > 0) || !Double.isFinite(numerator)
                 || !(denominator > 0) || !Double.isFinite(denominator))
