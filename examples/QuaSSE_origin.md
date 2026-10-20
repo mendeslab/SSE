@@ -86,14 +86,34 @@ and improper Uniform distributions are unsupported. Corresponding PhyloJunction 
 
 | PhyloJunction starting distribution | BEAST distribution settings |
 | --- | --- |
-| `normal_distribution(mean=m, sd=s)` | `Normal mean=m sigma=s`, with s > 0 |
-| `uniform_distribution(min=a, max=b)` | `Uniform lower=a upper=b`, finite a < b |
-| `lognormal_distribution(meanlog=m, sdlog=s)` | `LogNormalDistributionModel M=m S=s meanInRealSpace=false` |
+| `normal(mean=m, sd=s)` | `Normal mean=m sigma=s`, with s > 0 |
+| `unif(min=a, max=b)` | `Uniform lower=a upper=b`, finite a < b |
+| `lognormal(meanlog=m, sdlog=s)` | `LogNormalDistributionModel M=m S=s meanInRealSpace=false` |
 | Lognormal with `log_space=false`, median c | Same BEAST settings with M=log(c) |
 | Exponential with rate r | `Exponential mean=1/r` |
 | Exponential with scale c | `Exponential mean=c` |
 | Gamma with shape k and scale c | `Gamma alpha=k beta=c mode=ShapeScale` |
 | Gamma with shape k and rate r | `Gamma alpha=k beta=r mode=ShapeRate` |
+| `cauchy(location=m, scale=s)` | `SSE.Cauchy location=m scale=s` |
+
+For a heavy-tailed origin trait, replace the Normal starting distribution with:
+
+```xml
+<startTraitDistribution spec="SSE.Cauchy" location="0.0" scale="1.0"/>
+```
+
+Both parameters are required and finite; scale must be positive. Location is the median and
+mode, not a mean: Cauchy has no finite mean or variance, and scale is not a standard deviation.
+Use `@parameter` references to estimate location or scale. Give an estimated scale a positive
+parameter domain and a scale-preserving proposal, such as BEAST's `ScaleOperator`.
+The corresponding PhyloJunction input is `start_distribution=cauchy(0,1)`.
+
+Heavy prior tails can make the finite-grid approximation more consequential. The likelihood
+numerator neglects the region outside the grid; the conditioning denominator includes its prior
+mass using constant extensions of the success probability at the two boundaries. Check stability
+by widening the grid while keeping spatial resolution fixed. It is the likelihood-weighted
+prior contribution that must be negligible in the omitted region, not necessarily the prior
+mass itself. Cauchy does not change these approximations or enable branching-root conditioning.
 
 BEAST's Uniform bounds are fixed inputs. Other distribution parameters can be estimated where
 supported by their BEAST classes. Distribution offsets are respected.
