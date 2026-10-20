@@ -6,6 +6,7 @@
     <provider classname="SSE.CladoTriplet"/>
     <provider classname="SSE.CladogeneticSpeciationRateStash"/>
     <provider classname="SSE.ConstantLinkFn"/>
+    <provider classname="SSE.Cauchy"/>
     <provider classname="SSE.HiddenInstantaneousRateMatrix"/>
     <provider classname="SSE.HiddenInstantaneousRateMatrix_original"/>
     <provider classname="SSE.HiddenObservedStateMapper"/>

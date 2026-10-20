@@ -2421,45 +2421,55 @@ public class QuaSSEDistributionTest {
     // Independent sums catch truncation/offset mistakes; retain while midpoint/tail integration is supported.
     @Test
     public void testStartTraitIntegrals() throws Exception {
-        Normal prior = new Normal();
-        prior.initByName("mean", new RealParameter("1"), "sigma", new RealParameter("3"), "offset", 2.0);
-        org.apache.commons.math.distribution.NormalDistributionImpl oracle =
-                new org.apache.commons.math.distribution.NormalDistributionImpl(3, 3);
-        for (boolean fine : new boolean[]{false, true}) {
-            for (String condition : new String[]{"any", "living", "none"}) {
-                QuaSSEDistribution d = fossilDistribution("(A:2,(S:0,B:1):1);", fine ? 4 : 0, true,
-                        1024, .015625, .01, 5, 2,
-                        "conditionOnRoot", false, "origin", new RealParameter("3"),
-                        "conditionOnSampling", condition.equals("any"),
-                        "conditionOnRhoSampling", condition.equals("living"), "startTraitDistribution", prior);
-                Assert.assertTrue(Double.isFinite(evaluate(d)));
-                double[][] rows = d.getEsDs(!fine)[d.treeInput.get().getRoot().getNr()];
-                double dx = d.gridInput.get().getDx() / (fine ? 2 : 1);
-                double[] x = d.gridInput.get().copyX(!fine);
-                // For living-only success, obtain Q from the same PDE with fossil rate zero.
-                double[] failure = rows[0];
-                if (condition.equals("living")) {
-                    QuaSSEDistribution q = fossilDistribution("(A:2,B:2);", fine ? 4 : 0, false,
-                            1024, .015625, .01, 5, 2, "conditionOnRoot", false,
-                            "origin", new RealParameter("3"));
-                    q.q2mLambdaInput.setValue(d.q2mLambdaInput.get(), q);
-                    q.fossilSamplingRateInput.get().setValue(0.0);
-                    q.initAndValidate();
-                    evaluate(q);
-                    failure = q.getEsDs(!fine)[q.treeInput.get().getRoot().getNr()][0];
+        Normal normal = new Normal();
+        normal.initByName("mean", new RealParameter("1"), "sigma", new RealParameter("3"), "offset", 2.0);
+        Cauchy cauchy = new Cauchy();
+        cauchy.initByName("location", new RealParameter("1"), "scale", new RealParameter("3"), "offset", 2.0);
+        for (ParametricDistribution prior : new ParametricDistribution[]{normal, cauchy}) {
+            org.apache.commons.math.distribution.NormalDistributionImpl oracle =
+                    new org.apache.commons.math.distribution.NormalDistributionImpl(3, 3);
+            for (boolean fine : new boolean[]{false, true}) {
+                for (String condition : new String[]{"any", "living", "none"}) {
+                    QuaSSEDistribution d = fossilDistribution("(A:2,(S:0,B:1):1);", fine ? 4 : 0, true,
+                            1024, .015625, .01, 5, 2,
+                            "conditionOnRoot", false, "origin", new RealParameter("3"),
+                            "conditionOnSampling", condition.equals("any"),
+                            "conditionOnRhoSampling", condition.equals("living"), "startTraitDistribution", prior);
+                    Assert.assertTrue(Double.isFinite(evaluate(d)));
+                    double[][] rows = d.getEsDs(!fine)[d.treeInput.get().getRoot().getNr()];
+                    double dx = d.gridInput.get().getDx() / (fine ? 2 : 1);
+                    double[] x = d.gridInput.get().copyX(!fine);
+                    // For living-only success, obtain Q from the same PDE with fossil rate zero.
+                    double[] failure = rows[0];
+                    if (condition.equals("living")) {
+                        QuaSSEDistribution q = fossilDistribution("(A:2,B:2);", fine ? 4 : 0, false,
+                                1024, .015625, .01, 5, 2, "conditionOnRoot", false,
+                                "origin", new RealParameter("3"));
+                        q.q2mLambdaInput.setValue(d.q2mLambdaInput.get(), q);
+                        q.fossilSamplingRateInput.get().setValue(0.0);
+                        q.initAndValidate();
+                        evaluate(q);
+                        failure = q.getEsDs(!fine)[q.treeInput.get().getRoot().getNr()][0];
+                    }
+                    double numerator = 0, denominator = 0;
+                    for (int i = 0; i < x.length; ++i) {
+                        double density = prior == normal ? oracle.density(x[i])
+                                : 1 / (3 * Math.PI * (1 + Math.pow((x[i] - 3) / 3, 2)));
+                        double weight = density * dx;
+                        numerator += weight * rows[1][2 * i];
+                        denominator += weight * (1 - failure[2 * i]);
+                    }
+                    double left = x[0] - dx / 2, right = x[x.length - 1] + dx / 2;
+                    double leftMass = prior == normal ? oracle.cumulativeProbability(left)
+                            : .5 + Math.atan((left - 3) / 3) / Math.PI;
+                    double rightMass = prior == normal ? 1 - oracle.cumulativeProbability(right)
+                            : .5 - Math.atan((right - 3) / 3) / Math.PI;
+                    denominator += leftMass * (1 - failure[0])
+                            + rightMass * (1 - failure[2 * (x.length - 1)]);
+                    if (condition.equals("none")) denominator = 1;
+                    Assert.assertEquals(Math.log(numerator / denominator) + 7,
+                            d.getLogPFromRelevantObjects(rows, 7, d.getLambda(!fine), dx, false), 1e-10);
                 }
-                double numerator = 0, denominator = 0;
-                for (int i = 0; i < x.length; ++i) {
-                    double weight = oracle.density(x[i]) * dx;
-                    numerator += weight * rows[1][2 * i];
-                    denominator += weight * (1 - failure[2 * i]);
-                }
-                denominator += oracle.cumulativeProbability(x[0] - dx / 2) * (1 - failure[0])
-                        + (1 - oracle.cumulativeProbability(x[x.length - 1] + dx / 2))
-                        * (1 - failure[2 * (x.length - 1)]);
-                if (condition.equals("none")) denominator = 1;
-                Assert.assertEquals(Math.log(numerator / denominator) + 7,
-                        d.getLogPFromRelevantObjects(rows, 7, d.getLambda(!fine), dx, false), 1e-10);
             }
         }
     }
@@ -2475,7 +2485,9 @@ public class QuaSSEDistributionTest {
         Exponential exponential = new Exponential(); exponential.initByName("mean", new RealParameter("1"));
         LogNormalDistributionModel lognormal = new LogNormalDistributionModel();
         lognormal.initByName("M", new RealParameter("0"), "S", new RealParameter("1"));
-        for (ParametricDistribution prior : new ParametricDistribution[]{normal, uniform, gamma, exponential, lognormal}) {
+        Cauchy cauchy = new Cauchy();
+        cauchy.initByName("location", new RealParameter("0"), "scale", new RealParameter("1"));
+        for (ParametricDistribution prior : new ParametricDistribution[]{normal, uniform, gamma, exponential, lognormal, cauchy}) {
             QuaSSEDistribution d = fossilDistribution("(A:2,B:2);", 0, true,
                     256, .03125, .01, 5, 1, "conditionOnRoot", false,
                     "origin", new RealParameter("3"), "startTraitDistribution", prior);
@@ -2522,6 +2534,35 @@ public class QuaSSEDistributionTest {
         Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
         d.startTraitDistributionInput.setValue(null, d);
         Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+    }
+
+    // Both Cauchy parameters may be estimated. State proposals must invalidate likelihood
+    // weights and restoration must recover them; distribution-only tests cannot check this.
+    @Test
+    public void testCauchyStartRestoration() {
+        RealParameter location = new RealParameter("0"), scale = new RealParameter("1");
+        Cauchy prior = new Cauchy(); prior.initByName("location", location, "scale", scale);
+        QuaSSEDistribution d = fossilDistribution("(A:2,B:2);", 0, true,
+                256, .03125, .01, 5, 1, "conditionOnRoot", false,
+                "origin", new RealParameter("3"), "startTraitDistribution", prior);
+        State state = new State(); state.initByName("stateNode", Arrays.asList(location, scale));
+        state.initialise(); state.setPosterior(d);
+        double initial = state.robustlyCalcPosterior(d);
+        for (RealParameter parameter : new RealParameter[]{location, scale}) {
+            state.store(1); parameter.setValue(2.0);
+            state.storeCalculationNodes(); state.checkCalculationNodesDirtiness();
+            double changed = d.calculateLogP();
+            Assert.assertNotEquals(initial, changed, 1e-6);
+            Cauchy freshPrior = new Cauchy();
+            freshPrior.initByName("location", new RealParameter(Double.toString(location.getValue())),
+                    "scale", new RealParameter(Double.toString(scale.getValue())));
+            QuaSSEDistribution fresh = fossilDistribution("(A:2,B:2);", 0, true,
+                    256, .03125, .01, 5, 1, "conditionOnRoot", false,
+                    "origin", new RealParameter("3"), "startTraitDistribution", freshPrior);
+            Assert.assertEquals(evaluate(fresh), changed, 1e-12);
+            state.restore(); state.restoreCalculationNodes(); state.setEverythingDirty(false);
+            Assert.assertEquals(initial, d.calculateLogP(), 1e-12);
+        }
     }
 
     // Trait-dependent endpoint weights must use the propagated origin partial; scalar cases alone
