@@ -56,11 +56,14 @@ Origin weights are normalized on the useful bins at the origin age. `Observed` r
 for comparison and uses the endpoint likelihood to construct its weights; it is not a generative
 Bayesian prior. Automatically chosen grid support can itself depend on observations.
 
-Changing the origin does not automatically widen the grid. Check likelihood stability when
-refining spatial spacing and timestep and when widening the useful interval separately. With Flat weighting, widening the useful interval changes the trait prior itself, so the resulting
-likelihood difference is not solely numerical error. Padding changes can also change useful support;
-keeping `nX` fixed alone does not hold the prior interval fixed. A long stem can require a wider domain. These checks establish numerical adequacy for the
-analysis being run, not a universal accuracy guarantee.
+Automatic grids use current origin age, drift, and diffusion to extend the observation-based
+interval by ancestral diffusion distance. This example supplies explicit spacing, midpoint,
+timestep, and transition age, so those controls remain fixed. Check likelihood stability when
+refining spacing and timestep and when widening the useful interval separately. With Flat
+weighting, widening the useful interval changes the trait prior itself, so the resulting likelihood
+difference is not solely numerical error. Padding changes can also change useful support; keeping
+`nX` fixed alone does not hold the prior interval fixed. These checks establish numerical adequacy
+for the analysis being run, not a universal accuracy guarantee.
 
 ## A specified origin-trait distribution
 

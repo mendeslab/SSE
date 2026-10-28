@@ -33,12 +33,14 @@ per log-mass unit. The positive endpoints are unordered, allowing either increas
 speciation. Starts are rounded plausible values, not the tutorial's fitted estimates. The midpoint
 random-walk window is 0.5; the five scale operators retain scaleFactor=0.75 and equal weights.
 
-Grid controls follow the same defaults as the smaller example: nX=1024, hiLoRatio=4,
-flankWidthScaler=5, dX=5 times trait range/1024, xMid=trait-range midpoint, tc=tree height/10,
-and dtMax=tree height/250 for Strang splitting. Here height is 65.0916859837, dX=0.0379022945773,
-and dtMax=0.260366743935. Padding can change with diffusion; `dynDt=true` is not error-adaptive.
-The current default grid can still trigger kernel-resolution warnings on short branch segments,
-including at the initial parameters; evaluation continues. Increasing `dtMax` does not resolve those kernels.
+The grid uses automatic controls with nX=1024, hiLoRatio=4 and flankWidthScaler=5. Its active
+interval covers both five times the observed trait range and the drift-shifted six-sigma ancestral
+diffusion interval, with extra space for padding and fixed boundary strips. Spacing and extent
+update with diffusion; bin counts stay fixed. Timestep and transition defaults are tree height/250
+and tree height/10. At the starting parameters, total coarse-grid width is about 40.819 and
+spacing is 0.039862. `dynDt=true` subdivides branches; it is not error-adaptive stepping.
+Short branch segments can still under-resolve diffusion. Check larger bin counts separately
+from wider domains.
 
 ## Run
 
@@ -74,6 +76,10 @@ BEAST's `-resume` restores the checkpoint instead of drawing new starting values
 not a guarantee of convergence; priors, operators and numerical settings match the short example.
 
 ## Validation
+
+The reference calculations below used explicit controls: dX=0.0379022945773, xMid at the
+observed midpoint, dtMax=0.260366743935, and tc=6.50916859837, with the same bin counts.
+They describe that grid, rather than the current automatic defaults.
 
 All embedded taxon/value pairs and the exported tree were checked against the source files.
 Starting-point log prior is 2.386168944446946, independently reproduced in R.

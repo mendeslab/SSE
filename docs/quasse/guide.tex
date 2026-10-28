@@ -133,6 +133,18 @@ step, and half a reaction step (Strang splitting). An exact reaction update does
 combined numerical propagation exact; the theory document's section on reaction flow gives
 its derivation and limiting cases.
 
+Automatic grids keep their bin counts fixed, but recompute physical controls from current
+parameters. Let $T$ be the origin age when supplied, otherwise the root age, $m$ the observed
+trait midpoint, $R$ its range, $v$ drift, and $q$ diffusion variance per unit time. The active
+trait interval contains both $m\pm cR/2$ and $m-vT\pm3\sqrt{qT}$, where
+\texttt{rangeMultiplier} supplies $c$ (default 5). Additional space accommodates FFT padding
+and preserved boundary strips. The default maximum timestep is $T/250$ and the fine/coarse
+transition age is $T/10$. Explicit spacing, midpoint, timestep, and transition settings override
+those defaults. Proposals and their restoration update geometry while reusing the FFT plans.
+Wider automatic domains have coarser spacing at fixed bin count; neither a six-sigma interval
+nor a finite likelihood establishes numerical accuracy. Check larger bin counts and wider
+intervals separately, especially with broad starting-trait distributions.
+
 The log-space exploration asks whether a different representation can support higher spatial order
 without negative represented likelihoods or no-sample probabilities. It is an investigation, not a
 new production solver or a general accuracy guarantee. Existing

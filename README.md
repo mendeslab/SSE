@@ -71,15 +71,29 @@ and the repeated E-integration cost. Supplied QuaSSE XMLs use a parser tip-age t
 for rounded living-tip lengths; mixed fossil trees must retain `adjustTipHeights="false"`.
 
 QuaSSE can omit `grid` when `q2d` is `NormalCenteredAtObservedLinkFn`: supply likelihood-level
-`drift` and `diffusion`, and defaults use the initial tree and observed traits. Reinitialize the
-likelihood to resolve these defaults again. Other links or numerical overrides require an explicit
-`QuaSSEGrid`, taking `tree`, `traits`, `drift`, and `diffusion`. Optional scalar
-attributes `nX`, `dX`, `xMid`, `hiLoRatio`, `flankWidthScaler`, `rangeMultiplier`, `dtMax`, and `tc`
-override defaults resolved at initialization. With Strang splitting, `dtMax` defaults to the initial
-tree height / 250; an explicit value overrides it. Reinitialize the grid and likelihood
-after editing these configuration values. Parameter proposals use BEAST's invalidation lifecycle;
-standalone callers should likewise notify through `State` before evaluating changed inputs.
-If drift/diffusion are supplied both on the likelihood and grid, they must reference the same objects.
+`drift` and `diffusion`. Other links or numerical overrides require an explicit `QuaSSEGrid`,
+taking `tree`, `traits`, `drift`, and `diffusion`. The likelihood connects its `origin` parameter
+to the grid; an independently initialized origin-based grid can also receive that same reference.
+
+Bin counts remain fixed during MCMC (`nX=1024`, `hiLoRatio=4` by default). Omitted physical controls
+are recalculated from current parameters. Let T be origin age when supplied, otherwise root age,
+m the observed midpoint, R the observed range, v drift, and q diffusion variance per unit time.
+The requested trait interval contains both m ± rangeMultiplier*R/2 and m − v*T ± 3*sqrt(q*T).
+Its active interval therefore covers observations and a six-sigma ancestral diffusion range.
+`rangeMultiplier` defaults to 5. With kernel-support distances aL and aR, automatic coarse spacing
+is (requested width + 2*(aL+aR))/(nX−6). This allows for FFT padding, fixed boundary strips, and
+rounding to whole bins; the active interval is centered on the requested interval's midpoint.
+Kernel support uses `flankWidthScaler=5` standard deviations by default.
+
+`dtMax` defaults to T/250 and `tc` to T/10. Explicit `dX`, `xMid`, `dtMax`, and `tc` override their
+respective automatic values. Fully explicit grids retain their existing placement convention.
+When supplying only `dX`, also supply `nX` if the observed range is zero. Reinitialize the grid
+and likelihood after editing configuration inputs such as bin counts. Parameter proposals use
+BEAST's invalidation lifecycle; standalone callers should likewise notify through `State` before
+evaluating changed inputs. Shared drift, diffusion, and origin inputs must reference the same objects.
+Arrays and FFT plans are reused when geometry changes. Increasing domain width at fixed bin count
+coarsens the grid: check larger bin counts and wider domains separately for likelihood convergence.
+The six-sigma rule is a default, not an error bound, particularly with broad starting distributions.
 
 QuaSSE warns when a sampled Gaussian kernel retains less than 95% of its intended variance,
 but continues with the same kernel. At most three kernel-resolution warnings are printed per

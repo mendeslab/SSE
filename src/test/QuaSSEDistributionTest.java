@@ -1728,8 +1728,8 @@ public class QuaSSEDistributionTest {
         Assert.assertTrue(distribution.listActiveBEASTObjects().contains(grid));
         Assert.assertTrue(grid.getOutputs().contains(distribution));
         Assert.assertEquals(1024, grid.getBins(true));
-        Assert.assertEquals(.5 / 1024, grid.getDx(), 0.0);
-        Assert.assertEquals(.05, grid.getMidpoint(), 0.0);
+        Assert.assertTrue(grid.getDx() > .5 / 1024);
+        Assert.assertEquals(.05, grid.getMidpoint(), 1e-15);
         Assert.assertEquals(.09 / 250, grid.getDtMax(), 0.0);
         Assert.assertEquals(.09 / 10, grid.getTc(), 0.0);
         double[] copy = grid.copyX(true);
@@ -1759,10 +1759,11 @@ public class QuaSSEDistributionTest {
             }
             QuaSSEDistribution reference = smallDistribution(parameters[0].getValue(), parameters[1].getValue(),
                     grid.getTc(), "(sp1:0.09,sp2:0.09);", "Observed");
-            // Match the frozen controls, not defaults re-derived from a proposed state.
-            reference.gridInput.get().initByName("nX", grid.getBins(true), "dX", grid.getDx(),
-                    "xMid", grid.getMidpoint(), "dtMax", grid.getDtMax(), "tc", grid.getTc(),
-                    "hiLoRatio", grid.getRatio(), "flankWidthScaler", grid.flankWidthScalerInput.get());
+            // Fresh automatic defaults must match current values, regardless of earlier proposals.
+            QuaSSEGrid referenceGrid = reference.gridInput.get();
+            reference.gridInput.setValue(null, reference);
+            reference.driftInput.setValue(referenceGrid.driftInput.get(), reference);
+            reference.diffusionInput.setValue(referenceGrid.diffusionInput.get(), reference);
             ((ConstantLinkFn) reference.q2mLambdaInput.get()).yValueInput.get().setValue(lambda.getValue());
             reference.initAndValidate();
             Assert.assertEquals(evaluate(reference), proposed, 1e-12);
@@ -1782,11 +1783,12 @@ public class QuaSSEDistributionTest {
         grid.treeInput.get().getRoot().setHeight(.12);
         grid.traitsInput.get().setValue(1, .2);
         evaluate(distribution);
-        Assert.assertEquals(.5 / 1024, grid.getDx(), 0.0);
-        Assert.assertEquals(.09 / 250, grid.getDtMax(), 0.0);
+        double updatedDx = grid.getDx();
+        Assert.assertTrue(updatedDx > 1.0 / 1024);
+        Assert.assertEquals(.12 / 250, grid.getDtMax(), 0.0);
         distribution.initAndValidate();
         Assert.assertSame(grid, distribution.gridInput.get());
-        Assert.assertEquals(1.0 / 1024, grid.getDx(), 0.0);
+        Assert.assertEquals(updatedDx, grid.getDx(), 0.0);
         Assert.assertEquals(.12 / 250, grid.getDtMax(), 0.0);
         grid.dtMaxInput.setValue(.0001, grid);
         grid.initAndValidate();
@@ -1794,7 +1796,7 @@ public class QuaSSEDistributionTest {
 
         grid.nXInput.setValue(256, grid);
         grid.initAndValidate();
-        Assert.assertEquals(1.0 / 256, grid.getDx(), 0.0);
+        Assert.assertTrue(grid.getDx() > 1.0 / 256);
         grid.nXInput.setValue(null, grid);
         grid.dXInput.setValue(.01, grid);
         grid.initAndValidate();
@@ -1804,6 +1806,34 @@ public class QuaSSEDistributionTest {
         grid.initAndValidate();
         Assert.assertEquals(256, grid.getBins(true));
         Assert.assertEquals(.01, grid.getDx(), 0.0);
+    }
+
+    // Padding must leave the requested interval active, including zero observed range and drift.
+    // Likelihood references cannot check this geometry; retain while automatic grids use these bounds.
+    @Test
+    public void testAutomaticGridCoverage() {
+        for (double range : new double[]{0, 2}) for (double drift : new double[]{-2, 0, 2}) {
+            Tree tree = new TreeParser("(A:1,B:1);", false, false, true, 0);
+            RealParameter traits = new RealParameter(new Double[]{0., range});
+            RealParameter origin = new RealParameter("4");
+            QuaSSEGrid grid = new QuaSSEGrid();
+            grid.initByName("tree", tree, "traits", traits, "origin", origin,
+                    "drift", new RealParameter(Double.toString(drift)), "diffusion", new RealParameter("0.2"));
+            double lower = Math.min(-2 * range, range / 2 - 4 * drift - 3 * Math.sqrt(.8));
+            double upper = Math.max(3 * range, range / 2 - 4 * drift + 3 * Math.sqrt(.8));
+            for (boolean low : new boolean[]{true, false}) {
+                double[] x = grid.copyX(low);
+                int[] padding = grid.copyPadding(low);
+                Assert.assertTrue(x[padding[1]] <= lower + 1e-12);
+                Assert.assertTrue(x[x.length - 1 - padding[0]] >= upper - 1e-12);
+            }
+            double[] low = grid.copyX(true), high = grid.copyX(false);
+            int[] transfer = grid.copyTransfer();
+            for (int i = 0; i < low.length; ++i)
+                Assert.assertEquals(low[i], high[transfer[i] / 2], 1e-10);
+            Assert.assertEquals(4. / 250, grid.getDtMax(), 0);
+            Assert.assertEquals(4. / 10, grid.getTc(), 0);
+        }
     }
 
     // Rejecting a proposal leaves unsnapshotted grids and link scalars at proposed values. A later
