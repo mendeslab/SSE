@@ -72,8 +72,10 @@ for rounded living-tip lengths; mixed fossil trees must retain `adjustTipHeights
 
 QuaSSE can omit `grid` when `q2d` is `NormalCenteredAtObservedLinkFn`: supply likelihood-level
 `drift` and `diffusion`. Other links or numerical overrides require an explicit `QuaSSEGrid`,
-taking `tree`, `traits`, `drift`, and `diffusion`. The likelihood connects its `origin` parameter
-to the grid; an independently initialized origin-based grid can also receive that same reference.
+taking `traits`, `drift`, `diffusion`, and exactly one time source: `tree` for root conditioning
+or `origin` for origin conditioning. This must reference the likelihood's own tree or origin
+parameter. Explicit origin-conditioned grids use `origin="@origin"` instead of `tree="@tree"`,
+so their time source is available during XML initialization, including for single-tip trees.
 
 Bin counts remain fixed during MCMC (`nX=1024`, `hiLoRatio=4` by default). Omitted physical controls
 are recalculated from current parameters. Let T be origin age when supplied, otherwise root age,

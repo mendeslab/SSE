@@ -40,7 +40,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     public final Input<RealParameter> driftInput = new Input<>("drift", "Trait drift for an automatic grid.");
     public final Input<RealParameter> diffusionInput = new Input<>("diffusion", "Diffusion variance rate for an automatic grid.");
     private QuaSSEGrid automaticGrid;
-    private RealParameter connectedGridOrigin;
 
     final public Input<LinkFn> q2mLambdaInput = new Input<>("q2mLambda", "Function converting quantitative trait into lambda parameter.", Input.Validate.REQUIRED);
     final public Input<LinkFn> q2mMuInput = new Input<>("q2mMu", "Function converting quantitative trait into mu parameter.", Input.Validate.REQUIRED);
@@ -227,15 +226,18 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                 throw new IllegalArgumentException("Automatic grids require NormalCenteredAtObservedLinkFn; "
                         + "supply an explicit grid for other links.");
             if (automaticGrid == null) automaticGrid = new QuaSSEGrid();
-            automaticGrid.initByName("tree", treeInput.get(), "traits", normal.quTraitsInput.get(),
-                    "drift", driftInput.get(), "diffusion", diffusionInput.get(), "origin", originInput.get());
+            // Reinitialization may switch conditioning modes; clear the previous time source.
+            automaticGrid.initByName("tree", conditionOnRootInput.get() ? treeInput.get() : null,
+                    "origin", conditionOnRootInput.get() ? null : originInput.get(),
+                    "traits", normal.quTraitsInput.get(), "drift", driftInput.get(), "diffusion", diffusionInput.get());
             gridInput.setValue(automaticGrid, this);
         } else {
-            if (supplied.originInput.get() != null && supplied.originInput.get() != originInput.get()
-                    && supplied.originInput.get() != connectedGridOrigin)
-                throw new IllegalArgumentException("Grid origin must reference the likelihood's origin parameter.");
-            if (supplied.originInput.get() != originInput.get()) {
-                supplied.originInput.setValue(originInput.get(), supplied);
+            if (conditionOnRootInput.get()) {
+                if (supplied.treeInput.get() != treeInput.get() || supplied.originInput.get() != null)
+                    throw new IllegalArgumentException("Root-conditioned grid must reference the likelihood's tree only.");
+            } else if (originInput.get() == null || supplied.originInput.get() != originInput.get()
+                    || supplied.treeInput.get() != null) {
+                throw new IllegalArgumentException("Origin-conditioned grid must reference the likelihood's origin only.");
             }
             // Reinitialization can follow direct edits or failed configuration checks, without
             // BEAST notifications. Recompute controls even if the parameter reference is unchanged.
@@ -246,9 +248,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                 throw new IllegalArgumentException(
                         "Likelihood drift/diffusion must reference the explicit grid's parameters.");
         }
-        // A later reinitialization may replace the origin parameter. Only replace a different
-        // grid reference when it is the one previously connected by this likelihood.
-        connectedGridOrigin = originInput.get();
     }
 
     // Also called by parent initialization: release old resolution-specific resources before resizing.

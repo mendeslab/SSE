@@ -49,6 +49,9 @@ has no observed branching event. At least one living sample at age zero is still
 Fossil-only trees and an offset to the present are not supported. A zero-length origin stem is allowed; its
 likelihood need not equal the root-conditioned likelihood because the starting conditions differ.
 
+The explicit grid supplies `origin="@origin"` and omits `tree`. Its origin reference must match
+the likelihood's, allowing the grid to initialize independently, including with a single living tip.
+
 ## Trait weighting and numerical scope
 
 The example uses `Flat` over a finite useful grid interval. Root mode retains SSE's convention

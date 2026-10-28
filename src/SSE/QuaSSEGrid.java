@@ -11,8 +11,9 @@ import java.util.Arrays;
  * BEAST notifications and restore invalidate derived data. Callers must use BEAST's lifecycle.
  */
 public class QuaSSEGrid extends CalculationNode {
-    public final Input<Tree> treeInput = new Input<>("tree", "Tree supplying the root age when no origin is supplied.", Input.Validate.REQUIRED);
-    public final Input<RealParameter> originInput = new Input<>("origin", "Origin age for automatic grid controls.");
+    public final Input<Tree> treeInput = new Input<>("tree", "Tree supplying the root age for root conditioning.");
+    public final Input<RealParameter> originInput = new Input<>("origin",
+            "Origin age for origin conditioning.", Input.Validate.XOR, treeInput);
     public final Input<RealParameter> traitsInput = new Input<>("traits", "Observed traits for spatial defaults.", Input.Validate.REQUIRED);
     public final Input<RealParameter> driftInput = new Input<>("drift", "Trait drift.", Input.Validate.REQUIRED);
     public final Input<RealParameter> diffusionInput = new Input<>("diffusion", "Trait diffusion variance rate.", Input.Validate.REQUIRED);
@@ -35,6 +36,8 @@ public class QuaSSEGrid extends CalculationNode {
     // before initial validation, so a singleton can use its origin rather than a zero root age.
     @Override
     public void initAndValidate() {
+        if ((treeInput.get() == null) == (originInput.get() == null))
+            throw new IllegalArgumentException("QuaSSEGrid requires exactly one of tree and origin.");
         nXbinsLo = nXInput.get() == null ? 1024 : nXInput.get();
         // Preserve spacing-only configuration: choose dimensions once from the observed range.
         if (nXInput.get() == null && dXInput.get() != null) {

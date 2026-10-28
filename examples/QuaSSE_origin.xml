@@ -39,7 +39,7 @@
         <!-- 7679 useful bins, including preserved boundary strips, cover [-3.75,3.75].
              Equal-weight midpoint integration: dX=7.5/7679; padding is 256 bins per side.
              The integration timestep is 1/256, with physical Gaussian support 0.25 per side. -->
-        <grid spec="QuaSSEGrid" tree="@tree" traits="@observations" drift="0.0" diffusion="0.05"
+        <grid spec="QuaSSEGrid" origin="@origin" traits="@observations" drift="0.0" diffusion="0.05"
               nX="8192" dX="0.0009766896731345227" xMid="0.0" hiLoRatio="1" tc="0.0"
               dtMax="0.00390625" flankWidthScaler="17.88854381999832"/>
         <dynDt spec="parameter.BooleanParameter" value="true"/>

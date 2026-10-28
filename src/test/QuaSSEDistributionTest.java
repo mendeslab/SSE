@@ -1813,11 +1813,10 @@ public class QuaSSEDistributionTest {
     @Test
     public void testAutomaticGridCoverage() {
         for (double range : new double[]{0, 2}) for (double drift : new double[]{-2, 0, 2}) {
-            Tree tree = new TreeParser("(A:1,B:1);", false, false, true, 0);
             RealParameter traits = new RealParameter(new Double[]{0., range});
             RealParameter origin = new RealParameter("4");
             QuaSSEGrid grid = new QuaSSEGrid();
-            grid.initByName("tree", tree, "traits", traits, "origin", origin,
+            grid.initByName("traits", traits, "origin", origin,
                     "drift", new RealParameter(Double.toString(drift)), "diffusion", new RealParameter("0.2"));
             double lower = Math.min(-2 * range, range / 2 - 4 * drift - 3 * Math.sqrt(.8));
             double upper = Math.max(3 * range, range / 2 - 4 * drift + 3 * Math.sqrt(.8));
@@ -1913,6 +1912,18 @@ public class QuaSSEDistributionTest {
     public void testAutomaticGridConfiguration() throws Exception {
         QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
         QuaSSEGrid explicit = distribution.gridInput.get();
+        Tree originalTree = explicit.treeInput.get();
+        explicit.treeInput.setValue(null, explicit);
+        Assert.assertThrows(IllegalArgumentException.class, explicit::validateInputs);
+        Assert.assertThrows(IllegalArgumentException.class, explicit::initAndValidate);
+        explicit.treeInput.setValue(originalTree, explicit);
+        explicit.originInput.setValue(new RealParameter("1"), explicit);
+        Assert.assertThrows(IllegalArgumentException.class, explicit::validateInputs);
+        Assert.assertThrows(IllegalArgumentException.class, explicit::initAndValidate);
+        explicit.originInput.setValue(null, explicit);
+        explicit.treeInput.setValue(new TreeParser("(sp1:0.09,sp2:0.09);", false, false, true, 0), explicit);
+        Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
+        explicit.treeInput.setValue(originalTree, explicit);
         distribution.gridInput.setValue(null, distribution);
         Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
         distribution.driftInput.setValue(explicit.driftInput.get(), distribution);
@@ -1943,6 +1954,17 @@ public class QuaSSEDistributionTest {
         Assert.assertSame(restored.diffusionInput.get(), restored.gridInput.get().diffusionInput.get());
         Assert.assertArrayEquals(generated.copyX(true), restored.gridInput.get().copyX(true), 0.0);
         Assert.assertEquals(evaluate(distribution), evaluate(restored), 1e-12);
+        distribution.conditionOnRootInput.setValue(false, distribution);
+        distribution.originInput.setValue(new RealParameter("0.2"), distribution);
+        distribution.initAndValidate();
+        Assert.assertNull(generated.treeInput.get());
+        Assert.assertSame(distribution.originInput.get(), generated.originInput.get());
+        distribution.conditionOnRootInput.setValue(true, distribution);
+        distribution.originInput.setValue(null, distribution);
+        distribution.initAndValidate();
+        Assert.assertNull(generated.originInput.get());
+        Assert.assertSame(distribution.treeInput.get(), generated.treeInput.get());
+        Assert.assertEquals(evaluate(restored), evaluate(distribution), 1e-12);
     }
 
     // Underresolved but finite kernels must remain usable without flooding output. Existing
@@ -2306,7 +2328,9 @@ public class QuaSSEDistributionTest {
         ConstantLinkFn death = new ConstantLinkFn();
         death.initByName("yV", new RealParameter("0.1"));
         QuaSSEGrid grid = new QuaSSEGrid();
-        grid.initByName("tree", tree, "traits", traits, "drift", new RealParameter("0"),
+        int originOption = Arrays.asList(options).indexOf("origin");
+        grid.initByName(originOption < 0 ? "tree" : "origin",
+                originOption < 0 ? tree : options[originOption + 1], "traits", traits, "drift", new RealParameter("0"),
                 "diffusion", new RealParameter("0.05"), "nX", nX, "dX", dx, "xMid", 0.0,
                 "dtMax", dt, "tc", tc, "hiLoRatio", ratio, "flankWidthScaler", support);
         QuaSSEDistribution distribution = newDistribution();
@@ -2403,7 +2427,7 @@ public class QuaSSEDistributionTest {
     // times the Normal predictive density checks its stem and conditioning, unlike multi-tip tests.
     // Retain while singleton likelihoods use the general grid/pruning path.
     @Test
-    public void testSingleLivingTip() {
+    public void testSingleLivingTip() throws Exception {
         for (double tc : new double[]{0, 1, 4}) for (double age : new double[]{0, 2}) {
             for (double lambda : new double[]{0, .3}) {
                 Normal prior = new Normal();
@@ -2475,7 +2499,18 @@ public class QuaSSEDistributionTest {
             Assert.assertEquals(accepted, d.calculateLogP(), 1e-12);
             Assert.assertArrayEquals(acceptedX, grid.copyX(true), 0);
         }
+        // XML initializes the explicit grid before the likelihood; singleton time defaults
+        // must already have their origin. Direct Java construction cannot check that ordering.
         grid.nXInput.setValue(1024, grid);
+        beast.pkgmgmt.BEASTClassLoader.initServices();
+        beast.pkgmgmt.BEASTClassLoader.addServices("version.xml");
+        String xml = new beast.base.parser.XMLProducer().toRawXML(d);
+        try (QuaSSEDistribution restored = (QuaSSEDistribution)
+                new beast.base.parser.XMLParser().parseBareFragment(xml, true)) {
+            Assert.assertNull(restored.gridInput.get().treeInput.get());
+            Assert.assertSame(restored.originInput.get(), restored.gridInput.get().originInput.get());
+            Assert.assertEquals(accepted, evaluate(restored), 1e-12);
+        }
         grid.dXInput.setValue(.01, grid);
         grid.dtMaxInput.setValue(.01, grid);
         d.startTraitDistributionInput.setValue(null, d);
@@ -2499,6 +2534,14 @@ public class QuaSSEDistributionTest {
         d.originInput.setValue(new RealParameter("3"), d);
         Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
         d.conditionOnRootInput.setValue(false, d);
+        QuaSSEGrid grid = d.gridInput.get();
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        grid.treeInput.setValue(null, grid);
+        grid.originInput.setValue(new RealParameter("3"), grid);
+        grid.initAndValidate();
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+        grid.originInput.setValue(d.originInput.get(), grid);
+        grid.initAndValidate();
         d.initAndValidate();
         double initial = evaluate(d);
         for (double bad : new double[]{1.9, Double.NaN, Double.POSITIVE_INFINITY}) {
@@ -2634,7 +2677,8 @@ public class QuaSSEDistributionTest {
         }
         d.conditionOnRootInput.setValue(true, d); d.originInput.setValue(null, d);
         Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
-        d.conditionOnRootInput.setValue(false, d); d.originInput.setValue(new RealParameter("3"), d);
+        d.conditionOnRootInput.setValue(false, d);
+        d.originInput.setValue(d.gridInput.get().originInput.get(), d);
         Gamma singular = new Gamma();
         singular.initByName("alpha", new RealParameter("0.5"), "beta", new RealParameter("1"));
         d.startTraitDistributionInput.setValue(singular, d); d.initAndValidate();
@@ -2913,12 +2957,14 @@ public class QuaSSEDistributionTest {
             tree.initByName("newick", invalidTrees[i], "IsLabelledNewick", true,
                     "adjustTipHeights", false, "singlechild", true, "binarizeMultifurcations", false);
             distribution.treeInput.setValue(tree, distribution);
+            distribution.gridInput.get().treeInput.setValue(tree, distribution.gridInput.get());
             IllegalArgumentException error = Assert.assertThrows(IllegalArgumentException.class,
                     distribution::initAndValidate);
             Assert.assertTrue(error.getMessage(), error.getMessage().contains(reasons[i]));
         }
         Tree tree = new TreeParser("(A:2,F:1.5);", false, false, true, 0);
         distribution.treeInput.setValue(tree, distribution);
+        distribution.gridInput.get().treeInput.setValue(tree, distribution.gridInput.get());
         for (double height : new double[]{-1, 3, Double.NaN, Double.POSITIVE_INFINITY}) {
             tree.getNode(0).setHeight(height);
             Assert.assertThrows(IllegalArgumentException.class, distribution::initAndValidate);
