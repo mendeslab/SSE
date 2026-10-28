@@ -1,0 +1,45 @@
+# One-trait QuaSSE adaptation of Zhang, Drummond & Mendes (2024), Simulation Study I.
+# Paper: https://doi.org/10.1093/sysbio/syad067
+# Sources: https://doi.org/10.5061/dryad.pnvx0k6vj (2024-01-31 archive),
+# zhang_etal_2023/01validation/01SimulateFBDTree.R,
+# 02BMPruneLikelihoodCalValSimMorph.R, PruneLikleihoodCalValSimUtils.R, and
+# BMPruneLikelihood_CalValSimMorph_template.xml.
+# Run from SSE with PhyloJunction's pjcli on PATH:
+# pjcli examples/QuaSSE_zhang2024_reference.pj --runs 100 -d -r 1601797 -o /tmp/quasse-zhang2024
+# Each model replicate redraws the priors and produces one tree. No median-of-30 calibration.
+
+# Original tree-parameter priors. Lognormal parameters are on the natural-log scale.
+diversification ~ lognormal(meanlog=-0.65, sdlog=0.1)
+turnover ~ beta(alpha=10, beta=40)
+fossil_sampling_proportion ~ beta(alpha=20, beta=40)
+
+# Original parameterization: d=lambda-mu, turnover=mu/lambda, s=psi/(mu+psi).
+# s controls fossil sampling; it is not the present-day sampling probability rho.
+lambda_rate := diversification / (1 - turnover)
+mu_rate := turnover * lambda_rate
+psi_rate := mu_rate * fossil_sampling_proportion / (1 - fossil_sampling_proportion)
+birth := quasse_constant(rate=lambda_rate)
+death := quasse_constant(rate=mu_rate)
+fossil := quasse_constant(rate=psi_rate)
+
+# The R script draws entries of an upper-triangular A, then uses Sigma=A %*% t(A).
+# Reducing that construction to one trait gives diffusion variance/time = A[1,1]^2.
+# This retains the scalar construction, not a marginal of the four correlated traits.
+trait_scale ~ lognormal(meanlog=1.0, sdlog=0.3)
+diffusion_variance := trait_scale * trait_scale
+
+# Requested adaptation: Normal(0,1) at the origin, redrawn for each biological attempt.
+# The original instead used four Normal(0,2) starting values at the reconstructed root.
+initial := normal(mean=0, sd=1)
+
+# Original: sim.fbd.taxa(n=50, frac=1), non-removing fossils, no measurement error.
+# Adaptation: PhyloJunction stops just before a birth would increase 50 living tips to 51;
+# this is its size-stopping law, not an assertion of equivalence to FossilSim/TreeSim.
+# The origin age is an output of size stopping; no independent age prior is imposed here.
+# local_thinning uses constant rate bounds here; block_duration controls Brownian bookkeeping.
+# Biological retries hold the rate draws fixed. The original outer filtering loop redrew them.
+# Not reproduced: the R scripts' 10..200 total-tip filter, exclusion of fossil-free trees,
+# and exclusion of sampled-ancestor roots. This file is a reference adaptation, not an exact replica.
+# observation_sd=0 preserves the original absence of measurement error. For SSE's Gaussian
+# observation model, enable a positive SD and use that same sdNormalQuTrValue with observed_trait.
+trees ~ quasse(birth_rate=birth, death_rate=death, fossil_rate=fossil, start_distribution=initial, drift=0, diffusion=diffusion_variance, stop="size", stop_value=50, sampling_prob=1, cond_surv=true, observation_sd=0, method="local_thinning", block_duration=1)
