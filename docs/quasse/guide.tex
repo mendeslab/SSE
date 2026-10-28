@@ -91,8 +91,9 @@ or on neither sampling-success event. These alternatives distinguish $E$ from $Q
 of no sampled living descendants. Fossil sampling affects $E$ but not $Q$ when observation does not
 remove the lineage. The observed-data calculation still includes fossils whichever success event
 is chosen. In root mode a fossil-only daughter does not satisfy living-sample conditioning.
-The implementation retains a living sample at age zero and does not support fossil-only trees
-or a sampled tree consisting of just one leaf.
+The implementation requires a living sample at age zero and does not support fossil-only trees.
+In origin mode, a single living observation is a one-node tree with no root edge; its likelihood
+is propagated from age zero to the separately supplied origin, without a starting birth event.
 
 The default remains root conditioning with any sample on each side. The trait weighting also
 retains the existing convention: at a starting split the effective trait distribution is

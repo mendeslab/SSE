@@ -202,7 +202,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                     throw new IllegalArgumentException("Ambiguous pair of ancestor leaves at node " + node.getID());
             }
         }
-        if (tree.getRoot().isLeaf() || (conditionOnRoot && tree.getRoot().isFake()))
+        if (conditionOnRoot && (tree.getRoot().isLeaf() || tree.getRoot().isFake()))
             throw new IllegalArgumentException("QuaSSE requires an ordinary bifurcating root, without a stem.");
         if (conditionOnRoot && conditionOnRhoSampling
                 && (!hasLivingDescendant(tree.getRoot().getLeft())

@@ -44,8 +44,9 @@ expose the root/no-sampling combination. Names alone do not establish matching l
 
 Root mode rejects a sampled-ancestor root and an explicit `origin`. Root/living conditioning also
 rejects an all-fossil daughter. Origin mode allows sampled-ancestor roots and multiple stem fossils,
-but still requires at least one living sample at age zero. Fossil-only trees, an offset to the
-present, and single-leaf trees are not supported. A zero-length origin stem is allowed; its
+and a single living tip written as `A;`. The origin age is supplied separately; a singleton
+has no observed branching event. At least one living sample at age zero is still required.
+Fossil-only trees and an offset to the present are not supported. A zero-length origin stem is allowed; its
 likelihood need not equal the root-conditioned likelihood because the starting conditions differ.
 
 ## Trait weighting and numerical scope

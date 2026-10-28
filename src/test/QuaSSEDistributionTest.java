@@ -2399,6 +2399,92 @@ public class QuaSSEDistributionTest {
         }
     }
 
+    // A singleton has no birth event at its root. A closed-form birth/death count probability
+    // times the Normal predictive density checks its stem and conditioning, unlike multi-tip tests.
+    // Retain while singleton likelihoods use the general grid/pruning path.
+    @Test
+    public void testSingleLivingTip() {
+        for (double tc : new double[]{0, 1, 4}) for (double age : new double[]{0, 2}) {
+            for (double lambda : new double[]{0, .3}) {
+                Normal prior = new Normal();
+                prior.initByName("mean", new RealParameter("0.1"), "sigma", new RealParameter("0.4"));
+                ConstantLinkFn birth = new ConstantLinkFn();
+                birth.initByName("yV", new RealParameter(Double.toString(lambda)));
+                QuaSSEDistribution d = fossilDistribution("A;", tc, true, 4096, .002, .005, 8, 2,
+                        "conditionOnRoot", false, "origin", new RealParameter(Double.toString(age)),
+                        "startTraitDistribution", prior, "conditionOnRhoSampling", true,
+                        "q2mLambda", birth, "fossilSamplingRate", new RealParameter("0"));
+                d.gridInput.get().driftInput.get().setValue(.1);
+                double variance = .4 * .4 + .05 * age + .1 * .1;
+                double delta = -.2 - (.1 + .1 * age);
+                double[] flow = scalarFlow(age, lambda, 0);
+                double expected = Math.log(.7) + flow[1] - Math.log1p(-flow[0])
+                        - .5 * (Math.log(2 * Math.PI * variance) + delta * delta / variance);
+                Assert.assertEquals(expected, evaluate(d), 2e-7);
+                d.close();
+            }
+        }
+        // Automatic geometry and actual BEAST restoration must also work with a zero-height tree.
+        Normal prior = new Normal();
+        prior.initByName("mean", new RealParameter("0"), "sigma", new RealParameter("0.4"));
+        RealParameter origin = new RealParameter("2");
+        QuaSSEDistribution d = fossilDistribution("A;", 0, true, 1024, .01, .01, 5, 4,
+                "conditionOnRoot", false, "origin", origin, "startTraitDistribution", prior,
+                "conditionOnRhoSampling", true, "fossilSamplingRate", new RealParameter("0"));
+        RealParameter traits = new RealParameter();
+        traits.initByName("value", "-0.2", "keys", "A");
+        NormalCenteredAtObservedLinkFn observation = (NormalCenteredAtObservedLinkFn) d.q2dInput.get();
+        observation.quTraitsInput.setValue(traits, observation);
+        observation.initAndValidate();
+        QuaSSEGrid oldGrid = d.gridInput.get();
+        d.gridInput.setValue(null, d);
+        d.driftInput.setValue(oldGrid.driftInput.get(), d);
+        d.diffusionInput.setValue(oldGrid.diffusionInput.get(), d);
+        d.initAndValidate();
+        QuaSSEGrid grid = d.gridInput.get();
+        Assert.assertSame(origin, grid.originInput.get());
+        State state = new State();
+        state.initByName("stateNode", Arrays.asList(origin, grid.diffusionInput.get(), grid.driftInput.get()));
+        state.initialise(); state.setPosterior(d);
+        double accepted = state.robustlyCalcPosterior(d);
+        double[] acceptedX = grid.copyX(true);
+        for (double age : new double[]{1, 3, -1}) {
+            state.store(1);
+            origin.setValue(age);
+            grid.diffusionInput.get().setValue(.07);
+            grid.driftInput.get().setValue(-.2);
+            state.storeCalculationNodes(); state.checkCalculationNodesDirtiness();
+            double proposed = d.calculateLogP();
+            if (age > 0) {
+                Assert.assertTrue(Double.isFinite(proposed));
+                Assert.assertEquals(age / 250, grid.getDtMax(), 0);
+                Assert.assertEquals(age / 10, grid.getTc(), 0);
+                QuaSSEDistribution fresh = fossilDistribution("A;", 0, true, 1024, .01, .01, 5, 4,
+                        "conditionOnRoot", false, "origin", new RealParameter(Double.toString(age)),
+                        "startTraitDistribution", prior, "conditionOnRhoSampling", true,
+                        "fossilSamplingRate", new RealParameter("0"), "q2d", observation);
+                fresh.gridInput.setValue(null, fresh);
+                fresh.driftInput.setValue(new RealParameter("-0.2"), fresh);
+                fresh.diffusionInput.setValue(new RealParameter("0.07"), fresh);
+                fresh.initAndValidate();
+                Assert.assertEquals(evaluate(fresh), proposed, 1e-12);
+                Assert.assertArrayEquals(fresh.gridInput.get().copyX(true), grid.copyX(true), 0);
+                fresh.close();
+            } else Assert.assertEquals(Double.NEGATIVE_INFINITY, proposed, 0);
+            state.restore(); state.restoreCalculationNodes(); state.setEverythingDirty(false);
+            Assert.assertEquals(accepted, d.calculateLogP(), 1e-12);
+            Assert.assertArrayEquals(acceptedX, grid.copyX(true), 0);
+        }
+        grid.nXInput.setValue(1024, grid);
+        grid.dXInput.setValue(.01, grid);
+        grid.dtMaxInput.setValue(.01, grid);
+        d.startTraitDistributionInput.setValue(null, d);
+        d.priorProbAtRootTypeInput.setValue("Flat", d);
+        d.conditionOnRootInput.setValue(true, d);
+        d.originInput.setValue(null, d);
+        Assert.assertThrows(IllegalArgumentException.class, d::initAndValidate);
+    }
+
     // Configuration errors differ from rejected age/tree proposals. Exercise live state and
     // Observed endpoint weighting; old fixed-root tests cannot cover these added inputs.
     @Test
