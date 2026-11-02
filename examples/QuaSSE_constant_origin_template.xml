@@ -21,8 +21,8 @@
   <function id="mu" spec="beast.base.inference.util.RPNcalculator" expression="turnover lambda *">
     <parameter idref="turnover"/><parameter idref="lambda"/>
   </function>
-  <function id="variance" spec="beast.base.inference.util.RPNcalculator" expression="traitScale traitScale *">
-    <parameter idref="traitScale"/>
+  <function id="diffusionVar" spec="beast.base.inference.util.RPNcalculator" expression="diffusionSD diffusionSD *">
+    <parameter idref="diffusionSD"/>
   </function>
   <run id="mcmc" spec="MCMC" chainLength="100">
     <state id="state">
@@ -30,7 +30,7 @@
            from the priors at run time, independently of simulation truth. -->
       <stateNode id="diversification" spec="parameter.RealParameter" lower="0" value="0.52"/>
       <stateNode id="turnover" spec="parameter.RealParameter" lower="0" upper="1" value="0.2"/>
-      <stateNode id="traitScale" spec="parameter.RealParameter" lower="0" value="2.72"/>
+      <stateNode id="diffusionSD" spec="parameter.RealParameter" lower="0" value="2.72"/>
     </state>
     <init spec="SSE.PriorInitialiser" state="@state" prior="@prior"/>
     <distribution id="posterior" spec="CompoundDistribution">
@@ -39,7 +39,7 @@
           <distr spec="LogNormalDistributionModel" M="-0.65" S="0.1" meanInRealSpace="false"/>
         </distribution>
         <distribution spec="Prior" x="@turnover"><distr spec="Beta" alpha="10" beta="40"/></distribution>
-        <distribution spec="Prior" x="@traitScale">
+        <distribution spec="Prior" x="@diffusionSD">
           <distr spec="LogNormalDistributionModel" M="1.0" S="0.3" meanInRealSpace="false"/>
         </distribution>
       </distribution>
@@ -52,7 +52,7 @@
         <q2mMu spec="ConstantLinkFn" yV="@mu"/>
         <q2d spec="NormalCenteredAtObservedLinkFn" quTraits="@observations" sdNormalQuTrValue="@observationSD"/>
         <grid id="grid" spec="QuaSSEGrid" origin="@origin" traits="@observations" drift="0"
-              diffusion="@variance" nX="4096" dtMax="0.01"/>
+              diffusion="@diffusionVar" nX="4096" dtMax="0.01"/>
         <dynDt spec="parameter.BooleanParameter" value="true"/>
       </distribution>
     </distribution>
@@ -60,12 +60,12 @@
               scaleFactor="0.9" weight="1"/>
     <operator spec="beast.base.evolution.operator.ScaleOperator" parameter="@turnover"
               scaleFactor="0.9" weight="1"/>
-    <operator spec="beast.base.evolution.operator.ScaleOperator" parameter="@traitScale"
+    <operator spec="beast.base.evolution.operator.ScaleOperator" parameter="@diffusionSD"
               scaleFactor="0.9" weight="1"/>
     <logger id="trace" fileName="replicate.log" logEvery="10" model="@posterior">
       <log idref="posterior"/><log idref="likelihood"/><log idref="prior"/>
-      <log idref="diversification"/><log idref="turnover"/><log idref="traitScale"/>
-      <log idref="lambda"/><log idref="mu"/><log idref="variance"/>
+      <log idref="diversification"/><log idref="turnover"/><log idref="diffusionSD"/>
+      <log idref="lambda"/><log idref="mu"/><log idref="diffusionVar"/>
     </logger>
   </run>
 </beast>
