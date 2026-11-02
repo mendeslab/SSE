@@ -3,7 +3,7 @@ package SSE;
 import beast.base.inference.CalculationNode;
 import beast.base.core.Description;
 import beast.base.core.Input;
-import beast.base.inference.parameter.RealParameter;
+import beast.base.core.Function;
 
 /**
  * This class implements a type of link function that is used
@@ -18,20 +18,20 @@ import beast.base.inference.parameter.RealParameter;
         "parameter.")
 public class LogisticFunction extends CalculationNode implements LinkFn {
 
-    final public Input<RealParameter> curveYBaseValueInput = new Input<>("curveYBaseValue", "Curve y base value.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> curveMaxYInput = new Input<>("curveMaxY", "Curve maximum y value.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> sigmoidMidpointInput = new Input<>("sigmoidMidpoint", "Midpoint of sigmoid curve.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> logisticGrowthRateInput = new Input<>("logisticGrowthRate", "Growth rate of logistic curve.", Input.Validate.REQUIRED);
+    final public Input<Function> curveYBaseValueInput = new Input<>("curveYBaseValue", "Curve y base value.", Input.Validate.REQUIRED);
+    final public Input<Function> curveMaxYInput = new Input<>("curveMaxY", "Curve maximum y value.", Input.Validate.REQUIRED);
+    final public Input<Function> sigmoidMidpointInput = new Input<>("sigmoidMidpoint", "Midpoint of sigmoid curve.", Input.Validate.REQUIRED);
+    final public Input<Function> logisticGrowthRateInput = new Input<>("logisticGrowthRate", "Growth rate of logistic curve.", Input.Validate.REQUIRED);
 
     private double y0, y1, x0, r, curveMaxMinusBaseValue;
     private static final String LINKFUNCTION = "logistic";
 
     @Override
     public void initAndValidate() {
-        y0 = curveYBaseValueInput.get().getValue();
-        y1 = curveMaxYInput.get().getValue();
-        r = logisticGrowthRateInput.get().getValue();
-        x0 = sigmoidMidpointInput.get().getValue();
+        y0 = curveYBaseValueInput.get().getArrayValue();
+        y1 = curveMaxYInput.get().getArrayValue();
+        r = logisticGrowthRateInput.get().getArrayValue();
+        x0 = sigmoidMidpointInput.get().getArrayValue();
     }
 
     @Override
@@ -40,23 +40,27 @@ public class LogisticFunction extends CalculationNode implements LinkFn {
         boolean refreshedSomething = false;
 
         // Compare values: rejection restores parameters, but not these cached scalars.
-        if (y0 != curveYBaseValueInput.get().getValue()) {
-            y0 = curveYBaseValueInput.get().getValue();
+        double currentY0 = curveYBaseValueInput.get().getArrayValue();
+        if (y0 != currentY0) {
+            y0 = currentY0;
             refreshedSomething = true;
         }
 
-        if (y1 != curveMaxYInput.get().getValue()) {
-            y1 = curveMaxYInput.get().getValue();
+        double currentY1 = curveMaxYInput.get().getArrayValue();
+        if (y1 != currentY1) {
+            y1 = currentY1;
             refreshedSomething = true;
         }
 
-        if (r != logisticGrowthRateInput.get().getValue()) {
-            r = logisticGrowthRateInput.get().getValue();
+        double currentR = logisticGrowthRateInput.get().getArrayValue();
+        if (r != currentR) {
+            r = currentR;
             refreshedSomething = true;
         }
 
-        if (x0 != sigmoidMidpointInput.get().getValue()) {
-            x0 = sigmoidMidpointInput.get().getValue();
+        double currentX0 = sigmoidMidpointInput.get().getArrayValue();
+        if (x0 != currentX0) {
+            x0 = currentX0;
             refreshedSomething = true;
         }
 

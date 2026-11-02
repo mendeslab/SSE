@@ -1,6 +1,9 @@
 package test;
 
 import SSE.*;
+import beast.base.core.BEASTInterface;
+import beast.base.core.Function;
+import beast.base.inference.util.RPNcalculator;
 import beast.base.inference.State;
 import beast.base.inference.CompoundDistribution;
 import beast.base.inference.distribution.Normal;
@@ -1593,7 +1596,6 @@ public class QuaSSEDistributionTest {
      */
     @Test
     public void testTraitDependentExtinctionLikelihoodAgainstDiversitree() {
-        QuaSSEDistribution distribution = smallDistribution(0.0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
         // drift, diffusion, left, right, xLo minimum, log likelihood (Observed prior).
         double[][] references = {
                 {0, .001, 3, 3, -.60, 2.777073862651771},
@@ -1604,11 +1606,8 @@ public class QuaSSEDistributionTest {
                 {1, .001, 3, 2, -.61, 2.7631220925249735}
         };
         for (double[] reference : references) {
-            QuaSSEDistribution fresh = smallDistribution(reference[0], reference[1], .005,
+            QuaSSEDistribution distribution = smallDistribution(reference[0], reference[1], .005,
                     "(sp1:0.1,sp2:0.1);", "Observed");
-            distribution.gridInput.get().driftInput.get().setValue(reference[0]);
-            distribution.gridInput.get().diffusionInput.get().setValue(reference[1]);
-            Assert.assertEquals(reference[5], evaluate(fresh), 1e-9);
             Assert.assertEquals(reference[5], evaluate(distribution), 1e-9);
             Assert.assertEquals((int) reference[2], distribution.getNLeftFlanks(true));
             Assert.assertEquals((int) reference[3], distribution.getNRightFlanks(true));
@@ -1708,10 +1707,10 @@ public class QuaSSEDistributionTest {
         return distribution;
     }
 
-    // Single-parameter proposals must notify the generated grid without forcing everything dirty.
-    // Full-recalculation references cannot check that path; also retain default/reinitialization checks.
+    // Default grid geometry and explicit reinitialization are configuration contracts. Proposal
+    // tests exercise state changes instead; retain this while automatic grids are supported.
     @Test
-    public void testGridDefaultsAndNotifications() {
+    public void testGridDefaultsAndReinitialization() {
         QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
         QuaSSEGrid previous = distribution.gridInput.get();
         QuaSSEGrid grid = new QuaSSEGrid();
@@ -1736,50 +1735,6 @@ public class QuaSSEDistributionTest {
         double first = copy[0];
         copy[0] = 100;
         Assert.assertEquals(first, grid.copyX(true)[0], 0.0);
-        RealParameter lambda = ((ConstantLinkFn) distribution.q2mLambdaInput.get()).yValueInput.get();
-        RealParameter[] parameters = {grid.driftInput.get(), grid.diffusionInput.get(), lambda};
-        State state = new State();
-        state.initByName("stateNode", Arrays.asList(parameters));
-        state.initialise();
-        state.setPosterior(distribution);
-        double accepted = state.robustlyCalcPosterior(distribution);
-        int revision = grid.getRevision();
-        double[] proposals = {.000001, .1, .16};
-        for (int i = 0; i < parameters.length; ++i) {
-            state.store(i);
-            parameters[i].setValue(proposals[i]);
-            state.storeCalculationNodes();
-            state.checkCalculationNodesDirtiness();
-            double proposed = distribution.calculateLogP();
-            if (i == 0) {
-                Assert.assertEquals(revision, grid.getRevision());
-                Assert.assertEquals(proposals[i], grid.getDrift(), 0.0);
-            } else if (i == 1) {
-                Assert.assertTrue(grid.getRevision() > revision);
-            }
-            QuaSSEDistribution reference = smallDistribution(parameters[0].getValue(), parameters[1].getValue(),
-                    grid.getTc(), "(sp1:0.09,sp2:0.09);", "Observed");
-            // Fresh automatic defaults must match current values, regardless of earlier proposals.
-            QuaSSEGrid referenceGrid = reference.gridInput.get();
-            reference.gridInput.setValue(null, reference);
-            reference.driftInput.setValue(referenceGrid.driftInput.get(), reference);
-            reference.diffusionInput.setValue(referenceGrid.diffusionInput.get(), reference);
-            ((ConstantLinkFn) reference.q2mLambdaInput.get()).yValueInput.get().setValue(lambda.getValue());
-            reference.initAndValidate();
-            Assert.assertEquals(evaluate(reference), proposed, 1e-12);
-            Assert.assertArrayEquals(reference.gridInput.get().copyX(true), grid.copyX(true), 0.0);
-            Assert.assertArrayEquals(reference.gridInput.get().copyX(false), grid.copyX(false), 0.0);
-            if (i == 1) {
-                state.restore();
-                state.restoreCalculationNodes();
-                Assert.assertEquals(accepted, distribution.getCurrentLogP(), 0.0);
-                // The next proposal changes only lambda: the rejected grid must still be refreshed.
-            } else {
-                state.acceptCalculationNodes();
-                accepted = proposed;
-            }
-            state.setEverythingDirty(false);
-        }
         grid.treeInput.get().getRoot().setHeight(.12);
         grid.traitsInput.get().setValue(1, .2);
         evaluate(distribution);
@@ -1839,24 +1794,28 @@ public class QuaSSEDistributionTest {
     // change to a different parameter must recover clean restored inputs, not merely the logP snapshot.
     @Test
     public void testGridRejectionLifecycle() {
-        QuaSSEDistribution distribution = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
-        QuaSSEGrid explicit = distribution.gridInput.get();
-        distribution.gridInput.setValue(null, distribution);
-        distribution.driftInput.setValue(explicit.driftInput.get(), distribution);
-        distribution.diffusionInput.setValue(explicit.diffusionInput.get(), distribution);
-        distribution.initAndValidate();
-        // Keep this small lifecycle test's controls; fresh reference models still use explicit grids.
-        for (String name : List.of("nX", "dX", "xMid", "dtMax", "tc", "hiLoRatio", "flankWidthScaler"))
-            distribution.gridInput.get().setInputValue(name, explicit.getInput(name).get());
-        distribution.initAndValidate();
-        RealParameter drift = distribution.gridInput.get().driftInput.get();
-        RealParameter diffusion = distribution.gridInput.get().diffusionInput.get();
-        RealParameter lambda = ((ConstantLinkFn) distribution.q2mLambdaInput.get()).yValueInput.get();
-        RealParameter mu = ((LogisticFunction) distribution.q2mMuInput.get()).curveYBaseValueInput.get();
-        NormalCenteredAtObservedLinkFn tip = (NormalCenteredAtObservedLinkFn) distribution.q2dInput.get();
-        RealParameter sd = tip.sdNormalQuTrValueInput.get();
-        RealParameter traits = tip.quTraitsInput.get();
-        Tree tree = distribution.treeInput.get();
+        RealParameter drift = new RealParameter("0");
+        RealParameter diffusion = new RealParameter("0.001");
+        RealParameter lambda = new RealParameter("0.15");
+        RealParameter mu = new RealParameter("0.01");
+        RealParameter sd = new RealParameter("0.05");
+        RealParameter traits = new RealParameter();
+        traits.initByName("value", "0.0 0.1", "keys", "sp1 sp2");
+        Tree tree = new TreeParser("(sp1:0.09,sp2:0.09);", false, false, true, 0);
+        ConstantLinkFn birth = new ConstantLinkFn();
+        birth.initByName("yV", lambda);
+        LogisticFunction death = new LogisticFunction();
+        death.initByName("curveYBaseValue", mu, "curveMaxY", "0.08",
+                "sigmoidMidpoint", "0.05", "logisticGrowthRate", "20");
+        NormalCenteredAtObservedLinkFn tip = new NormalCenteredAtObservedLinkFn();
+        tip.initByName("quTraits", traits, "sdNormalQuTrValue", sd);
+        QuaSSEGrid grid = new QuaSSEGrid();
+        grid.initByName("tree", tree, "traits", traits, "drift", drift, "diffusion", diffusion,
+                "nX", 128, "dX", .01, "xMid", 0.0, "dtMax", .005, "tc", .1,
+                "hiLoRatio", 4, "flankWidthScaler", 10.0);
+        QuaSSEDistribution distribution = newDistribution();
+        distribution.initByName("tree", tree, "grid", grid, "q2mLambda", birth, "q2mMu", death,
+                "q2d", tip, "dynDt", "true", "priorProbAtRootType", "Observed");
         State state = new State();
         state.initByName("stateNode", Arrays.asList(drift, diffusion, lambda, mu, sd, traits, tree));
         state.initialise();
@@ -1878,10 +1837,10 @@ public class QuaSSEDistributionTest {
             if (proposedDiffusion < 1) {
                 QuaSSEDistribution fresh = smallDistribution(1, proposedDiffusion, .1,
                         "(sp1:0.11,sp2:0.11);", "Observed");
-                ((ConstantLinkFn) fresh.q2mLambdaInput.get()).yValueInput.get().setValue(lambda.getValue());
-                ((LogisticFunction) fresh.q2mMuInput.get()).curveYBaseValueInput.get().setValue(.02);
+                ((ConstantLinkFn) fresh.q2mLambdaInput.get()).initByName("yV", Double.toString(lambda.getValue()));
+                ((LogisticFunction) fresh.q2mMuInput.get()).initByName("curveYBaseValue", Double.toString(.02));
                 NormalCenteredAtObservedLinkFn freshTip = (NormalCenteredAtObservedLinkFn) fresh.q2dInput.get();
-                freshTip.sdNormalQuTrValueInput.get().setValue(.07);
+                freshTip.initByName("sdNormalQuTrValue", "0.07");
                 freshTip.quTraitsInput.get().setValue(0, .01);
                 Assert.assertEquals(evaluate(fresh), proposed, 1e-12);
             } else {
@@ -1898,7 +1857,7 @@ public class QuaSSEDistributionTest {
             state.storeCalculationNodes();
             state.checkCalculationNodesDirtiness();
             QuaSSEDistribution fresh = smallDistribution(0, .001, .1, "(sp1:0.09,sp2:0.09);", "Observed");
-            ((ConstantLinkFn) fresh.q2mLambdaInput.get()).yValueInput.get().setValue(lambda.getValue());
+            ((ConstantLinkFn) fresh.q2mLambdaInput.get()).initByName("yV", Double.toString(lambda.getValue()));
             accepted = posterior.calculateLogP();
             Assert.assertEquals(evaluate(fresh), accepted, 1e-12);
             state.acceptCalculationNodes();
@@ -2041,12 +2000,14 @@ public class QuaSSEDistributionTest {
     @Test
     public void testKernelValidity() {
         QuaSSEDistribution distribution = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
-        QuaSSEDistribution fresh = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        RealParameter diffusion = new RealParameter("0.001");
+        distribution.gridInput.get().diffusionInput.setValue(diffusion, distribution.gridInput.get());
+        distribution.initAndValidate();
         for (double[] parameters : new double[][] {{0, .001}, {.1, .001}, {0, .001}, {0, .0011}, {0, .001}}) {
             distribution.gridInput.get().driftInput.get().setValue(parameters[0]);
-            fresh.gridInput.get().driftInput.get().setValue(parameters[0]);
-            distribution.gridInput.get().diffusionInput.get().setValue(parameters[1]);
-            fresh.gridInput.get().diffusionInput.get().setValue(parameters[1]);
+            QuaSSEDistribution fresh = smallDistribution(parameters[0], parameters[1], .005,
+                    "(sp1:0.1,sp2:0.1);", "Observed");
+            diffusion.setValue(parameters[1]);
             evaluate(distribution);
             evaluate(fresh);
             for (boolean jtransforms : new boolean[] {false, true, false}) {
@@ -2069,9 +2030,12 @@ public class QuaSSEDistributionTest {
     @Test
     public void testDynamicGridAgainstFreshCalculation() {
         QuaSSEDistribution distribution = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        RealParameter diffusion = new RealParameter("0.001");
+        distribution.gridInput.get().diffusionInput.setValue(diffusion, distribution.gridInput.get());
+        distribution.initAndValidate();
         for (double[] parameters : new double[][] {{0, .004}, {1, .001}, {-1, .001}, {.1, .001}, {0, .001}}) {
             distribution.gridInput.get().driftInput.get().setValue(parameters[0]);
-            distribution.gridInput.get().diffusionInput.get().setValue(parameters[1]);
+            diffusion.setValue(parameters[1]);
             QuaSSEDistribution fresh = smallDistribution(parameters[0], parameters[1], .005,
                     "(sp1:0.1,sp2:0.1);", "Observed");
             Assert.assertEquals(evaluate(fresh), evaluate(distribution), 1e-12);
@@ -2087,11 +2051,11 @@ public class QuaSSEDistributionTest {
         }
         distribution.gridInput.get().driftInput.get().setValue(0.0);
         for (double invalid : new double[] {-1, 0, Double.NaN, Double.POSITIVE_INFINITY, 1e100}) {
-            distribution.gridInput.get().diffusionInput.get().setValue(invalid);
+            diffusion.setValue(invalid);
             Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(distribution), 0.0);
             Assert.assertSame(ruler, distribution.getX(true));
         }
-        distribution.gridInput.get().diffusionInput.get().setValue(.001);
+        diffusion.setValue(.001);
         Assert.assertEquals(2.777073862651771, evaluate(distribution), 1e-9);
         distribution.gridInput.get().dtMaxInput.setValue(.01, distribution.gridInput.get());
         // Configuration overrides take effect on explicit grid reinitialization, not during MCMC.
@@ -2108,7 +2072,7 @@ public class QuaSSEDistributionTest {
             distribution.gridInput.get().dXInput.setValue(.1, distribution.gridInput.get());
             distribution.gridInput.get().flankWidthScalerInput.setValue(3.0, distribution.gridInput.get());
             distribution.gridInput.get().driftInput.get().setValue(drift);
-            distribution.gridInput.get().diffusionInput.get().setValue(1.0);
+            distribution.gridInput.get().setInputValue("diffusion", "1.0");
             distribution.gridInput.get().initAndValidate();
             distribution.initAndValidate();
             Assert.assertEquals(drift > 0 ? 50 : 12, distribution.getNLeftFlanks(true));
@@ -2202,88 +2166,161 @@ public class QuaSSEDistributionTest {
 
         QuaSSEDistribution a = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
         QuaSSEDistribution b = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
+        RealParameter mu = new RealParameter("0.01");
+        ((LogisticFunction) a.q2mMuInput.get()).initByName("curveYBaseValue", mu);
         b.q2mMuInput.setValue(a.q2mMuInput.get(), b);
         b.initAndValidate();
-        RealParameter mu = ((LogisticFunction) a.q2mMuInput.get()).curveYBaseValueInput.get();
         for (double value : new double[] {.02, .03, .02}) {
             mu.setValue(value);
             mu.setEverythingDirty(false);
             QuaSSEDistribution fresh = smallDistribution(0, .001, .005, "(sp1:0.1,sp2:0.1);", "Observed");
-            ((LogisticFunction) fresh.q2mMuInput.get()).curveYBaseValueInput.get().setValue(value);
+            ((LogisticFunction) fresh.q2mMuInput.get()).initByName("curveYBaseValue", Double.toString(value));
             double expected = evaluate(fresh);
             Assert.assertEquals(expected, evaluate(a), 1e-12);
             Assert.assertEquals(expected, evaluate(b), 1e-12);
         }
     }
 
-    /*
-     * BEAST acceptance/rejection must preserve both link values and the cached likelihood scalar.
-     * One-shot checks and manual parameter round trips do not exercise dependency tracking.
-     */
+    // Computed rates and diffusion must propagate proposals through BEAST's dependency graph.
+    // Link-value checks cannot exercise acceptance, restoration, or unrelated-parameter cache reuse;
+    // retain this lifecycle check while the likelihood caches results across MCMC proposals.
     @Test
     public void testLikelihoodParameterRoundTrip() {
-        RealParameter deathRate = new RealParameter(new Double[] { 0.03 });
-        ConstantLinkFn deathLink = new ConstantLinkFn();
-        deathLink.initByName("yV", deathRate);
-        QuaSSEDistribution distribution = newDistribution();
-        QuaSSEGrid distributionGrid = new QuaSSEGrid();
-        distributionGrid.initByName(
-                "tree", threeSpTreeHeight002,
-                "traits", nfn3Sp.quTraitsInput.get(),
-                "dtMax", dt0005Rp.getValue(),
-                "tc", tc0005Rp.getValue(),
-                "nX", nXbins32Ip.getValue(),
-                "dX", dxBin001Rp.getValue(),
-                "xMid", xMid00Rp.getValue(),
-                "flankWidthScaler", flankWidthScaler10Rp.getValue(),
-                "hiLoRatio", hiLoRatioIp.getValue(),
-                "drift", driftRp,
-                "diffusion", diffusionRp0001);
-        distribution.initByName(
-                "grid", distributionGrid,
-                "dynDt", dynDtbpTrue,
-                "q2mLambda", lfn,
-                "q2mMu", deathLink,
-                "tree", threeSpTreeHeight002,
-                "q2d", nfn3Sp,
-                "priorProbAtRootType", rootPriorType);
+        for (boolean automatic : new boolean[]{false, true}) {
+            RealParameter deathRate = new RealParameter("0.03");
+            deathRate.setID("rate");
+            RPNcalculator computedRate = new RPNcalculator();
+            computedRate.initByName("parameter", deathRate, "expression", "rate 2 *");
+            RealParameter scale = new RealParameter("0.02");
+            scale.setID("scale");
+            RPNcalculator variance = new RPNcalculator();
+            variance.initByName("parameter", scale, "expression", "scale scale *");
+            ConstantLinkFn deathLink = new ConstantLinkFn();
+            deathLink.initByName("yV", computedRate);
+            QuaSSEGrid grid = new QuaSSEGrid();
+            if (!automatic) {
+                grid.initByName("tree", threeSpTreeHeight002, "traits", nfn3Sp.quTraitsInput.get(),
+                        "dtMax", .005, "tc", .005, "nX", 128, "dX", .01, "xMid", 0.0,
+                        "flankWidthScaler", 10.0, "hiLoRatio", 4, "drift", driftRp, "diffusion", variance);
+            }
+            QuaSSEDistribution distribution = newDistribution();
+            distribution.initByName("grid", automatic ? null : grid, "drift", driftRp, "diffusion", variance,
+                    "dynDt", "true", "q2mLambda", lfn, "q2mMu", deathLink,
+                    "tree", threeSpTreeHeight002, "q2d", nfn3Sp, "priorProbAtRootType", rootPriorType);
+            RealParameter unrelated = new RealParameter();
+            unrelated.initByName("value", "0.0");
+            Normal normal = new Normal();
+            normal.initAndValidate();
+            Prior prior = new Prior();
+            prior.initByName("x", unrelated, "distr", normal);
+            CompoundDistribution posterior = new CompoundDistribution();
+            posterior.initByName("distribution", Arrays.asList(distribution, prior));
+            State state = new State();
+            state.initByName("stateNode", Arrays.asList(deathRate, scale, unrelated));
+            state.initialise();
+            state.setPosterior(posterior);
+            double accepted = state.robustlyCalcPosterior(posterior);
+            // Accept a joint proposal, reject another, then change only the rate. Do not force a
+            // recalculation after rejection: diffusion's restored value must refresh a clean cache.
+            for (int proposal = 0; proposal < 3; proposal++) {
+                boolean accept = proposal != 1;
+                double oldLikelihood = distribution.getCurrentLogP();
+                state.store(1);
+                deathRate.setValue(proposal == 0 ? .04 : .06);
+                if (proposal < 2) scale.setValue(proposal == 0 ? .025 : .03);
+                state.storeCalculationNodes();
+                state.checkCalculationNodesDirtiness();
+                Assert.assertTrue(distribution.isDirtyCalculation());
+                double proposed = posterior.calculateLogP();
+                Assert.assertNotEquals(accepted, proposed, 1e-8);
+                ConstantLinkFn referenceDeath = new ConstantLinkFn();
+                referenceDeath.initByName("yV", Double.toString(2 * deathRate.getValue()));
+                QuaSSEGrid referenceGrid = new QuaSSEGrid();
+                List<Object> controls = new ArrayList<>(Arrays.asList("tree", threeSpTreeHeight002,
+                        "traits", nfn3Sp.quTraitsInput.get(), "drift", new RealParameter("0"),
+                        "diffusion", Double.toString(scale.getValue() * scale.getValue())));
+                if (!automatic) controls.addAll(Arrays.asList("dtMax", .005, "tc", .005, "nX", 128,
+                        "dX", .01, "xMid", 0.0, "flankWidthScaler", 10.0, "hiLoRatio", 4));
+                referenceGrid.initByName(controls.toArray());
+                QuaSSEDistribution fresh = newDistribution();
+                fresh.initByName("grid", referenceGrid, "dynDt", "true", "tree", threeSpTreeHeight002,
+                        "q2mLambda", lfn, "q2mMu", referenceDeath, "q2d", nfn3Sp,
+                        "priorProbAtRootType", rootPriorType);
+                Assert.assertEquals(evaluate(fresh), distribution.getCurrentLogP(), 1e-10);
+                Assert.assertArrayEquals(fresh.getX(true), distribution.getX(true), 0.0);
+                fresh.close();
+                if (accept) {
+                    state.acceptCalculationNodes();
+                    accepted = proposed;
+                } else {
+                    state.restore();
+                    state.restoreCalculationNodes();
+                    Assert.assertEquals(oldLikelihood, distribution.getCurrentLogP(), 0.0);
+                }
+                state.setEverythingDirty(false);
+            }
+            state.store(2);
+            unrelated.setValue(1.0);
+            state.storeCalculationNodes();
+            state.checkCalculationNodesDirtiness();
+            Assert.assertFalse(distribution.isDirtyCalculation());
+            Assert.assertEquals("unchanged likelihood reuse", accepted - .5, posterior.calculateLogP(), 1e-12);
+            state.acceptCalculationNodes();
+            state.setEverythingDirty(false);
+        }
+    }
 
-        RealParameter unrelated = new RealParameter();
-        unrelated.initByName("value", "0.0");
-        Normal normal = new Normal();
-        normal.initAndValidate();
-        Prior prior = new Prior();
-        prior.initByName("x", unrelated, "distr", normal);
-        CompoundDistribution posterior = new CompoundDistribution();
-        posterior.initByName("distribution", Arrays.asList(distribution, prior));
-        State state = new State();
-        state.initByName("stateNode", Arrays.asList(deathRate, unrelated));
-        state.initialise();
-        state.setPosterior(posterior);
-        double initial = state.robustlyCalcPosterior(posterior);
-        double initialLikelihood = distribution.getCurrentLogP();
-
-        state.store(1);
-        deathRate.setValue(0.06);
-        state.storeCalculationNodes();
-        state.checkCalculationNodesDirtiness();
-        double changed = posterior.calculateLogP();
-        Assert.assertTrue(distribution.isDirtyCalculation());
-        state.restore();
-        state.restoreCalculationNodes();
-        state.setEverythingDirty(false);
-        Assert.assertEquals("restored scalar", initialLikelihood, distribution.getCurrentLogP(), 0.0);
-        Assert.assertEquals("recalculated restored inputs", initialLikelihood, distribution.calculateLogP(), 1e-12);
-
-        Assert.assertNotEquals(initial, changed, 1e-8);
-        state.store(2);
-        unrelated.setValue(1.0);
-        state.storeCalculationNodes();
-        state.checkCalculationNodesDirtiness();
-        Assert.assertFalse(distribution.isDirtyCalculation());
-        Assert.assertEquals("unchanged likelihood reuse", initial - .5, posterior.calculateLogP(), 1e-12);
-        state.acceptCalculationNodes();
-        state.setEverythingDirty(false);
+    // Each scalar link input must read and refresh computed values just like direct parameters.
+    // The lifecycle test covers dependency tracking, not every link formula; retain these cheap
+    // array comparisons while the links accept general Functions.
+    @Test
+    public void testComputedLinkValues() {
+        for (String name : List.of("yV", "curveYBaseValue", "curveMaxY", "sigmoidMidpoint",
+                "logisticGrowthRate", "sdNormalQuTrValue")) {
+            RealParameter source = new RealParameter("0.1");
+            source.setID("source");
+            RPNcalculator computed = new RPNcalculator();
+            computed.initByName("parameter", source, "expression", "source 2 *");
+            RealParameter direct = new RealParameter("0.2");
+            List<LinkFn> links = new ArrayList<>();
+            for (Function value : List.of(computed, direct)) {
+                if (name.equals("yV")) {
+                    ConstantLinkFn link = new ConstantLinkFn();
+                    link.initByName(name, value);
+                    links.add(link);
+                } else if (name.equals("sdNormalQuTrValue")) {
+                    NormalCenteredAtObservedLinkFn link = new NormalCenteredAtObservedLinkFn();
+                    RealParameter traits = new RealParameter();
+                    traits.initByName("value", "0.1", "keys", "tip");
+                    link.initByName("quTraits", traits, name, value);
+                    links.add(link);
+                } else {
+                    LogisticFunction link = new LogisticFunction();
+                    link.setInputValue("curveYBaseValue", "0.1");
+                    link.setInputValue("curveMaxY", "0.5");
+                    link.setInputValue("sigmoidMidpoint", "0.0");
+                    link.setInputValue("logisticGrowthRate", "2.0");
+                    link.setInputValue(name, value);
+                    link.initAndValidate();
+                    links.add(link);
+                }
+            }
+            double[] x = {-.3, 0, .7};
+            double[] actual = new double[x.length], expected = new double[x.length];
+            for (double value : new double[]{.1, .15, .1}) {
+                source.setValue(value);
+                direct.setValue(2 * value);
+                for (LinkFn link : links) link.refreshParams();
+                if (name.equals("sdNormalQuTrValue")) {
+                    links.get(0).getY(x, actual, new int[]{0, 0}, "tip", true);
+                    links.get(1).getY(x, expected, new int[]{0, 0}, "tip", true);
+                } else {
+                    links.get(0).getY(x, actual, true);
+                    links.get(1).getY(x, expected, true);
+                }
+                Assert.assertArrayEquals(name, expected, actual, 1e-12);
+            }
+        }
     }
 
     // Constant observation densities isolate sampling-event factors from trait transport. Existing
@@ -2329,9 +2366,11 @@ public class QuaSSEDistributionTest {
         death.initByName("yV", new RealParameter("0.1"));
         QuaSSEGrid grid = new QuaSSEGrid();
         int originOption = Arrays.asList(options).indexOf("origin");
+        int diffusionOption = Arrays.asList(options).indexOf("diffusion");
         grid.initByName(originOption < 0 ? "tree" : "origin",
                 originOption < 0 ? tree : options[originOption + 1], "traits", traits, "drift", new RealParameter("0"),
-                "diffusion", new RealParameter("0.05"), "nX", nX, "dX", dx, "xMid", 0.0,
+                "diffusion", diffusionOption < 0 ? new RealParameter("0.05") : options[diffusionOption + 1],
+                "nX", nX, "dX", dx, "xMid", 0.0,
                 "dtMax", dt, "tc", tc, "hiLoRatio", ratio, "flankWidthScaler", support);
         QuaSSEDistribution distribution = newDistribution();
         List<Object> inputs = new ArrayList<>(Arrays.asList("tree", tree, "grid", grid, "q2mLambda", birth,
@@ -2389,7 +2428,7 @@ public class QuaSSEDistributionTest {
                         "conditionOnRoot", false, "origin", new RealParameter("3"),
                         "conditionOnSampling", condition == 0, "conditionOnRhoSampling", condition == 1);
                 double lambda = newick.equals(trees[2]) ? 0 : .3;
-                ((ConstantLinkFn) d.q2mLambdaInput.get()).yValueInput.get().setValue(lambda);
+                ((ConstantLinkFn) d.q2mLambdaInput.get()).initByName("yV", Double.toString(lambda));
                 Node root = d.treeInput.get().getRoot();
                 double numerator = scalarSubtree(root, lambda, .08)
                         + scalarFlow(3, lambda, .08)[1] - scalarFlow(root.getHeight(), lambda, .08)[1];
@@ -2463,19 +2502,20 @@ public class QuaSSEDistributionTest {
         QuaSSEGrid oldGrid = d.gridInput.get();
         d.gridInput.setValue(null, d);
         d.driftInput.setValue(oldGrid.driftInput.get(), d);
-        d.diffusionInput.setValue(oldGrid.diffusionInput.get(), d);
+        RealParameter diffusion = new RealParameter("0.05");
+        d.diffusionInput.setValue(diffusion, d);
         d.initAndValidate();
         QuaSSEGrid grid = d.gridInput.get();
         Assert.assertSame(origin, grid.originInput.get());
         State state = new State();
-        state.initByName("stateNode", Arrays.asList(origin, grid.diffusionInput.get(), grid.driftInput.get()));
+        state.initByName("stateNode", Arrays.asList(origin, diffusion, grid.driftInput.get()));
         state.initialise(); state.setPosterior(d);
         double accepted = state.robustlyCalcPosterior(d);
         double[] acceptedX = grid.copyX(true);
         for (double age : new double[]{1, 3, -1}) {
             state.store(1);
             origin.setValue(age);
-            grid.diffusionInput.get().setValue(.07);
+            diffusion.setValue(.07);
             grid.driftInput.get().setValue(-.2);
             state.storeCalculationNodes(); state.checkCalculationNodesDirtiness();
             double proposed = d.calculateLogP();
@@ -2854,11 +2894,13 @@ public class QuaSSEDistributionTest {
         rho.setValue(1.1);
         Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(distribution), 0);
         rho.setValue(1.0);
-        RealParameter mu = ((ConstantLinkFn) distribution.q2mMuInput.get()).yValueInput.get();
+        RealParameter mu = new RealParameter("0.1");
+        ((ConstantLinkFn) distribution.q2mMuInput.get()).initByName("yV", mu);
         mu.setValue(0.0);
         Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(distribution), 0);
         mu.setValue(.1); rho.setValue(.7);
-        RealParameter lambda = ((ConstantLinkFn) distribution.q2mLambdaInput.get()).yValueInput.get();
+        RealParameter lambda = new RealParameter("0.3");
+        ((ConstantLinkFn) distribution.q2mLambdaInput.get()).initByName("yV", lambda);
         lambda.setValue(0.0);
         Assert.assertEquals(Double.NEGATIVE_INFINITY, evaluate(distribution), 0);
         lambda.setValue(.3);
@@ -2901,9 +2943,19 @@ public class QuaSSEDistributionTest {
             }
             if ("A".equals(node.getID()) || "B".equals(node.getID())) Assert.assertEquals(0, node.getHeight(), 0);
         }
-        RealParameter[] parameters = {distribution.fossilSamplingRateInput.get(),
-                distribution.presentSamplingProbabilityInput.get(), distribution.gridInput.get().diffusionInput.get(),
-                ((LogisticFunction) distribution.q2mLambdaInput.get()).curveYBaseValueInput.get()};
+        double reference = evaluate(distribution);
+        Assert.assertEquals(-11.075528805735900, reference, 1e-8);
+        distribution.close();
+        RealParameter psi = new RealParameter("0.08"), rho = new RealParameter("0.7");
+        RealParameter diffusion = new RealParameter("0.05"), birthBase = new RealParameter("0.2");
+        LogisticFunction birth = new LogisticFunction();
+        birth.initByName("curveYBaseValue", birthBase, "curveMaxY", "0.3",
+                "sigmoidMidpoint", "0", "logisticGrowthRate", "1");
+        distribution = fossilDistribution(newick, 0, true,
+                8192, 7.5 / 7679, 1.0 / 256, Math.sqrt(320), 1,
+                "fossilSamplingRate", psi, "presentSamplingProbability", rho,
+                "diffusion", diffusion, "q2mLambda", birth);
+        RealParameter[] parameters = {psi, rho, diffusion, birthBase};
         State state = new State();
         state.initByName("stateNode", Arrays.asList(parameters));
         state.initialise();
@@ -2912,12 +2964,14 @@ public class QuaSSEDistributionTest {
         Assert.assertEquals(-11.075528805735900, initial, 1e-8);
         double[] changes = {.12, .85, .06, .23};
         for (int i = 0; i < parameters.length; ++i) {
+            LogisticFunction freshBirth = new LogisticFunction();
+            freshBirth.initByName("curveYBaseValue", i == 3 ? "0.23" : "0.2", "curveMaxY", "0.3",
+                    "sigmoidMidpoint", "0", "logisticGrowthRate", "1");
             QuaSSEDistribution fresh = fossilDistribution(newick, 0, true,
-                    8192, 7.5 / 7679, 1.0 / 256, Math.sqrt(320), 1);
-            RealParameter[] freshParameters = {fresh.fossilSamplingRateInput.get(),
-                    fresh.presentSamplingProbabilityInput.get(), fresh.gridInput.get().diffusionInput.get(),
-                    ((LogisticFunction) fresh.q2mLambdaInput.get()).curveYBaseValueInput.get()};
-            freshParameters[i].setValue(changes[i]);
+                    8192, 7.5 / 7679, 1.0 / 256, Math.sqrt(320), 1,
+                    "fossilSamplingRate", new RealParameter(i == 0 ? "0.12" : "0.08"),
+                    "presentSamplingProbability", new RealParameter(i == 1 ? "0.85" : "0.7"),
+                    "diffusion", new RealParameter(i == 2 ? "0.06" : "0.05"), "q2mLambda", freshBirth);
             double expected = evaluate(fresh);
             fresh.close();
             state.store(i + 1);

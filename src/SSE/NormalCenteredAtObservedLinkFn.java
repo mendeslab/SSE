@@ -2,6 +2,7 @@ package SSE;
 
 import beast.base.inference.CalculationNode;
 import beast.base.core.Input;
+import beast.base.core.Function;
 import beast.base.inference.util.InputUtil;
 import beast.base.inference.parameter.RealParameter;
 
@@ -15,7 +16,7 @@ public class NormalCenteredAtObservedLinkFn extends CalculationNode implements L
     final public Input<RealParameter> quTraitsInput = new Input<>("quTraits", "Quantitative trait values observed at tips", Input.Validate.REQUIRED);
     // final public Input<RealParameter> dtInput = new Input<>("dt", "Length of time interval over which integration is carried out.", Input.Validate.REQUIRED);
     // final public Input<RealParameter> diffusionInput = new Input<>("diffusion", "Diffusion term of quantitative trait diffusion process.", Input.Validate.REQUIRED);
-    final public Input<RealParameter> sdNormalQuTrValueInput = new Input<>("sdNormalQuTrValue", "User-specified standard deviation of normal distribution for trait values (not trait value change!).", Input.Validate.REQUIRED);
+    final public Input<Function> sdNormalQuTrValueInput = new Input<>("sdNormalQuTrValue", "User-specified standard deviation of normal distribution for trait values (not trait value change!).", Input.Validate.REQUIRED);
 
     protected RealParameter quTraits;
     private double sdNormalQuTrValue; // not a parameter in the model
@@ -24,7 +25,7 @@ public class NormalCenteredAtObservedLinkFn extends CalculationNode implements L
     @Override
     public void initAndValidate() {
         quTraits = quTraitsInput.get();
-        sdNormalQuTrValue = sdNormalQuTrValueInput.get().getValue();
+        sdNormalQuTrValue = sdNormalQuTrValueInput.get().getArrayValue();
     }
 
     @Override
@@ -38,8 +39,9 @@ public class NormalCenteredAtObservedLinkFn extends CalculationNode implements L
         }
 
         // This scalar is not snapshotted; a clean restored parameter must also refresh it.
-        if (sdNormalQuTrValue != sdNormalQuTrValueInput.get().getValue()) {
-            sdNormalQuTrValue = sdNormalQuTrValueInput.get().getValue();
+        double currentSdNormalQuTrValue = sdNormalQuTrValueInput.get().getArrayValue();
+        if (sdNormalQuTrValue != currentSdNormalQuTrValue) {
+            sdNormalQuTrValue = currentSdNormalQuTrValue;
             refreshedSomething = true;
         }
 

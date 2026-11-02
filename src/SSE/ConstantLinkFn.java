@@ -2,7 +2,7 @@ package SSE;
 
 import beast.base.inference.CalculationNode;
 import beast.base.core.Input;
-import beast.base.inference.parameter.RealParameter;
+import beast.base.core.Function;
 
 /*
  * Applies the same y (macroevol param) value to all x (qu trait) bins.
@@ -11,14 +11,14 @@ import beast.base.inference.parameter.RealParameter;
  */
 public class ConstantLinkFn extends CalculationNode implements LinkFn {
 
-    final public Input<RealParameter> yValueInput = new Input<>("yV", "Constant value of dependent variable (quantitative trait).", Input.Validate.REQUIRED);
+    final public Input<Function> yValueInput = new Input<>("yV", "Constant value of dependent variable (quantitative trait).", Input.Validate.REQUIRED);
 
     double yValue;
     private static final String LINKFUNCTION = "constant";
 
     @Override
     public void initAndValidate() {
-        yValue = yValueInput.get().getValue();
+        yValue = yValueInput.get().getArrayValue();
     }
 
     @Override
@@ -27,8 +27,9 @@ public class ConstantLinkFn extends CalculationNode implements LinkFn {
         boolean refreshedSomething = false;
 
         // Restored parameters may be clean while this unsnapshotted scalar still holds a proposal.
-        if (yValue != yValueInput.get().getValue()) {
-            yValue = yValueInput.get().getValue();
+        double currentYValue = yValueInput.get().getArrayValue();
+        if (yValue != currentYValue) {
+            yValue = currentYValue;
             refreshedSomething = true;
         }
 

@@ -1,6 +1,7 @@
 package SSE;
 
 import beast.base.core.Input;
+import beast.base.core.Function;
 import beast.base.inference.State;
 import beast.base.inference.parameter.RealParameter;
 import beast.base.evolution.tree.Node;
@@ -38,7 +39,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     // One reusable probability workspace per resolution: terminal-fossil E, then living-sample Q.
     private double[][] fossilELo, fossilEHi, scratchELo, scratchEHi, fftBufferELo, fftBufferEHi;
     public final Input<RealParameter> driftInput = new Input<>("drift", "Trait drift for an automatic grid.");
-    public final Input<RealParameter> diffusionInput = new Input<>("diffusion", "Diffusion variance rate for an automatic grid.");
+    public final Input<Function> diffusionInput = new Input<>("diffusion", "Diffusion variance rate for an automatic grid.");
     private QuaSSEGrid automaticGrid;
 
     final public Input<LinkFn> q2mLambdaInput = new Input<>("q2mLambda", "Function converting quantitative trait into lambda parameter.", Input.Validate.REQUIRED);
@@ -246,7 +247,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             if ((driftInput.get() != null && driftInput.get() != supplied.driftInput.get())
                     || (diffusionInput.get() != null && diffusionInput.get() != supplied.diffusionInput.get()))
                 throw new IllegalArgumentException(
-                        "Likelihood drift/diffusion must reference the explicit grid's parameters.");
+                        "Likelihood drift/diffusion must reference the explicit grid's inputs.");
         }
     }
 

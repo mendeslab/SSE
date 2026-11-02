@@ -1,6 +1,7 @@
 package SSE;
 
 import beast.base.core.Input;
+import beast.base.core.Function;
 import beast.base.inference.CalculationNode;
 import beast.base.inference.parameter.RealParameter;
 import beast.base.evolution.tree.Tree;
@@ -16,7 +17,7 @@ public class QuaSSEGrid extends CalculationNode {
             "Origin age for origin conditioning.", Input.Validate.XOR, treeInput);
     public final Input<RealParameter> traitsInput = new Input<>("traits", "Observed traits for spatial defaults.", Input.Validate.REQUIRED);
     public final Input<RealParameter> driftInput = new Input<>("drift", "Trait drift.", Input.Validate.REQUIRED);
-    public final Input<RealParameter> diffusionInput = new Input<>("diffusion", "Trait diffusion variance rate.", Input.Validate.REQUIRED);
+    public final Input<Function> diffusionInput = new Input<>("diffusion", "Trait diffusion variance rate.", Input.Validate.REQUIRED);
     public final Input<Integer> nXInput = new Input<>("nX", "Coarse bins; defaults to 1024.");
     public final Input<Double> dXInput = new Input<>("dX", "Coarse spacing; defaults cover observations, diffusion and padding.");
     public final Input<Double> xMidInput = new Input<>("xMid", "Midpoint; defaults to the center of the observation/diffusion interval.");
@@ -86,7 +87,7 @@ public class QuaSSEGrid extends CalculationNode {
         needsUpdate = false;
         valid = false;
         // Read current parameters and validate the physical time controls.
-        double candidateDrift = driftInput.get().getValue(), candidateDiffusion = diffusionInput.get().getValue();
+        double candidateDrift = driftInput.get().getValue(), candidateDiffusion = diffusionInput.get().getArrayValue();
         RealParameter origin = originInput.get();
         if (origin != null && origin.getDimension() != 1) return false;
         double age = origin == null ? treeInput.get().getRoot().getHeight() : origin.getValue();
