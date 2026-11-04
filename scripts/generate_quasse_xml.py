@@ -49,7 +49,7 @@ def replicate_id(row):
     return replicate
 
 
-# Validate the reconstructed tree and observations while retaining the original Newick text.
+# Validate the reconstructed tree and observations, and serialize the tree for BEAST.
 def validate_tree(newick, observations):
     tree = dendropy.Tree.get(data=newick, schema="newick", preserve_underscores=True)
     labels = [leaf.taxon.label for leaf in tree.leaf_node_iter() if leaf.taxon is not None]
@@ -76,7 +76,11 @@ def validate_tree(newick, observations):
     # Floating-point summation during simulation can leave tiny differences between living tips.
     if max(heights) - min(heights) > 1e-8:
         raise ValueError("Fossil-free trees must be ultrametric within 1e-8 time units")
-    return labels, max(heights)
+    # Compatibility workaround until BEAST accepts DendroPy annotations after branch lengths:
+    # omit metadata here; inference observations are supplied separately by the trait table.
+    newick = tree.as_string(schema="newick", suppress_annotations=True, suppress_item_comments=True,
+                            suppress_rooting=True).strip()
+    return labels, max(heights), newick
 
 
 # Join observations and trees by replicate, reading scalar truth only for explicit fixed bindings.
@@ -127,7 +131,8 @@ def read_datasets(directory, columns):
             raise ValueError("Tree and scalar replicate sets differ")
     for replicate, dataset in datasets.items():
         try:
-            dataset["labels"], dataset["height"] = validate_tree(dataset["newick"], dataset["observations"])
+            dataset["labels"], dataset["height"], dataset["newick"] = validate_tree(
+                dataset["newick"], dataset["observations"])
         except (ValueError, dendropy.utility.error.DataParseError) as error:
             raise ValueError(f"Replicate {replicate}: {error}") from error
     return datasets

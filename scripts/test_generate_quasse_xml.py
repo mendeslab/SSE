@@ -11,7 +11,8 @@ import generate_quasse_xml as converter
 # These small end-to-end checks protect joins and template preservation, which BEAST parsing
 # alone cannot verify. They remain useful while simulation tables supply inference inputs.
 class ConverterTest(unittest.TestCase):
-    # Write two replicates in different table orders, with latent and unobserved traits as decoys.
+    # Annotated export must preserve trees while inference observations come from the trait table.
+    # Include both singleton and branching trees in the existing end-to-end checks.
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -22,7 +23,8 @@ class ConverterTest(unittest.TestCase):
             bind=["origin=origin_age", "observationSD=observation_sd"], chain_length=3, log_every=1,
             bins=4096, dt_max=.01, fft_backend="sst", integration_backend="java")
         self.write("trees_reconstructed.tsv", ["@replicate", "@element", "trees"],
-                   [["8", "", "(a:1,b:1);"], ["2", "", "single;"]])
+                   [["8", "", "(a:1[&trait=99,observed_trait=.1],b:1[&trait=99,observed_trait=.4]);"],
+                    ["2", "", "single[&trait=99,observed_trait=-.2];"]])
         self.write("trees_traits.tsv", ["@replicate", "@element", "node", "alive", "sampled", "trait", "observed_trait"],
                    [["2", "", "single", "True", "True", "99", "-.2"],
                     ["8", "", "b", "True", "True", "99", ".4"],
@@ -53,6 +55,7 @@ class ConverterTest(unittest.TestCase):
         output = ET.parse(self.args.output_dir / "replicate_008.xml").getroot()
         ids = converter.index_xml(output)
         self.assertEqual("5.0", ids["origin"].get("value"))
+        self.assertEqual("(a:1.0,b:1.0);", ids["observedTree"].get("newick"))
         self.assertEqual("a b", ids["observations"].get("keys"))
         self.assertEqual("0.1 0.4", ids["observations"].get("value"))
         self.assertEqual("0.52", ids["diversification"].get("value"))
