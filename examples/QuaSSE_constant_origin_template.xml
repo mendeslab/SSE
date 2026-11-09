@@ -25,6 +25,8 @@
     <parameter idref="diffusionSD"/>
   </function>
   <run id="mcmc" spec="MCMC" chainLength="100">
+    <operatorschedule spec="OperatorSchedule" autoOptimizeDelay="250"/>
+
     <state id="state">
       <!-- These finite values permit model construction. PriorInitialiser draws starting values
            from the priors at run time, independently of simulation truth. -->
