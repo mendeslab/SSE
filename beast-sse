@@ -1,15 +1,20 @@
 #!/bin/sh
-# Incrementally compile with Ant, then invoke BEAST's standard launcher in the caller's directory.
+# Invoke BEAST's standard launcher from a prepared build in the caller's directory.
 set -eu
 if [ "${1-}" = --help ] || [ "$#" -eq 0 ]; then
     echo 'Usage: beast-sse [BEAST options] analysis.xml'
-    echo 'Set BEAST2_HOME to a BEAST 2.7 installation containing bin/ and lib/.'
+    echo 'Prepare first: set BEAST2_HOME to a BEAST 2.7 installation, then run ant prepare-run.'
+    echo 'Rerun preparation after source or dependency-path changes, before submitting jobs.'
     echo 'ant show-config displays dependency paths; ant show-ide displays IDE settings.'
     echo 'BEAST arguments are passed unchanged; normal package discovery applies.'
     exit 0
 fi
 sse_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-ant -q -f "$sse_dir/build.xml" prepare-run
+if [ ! -r "$sse_dir/build/beast.args" ] || [ ! -s "$sse_dir/build/beast.args" ]; then
+    echo 'Missing, unreadable, or empty build/beast.args. Prepare the build first:' >&2
+    printf '  ant -f "%s/build.xml" prepare-run\n' "$sse_dir" >&2
+    exit 1
+fi
 if [ -n "${JAVA_HOME-}" ]; then
     exec "$JAVA_HOME/bin/java" "@$sse_dir/build/beast.args" "$@"
 else

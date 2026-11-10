@@ -17,14 +17,19 @@ containing `bin/` and `lib/`, then run directly from source (no SSE jar needed):
 
 ```sh
 export BEAST2_HOME=/path/to/beast
+ant prepare-run
 ./beast-sse -seed 127 examples/BiSSE_fixed_tree_SDSEP.xml
 ```
 
-`beast-sse` compiles incrementally and invokes BEAST's standard launcher with normal
-package discovery. It preserves your working directory and passes BEAST options unchanged.
+`ant prepare-run` compiles incrementally and writes the Java arguments to `build/beast.args`.
+`beast-sse` uses that prepared build to invoke BEAST's standard launcher with normal package
+discovery. It preserves your working directory and passes BEAST options unchanged.
 Use `JAVA_HOME` to select Java and `JAVA_TOOL_OPTIONS` for JVM memory/profiling options.
 
-`BEAST2_HOME` is required; `ant show-config` prints resolved dependency paths.
+Prepare once before submitting a batch of jobs, and repeat after source or dependency-path changes.
+Jobs share the prepared build; wait until they finish before rebuilding or regenerating the arguments.
+`BEAST2_HOME` is required during preparation; the launcher uses the saved paths.
+`ant show-config` prints resolved dependency paths.
 
 To compile without running, use `ant compile`. To run the portable tests:
 
