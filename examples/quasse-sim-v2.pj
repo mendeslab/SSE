@@ -1,0 +1,36 @@
+# Fixed-origin QuaSSE simulation with known extinction and a broader speciation prior.
+# Run from SSE with PhyloJunction's pjcli on PATH:
+# pjcli examples/quasse-sim-v2.pj --runs 100 -d -r 1601797 -o /tmp/quasse-sim-v2
+# Each replicate draws parameters once, then retries histories until one survives.
+# Averaging the survival-conditioned birth-death count distribution over the lambda
+# prior gives a median near 75 extant tips at this fixed origin age.
+origin_age <- 9
+
+# Lognormal median 0.65: meanlog = log(0.65); sdlog is on the natural-log scale.
+lambda_rate ~ lognormal(meanlog=-0.4307829161, sdlog=0.3)
+mu_rate <- 0.13
+diversification := lambda_rate - mu_rate
+turnover := mu_rate / lambda_rate
+
+# Constant diversification rates, no fossils, and complete present-day sampling.
+psi_rate := 0
+birth := quasse_constant(rate=lambda_rate)
+death := quasse_constant(rate=mu_rate)
+fossil := quasse_constant(rate=psi_rate)
+
+# Brownian trait evolution: diffusion variance per unit time is the squared scale.
+diffusion_sd ~ lognormal(meanlog=1.0, sdlog=0.3)
+diffusion_variance := diffusion_sd * diffusion_sd
+
+# Redraw the initial character at the origin for each biological attempt.
+initial := normal(mean=0, sd=1)
+
+# Start from one lineage and retain surviving histories; the tip count is not fixed.
+# local_thinning uses constant rate bounds here; block_duration controls Brownian bookkeeping.
+# Add independent Normal(0, observation_sd) measurement error to sampled traits.
+# In SSE, use observed_trait and set sdNormalQuTrValue to the same SD.
+observation_sd <- 0.1
+tree ~ quasse(birth_rate=birth, death_rate=death, fossil_rate=fossil, start_distribution=initial, drift=0, diffusion=diffusion_variance, stop="age", stop_value=origin_age, sampling_prob=1, cond_surv=true, observation_sd=observation_sd, method="local_thinning", block_duration=1)
+
+n := n_extant_tips(tree)
+condition( 100 <= n && n <= 300 )
