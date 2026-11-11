@@ -4,11 +4,13 @@ r"""Fill a BEAST XML template from fossil-free PhyloJunction simulation outputs.
 Requires DendroPy (available in the PhyloJunction Python environment). The template uses IDs
 observedTree, observations, mcmc, grid, likelihood and trace. observedTree contains a taxonset;
 observations is a keyed RealParameter. Other model elements are preserved.
+Input tables are <tree-variable>_reconstructed.tsv and <tree-variable>_traits.tsv;
+the tree column has the same variable name (default: tree).
 
 Example, from SSE (numerical and chain settings here are only an execution example):
   ../PhyloJunction/.venv/bin/python scripts/generate_quasse_xml.py \
       ../quasse_fixed_origin_100 examples/QuaSSE_constant_origin_template.xml /path/to/xmls \
-      --bind origin=origin_age --bind observationSD=observation_sd \
+      --tree-variable trees --bind origin=origin_age --bind observationSD=observation_sd \
       --chain-length 100 --log-every 10 --bins 4096 --dt-max 0.01
 
 Run each XML from its result directory, supplying a distinct BEAST seed per replicate. The output
@@ -84,16 +86,16 @@ def validate_tree(newick, observations):
 
 
 # Join observations and trees by replicate, reading scalar truth only for explicit fixed bindings.
-def read_datasets(directory, columns):
-    trees = read_rows(directory / "trees_reconstructed.tsv", "\t", ["@replicate", "@element", "trees"])
-    traits = read_rows(directory / "trees_traits.tsv", "\t",
+def read_datasets(directory, columns, tree_variable="tree"):
+    trees = read_rows(directory / f"{tree_variable}_reconstructed.tsv", "\t", ["@replicate", "@element", tree_variable])
+    traits = read_rows(directory / f"{tree_variable}_traits.tsv", "\t",
                        ["@replicate", "@element", "node", "alive", "sampled", "observed_trait"])
     datasets = {}
     for row in trees:
         replicate = replicate_id(row)
         if replicate in datasets:
             raise ValueError(f"Duplicate tree for replicate {replicate}")
-        datasets[replicate] = {"newick": row["trees"], "observations": {}, "fixed": {}}
+        datasets[replicate] = {"newick": row[tree_variable], "observations": {}, "fixed": {}}
     seen = set()
     for row in traits:
         replicate = replicate_id(row)
@@ -220,7 +222,7 @@ def generate(args):
     if args.dt_max is not None and (not math.isfinite(args.dt_max) or args.dt_max <= 0):
         raise ValueError("dt-max must be finite and positive")
     template = ET.parse(args.template, parser=ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))).getroot()
-    datasets = read_datasets(args.simulation_dir, bindings.values())
+    datasets = read_datasets(args.simulation_dir, bindings.values(), args.tree_variable)
     outputs = {}
     for replicate, dataset in datasets.items():
         suffix = replicate.zfill(3) if replicate.isdecimal() else replicate
@@ -244,6 +246,8 @@ def main():
     parser.add_argument("simulation_dir", type=Path)
     parser.add_argument("template", type=Path)
     parser.add_argument("output_dir", type=Path)
+    parser.add_argument("--tree-variable", default="tree",
+                        help="tree variable naming the input tables and tree column (default: tree)")
     parser.add_argument("--bind", action="append", default=[], metavar="XML_ID=COLUMN")
     parser.add_argument("--chain-length", type=int, required=True)
     parser.add_argument("--log-every", type=int, required=True)

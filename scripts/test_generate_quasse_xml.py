@@ -20,7 +20,7 @@ class ConverterTest(unittest.TestCase):
         self.args = argparse.Namespace(
             simulation_dir=self.directory, output_dir=self.directory / "xml",
             template=Path(__file__).resolve().parents[1] / "examples/QuaSSE_constant_origin_template.xml",
-            bind=["origin=origin_age", "observationSD=observation_sd"], chain_length=3, log_every=1,
+            tree_variable="trees", bind=["origin=origin_age", "observationSD=observation_sd"], chain_length=3, log_every=1,
             bins=4096, dt_max=.01, fft_backend="sst", integration_backend="java")
         self.write("trees_reconstructed.tsv", ["@replicate", "@element", "trees"],
                    [["8", "", "(a:1[&trait=99,observed_trait=.1],b:1[&trait=99,observed_trait=.4]);"],
@@ -83,7 +83,7 @@ class ConverterTest(unittest.TestCase):
                            traits.replace("\tb\t", "\ta\t"), traits.replace("8\t", "9\t")):
             with self.subTest(traits=bad_traits), self.assertRaises(ValueError):
                 traits_path.write_text(bad_traits)
-                converter.read_datasets(self.directory, [])
+                converter.read_datasets(self.directory, [], "trees")
         traits_path.write_text(traits)
         for newick in ("(a:1,c:1);", "(a:1,b:2);", "(a:-1,b:1);"):
             with self.subTest(tree=newick), self.assertRaises(ValueError):
