@@ -3,15 +3,14 @@
 origin_age <- 9
 
 # rate_scale is the geometric mean of the center and tail rates, with prior median 0.65.
-# The signed contrast log(center_rate / baseline) has mean 0 and SD log(2).
-# Drawing exp(contrast / 2) directly gives peaks and troughs equal prior probability.
-rate_scale ~ lognormal(meanlog=-0.4307829160924542, sdlog=0.3)
-half_contrast_factor ~ lognormal(meanlog=0, sdlog=0.34657359027997265)
-center_rate := rate_scale * half_contrast_factor
-baseline := rate_scale / half_contrast_factor
+# contrast is the log center-to-tail rate ratio. Positive values give peaks and negative values give troughs.
+rate_scale ~ lognormal(meanlog=log(0.65), sdlog=0.3)
+contrast ~ normal(mean=0, sd=log(2))
+center_rate := rate_scale * exp(contrast/2)
+baseline := rate_scale * exp(-contrast/2)
 rate_ratio := center_rate / baseline
 center ~ normal(mean=0, sd=3)
-width ~ lognormal(meanlog=1.6094379124341003, sdlog=0.5)
+width ~ lognormal(meanlog=log(5), sdlog=0.5)
 birth := quasse_gaussian(baseline=baseline, center_rate=center_rate, center=center, width=width)
 
 mu_rate <- 0.13
@@ -26,6 +25,6 @@ initial := normal(mean=0, sd=1)
 observation_sd <- 0.1
 
 # Retry extinct histories at the same parameters. A failed tip-count condition redraws the model.
-tree ~ quasse(birth_rate=birth, death_rate=death, fossil_rate=fossil, start_distribution=initial, drift=0, diffusion=diffusion_variance, stop="age", stop_value=origin_age, sampling_prob=1, cond_surv=true, observation_sd=observation_sd, method="local_thinning", block_duration=1)
+tree ~ quasse(birth_rate=birth, death_rate=death, fossil_rate=fossil, start_distribution=initial, drift=0, diffusion=diffusion_variance, stop="age", stop_value=origin_age, sampling_prob=1, cond_surv=true, observation_sd=observation_sd, method="local_thinning", block_duration=1, reject_above=5000)
 n := n_extant_tips(tree)
 condition(100 <= n && n <= 300)
