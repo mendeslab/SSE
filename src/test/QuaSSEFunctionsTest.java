@@ -2,6 +2,7 @@ package test;
 
 import SSE.ConstantLinkFn;
 import SSE.LinearLinkFn;
+import SSE.GaussianLinkFn;
 import org.junit.Assert;
 import SSE.LogisticFunction;
 import beast.base.inference.parameter.RealParameter;
@@ -231,6 +232,42 @@ public class QuaSSEFunctionsTest {
                 {"intercept", "2 3", "slope", "1"},
                 {"intercept", "2", "slope", "NaN"}}) {
             Assert.assertThrows(RuntimeException.class, () -> new LinearLinkFn().initByName(inputs));
+        }
+    }
+
+    // Pointwise values and XML parsing isolate width conventions and numerical cancellation that
+    // likelihood tests cannot. Retire if evaluation moves to an equivalently tested implementation.
+    @Test
+    public void testGaussianRates() throws Exception {
+        double[] x = {-2, 0, 2, 100};
+        for (double[] levels : new double[][]{{0, 1}, {1, 0}, {2, 2}, {0, 0}}) {
+            GaussianLinkFn link = new GaussianLinkFn();
+            link.initByName("baseline", Double.toString(levels[0]), "center_rate", Double.toString(levels[1]),
+                    "center", "0", "width", "2");
+            double atWidth = levels[0] + (levels[1] - levels[0]) * 0.6065306597126334;
+            assertArrayEquals(new double[]{atWidth, levels[1], atWidth, levels[0]},
+                    link.getY(x, new double[4], true), 1e-15);
+        }
+        GaussianLinkFn parsed = (GaussianLinkFn) new beast.base.parser.XMLParser().parseBareFragment(
+                "<q2mLambda spec=\"SSE.GaussianLinkFn\" baseline=\"0.1\" center_rate=\"0.4\" "
+                + "center=\"0\" width=\"1\"/>", true);
+        assertArrayEquals(new double[]{.4, .2819591979137901},
+                parsed.getY(new double[]{0, 1}, new double[2], true), 1e-15);
+        GaussianLinkFn trough = new GaussianLinkFn();
+        trough.initByName("baseline", "1", "center_rate", "0", "center", "0", "width", "1");
+        // At z=1e-10 the trough is z²/2 to double precision; direct subtraction rounds to zero.
+        Assert.assertEquals(5e-21, trough.getY(new double[]{1e-10}, new double[1], true)[0], 1e-35);
+        GaussianLinkFn wide = new GaussianLinkFn();
+        wide.initByName("baseline", "0", "center_rate", "1", "center", "-1e308", "width", "1e308");
+        Assert.assertEquals(0.1353352832366127,
+                wide.getY(new double[]{1e308}, new double[1], true)[0], 1e-15);
+        for (String[] invalid : new String[][]{{"baseline", "-1"}, {"center_rate", "-1"},
+                {"center", "NaN"}, {"width", "0"}, {"width", "-1"}, {"width", "Infinity"},
+                {"center", "0 1"}}) {
+            GaussianLinkFn link = new GaussianLinkFn();
+            link.initByName("baseline", "0", "center_rate", "1", "center", "0", "width", "1");
+            link.setInputValue(invalid[0], new RealParameter(invalid[1]));
+            Assert.assertThrows(IllegalArgumentException.class, link::initAndValidate);
         }
     }
 

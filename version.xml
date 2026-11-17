@@ -16,6 +16,7 @@
     <provider classname="SSE.LambdaMuAssigner"/>
     <provider classname="SSE.LogisticFunction"/>
     <provider classname="SSE.LinearLinkFn"/>
+    <provider classname="SSE.GaussianLinkFn"/>
     <provider classname="SSE.MaskOperatorDist"/>
     <provider classname="SSE.MasqueradeBall"/>
     <provider classname="SSE.MoSSEDistribution"/>

@@ -50,6 +50,26 @@ The trait bounds are fixed settings and cannot be estimated by MCMC. When changi
 existing MCMC XML, remove unused state nodes, priors, and operators, and add those needed for
 the estimated coefficients.
 
+## Gaussian birth and death rates
+
+Either rate can also use `SSE.GaussianLinkFn`:
+
+```xml
+<q2mLambda spec="SSE.GaussianLinkFn" baseline="0.1" center_rate="0.4"
+           center="0" width="1"/>
+```
+
+The rate is `baseline + (center_rate - baseline) * exp(-z²/2)`, where
+`z = (x - center)/width`. It forms a peak when `center_rate > baseline`, a trough when
+`center_rate < baseline`, and a constant when they are equal. All four parameters must be
+finite scalars; the two rate levels must be nonnegative and `width` positive.
+All four may reference estimated `RealParameter` nodes with suitable priors and operators,
+as described above, with parameter domains respecting these constraints.
+
+The parameters match PhyloJunction's `quasse_gaussian`. In diversitree's
+`noroptimal.x(x, y0, y1, xmid, s2)`, they correspond to `y0 = baseline`,
+`y1 = center_rate`, `xmid = center`, and `s2 = width²`.
+
 ## Starting and sampling options
 
 | Input | Meaning and default |

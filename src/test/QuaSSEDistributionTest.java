@@ -2420,6 +2420,46 @@ public class QuaSSEDistributionTest {
         }
     }
 
+    // Constant equivalence checks integration; nonconstant proposals exercise every cached parameter
+    // through real State restoration. Pointwise tests cannot do this; retire if link caching is removed.
+    @Test
+    public void testGaussianLinksAndRestoration() {
+        RealParameter a = new RealParameter("0.3"), b = new RealParameter("0.3");
+        RealParameter c = new RealParameter("0.2"), w = new RealParameter("0.7");
+        GaussianLinkFn birth = new GaussianLinkFn(), death = new GaussianLinkFn();
+        birth.initByName("baseline", a, "center_rate", b, "center", c, "width", w);
+        death.initByName("baseline", "0.1", "center_rate", "0.1", "center", "0", "width", "1");
+        ConstantLinkFn constantBirth = new ConstantLinkFn(), constantDeath = new ConstantLinkFn();
+        constantBirth.initByName("yV", "0.3");
+        constantDeath.initByName("yV", "0.1");
+        // Observed traits break translation symmetry, making the center proposal identifiable here.
+        QuaSSEDistribution constant = fossilDistribution("(A:2,B:2);", 0, true, 1024, .01, .01, 5, 2,
+                "q2mLambda", constantBirth, "q2mMu", constantDeath);
+        QuaSSEDistribution gaussian = fossilDistribution("(A:2,B:2);", 0, true,
+                1024, .01, .01, 5, 2, "q2mLambda", birth, "q2mMu", death);
+        State state = new State();
+        state.initByName("stateNode", Arrays.asList(a, b, c, w));
+        state.initialise();
+        state.setPosterior(gaussian);
+        Assert.assertEquals(evaluate(constant), state.robustlyCalcPosterior(gaussian), 1e-12);
+        b.setValue(.5);
+        double initial = state.robustlyCalcPosterior(gaussian);
+        RealParameter[] parameters = {a, b, c, w};
+        double[] proposals = {.2, .6, .8, 1.1};
+        for (int i = 0; i < parameters.length; i++) {
+            state.store(i + 1);
+            parameters[i].setValue(proposals[i]);
+            state.storeCalculationNodes();
+            state.checkCalculationNodesDirtiness();
+            double proposed = gaussian.calculateLogP();
+            Assert.assertTrue(Double.isFinite(proposed));
+            Assert.assertNotEquals("Parameter " + i,
+                    initial, proposed, 1e-8);
+            state.restore(); state.restoreCalculationNodes(); state.setEverythingDirty(false);
+            Assert.assertEquals(initial, gaussian.calculateLogP(), 1e-12);
+        }
+    }
+
     // Closed-form Riccati flow and its derivative provide an independent constant-rate oracle.
     // The derivative propagates D; this avoids duplicating the production reaction implementation.
     private double[] scalarFlow(double age, double lambda, double psi) {
