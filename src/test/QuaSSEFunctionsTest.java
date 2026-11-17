@@ -1,6 +1,8 @@
 package test;
 
 import SSE.ConstantLinkFn;
+import SSE.LinearLinkFn;
+import org.junit.Assert;
 import SSE.LogisticFunction;
 import beast.base.inference.parameter.RealParameter;
 import org.junit.Test;
@@ -196,4 +198,40 @@ public class QuaSSEFunctionsTest {
         cfn.initByName("yV", yValuerp);
         double[] cfnOut = cfn.getY(xRuler, muHi, true);
     }
+    // Direct tail checks isolate clipping and optional bounds, which likelihood tests cannot.
+    // Remove these cases if linear evaluation moves to an equivalently tested implementation.
+    @Test
+    public void testLinearTails() throws Exception {
+        double[] x = {-3, -1, 0, 2, 4};
+        double[][] traits = {{-3, -1, 0, 2, 4}, {-1, -1, 0, 2, 4},
+                {-3, -1, 0, 2, 2}, {-1, -1, 0, 2, 2}};
+        for (int bounds = 0; bounds < 4; bounds++) {
+            for (double slope : new double[]{-1, 0, 1}) {
+                LinearLinkFn link = new LinearLinkFn();
+                if ((bounds & 1) != 0) link.lowerTraitInput.setValue(-1.0, link);
+                if ((bounds & 2) != 0) link.upperTraitInput.setValue(2.0, link);
+                link.initByName("intercept", "2", "slope", Double.toString(slope));
+                double[] expected = new double[5];
+                for (int i = 0; i < 5; i++) expected[i] = Math.max(0, 2 + slope * traits[bounds][i]);
+                assertArrayEquals(expected, link.getY(x, new double[5], true), 0);
+            }
+        }
+        LinearLinkFn parsed = (LinearLinkFn) new beast.base.parser.XMLParser().parseBareFragment(
+                "<q2mLambda spec=\"SSE.LinearLinkFn\" intercept=\"0.2\" slope=\"0.1\" "
+                + "lower_trait=\"-1\" upper_trait=\"2\"/>", true);
+        assertArrayEquals(new double[]{.1, .1, .2, .4, .4}, parsed.getY(x, new double[5], true), 1e-15);
+        LinearLinkFn equal = new LinearLinkFn();
+        equal.initByName("intercept", "2", "slope", "-1", "lower_trait", 1.0, "upper_trait", 1.0);
+        assertArrayEquals(new double[]{1, 1, 1, 1, 1}, equal.getY(x, new double[5], true), 0);
+        Assert.assertThrows(IllegalArgumentException.class, () -> equal.getY(x, new double[4], true));
+        for (Object[] inputs : new Object[][]{
+                {"intercept", "2", "slope", "1", "lower_trait", 2.0, "upper_trait", 1.0},
+                {"intercept", "2", "slope", "1", "lower_trait", Double.NaN},
+                {"intercept", "2", "slope", "1", "upper_trait", Double.POSITIVE_INFINITY},
+                {"intercept", "2 3", "slope", "1"},
+                {"intercept", "2", "slope", "NaN"}}) {
+            Assert.assertThrows(RuntimeException.class, () -> new LinearLinkFn().initByName(inputs));
+        }
+    }
+
 }

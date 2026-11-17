@@ -27,6 +27,29 @@ For Java-only integration, copy the XML and set `fftBackend="sst"` and
 `integrationBackend="java"`. See the [documentation index](../docs/README.md) for building the
 [guide](../docs/quasse/guide.tex) and [mathematical reference](../docs/quasse/theory.tex).
 
+## Linear birth and death rates
+
+Either `q2mLambda` or `q2mMu` can use `SSE.LinearLinkFn`. For example, replace the
+corresponding link element with:
+
+```xml
+<q2mLambda spec="SSE.LinearLinkFn" intercept="0.2" slope="0.1"
+           lower_trait="-1" upper_trait="2"/>
+```
+
+The rate is `max(0, intercept + slope * clamped_trait)`. Either `lower_trait` or
+`upper_trait` may be omitted. Supplied bounds must be finite,
+with `lower_trait <= upper_trait`; equality produces a constant rate. This example has rate 0.1
+below trait -1 and rate 0.4 above trait 2. With both bounds omitted, the nonnegative line has no
+upper cap. Negative slopes and intercepts are allowed, but coefficients must be finite scalars.
+The function matches diversitree's `make.linear.x(L,U)` when both trait bounds are supplied.
+
+Intercept and slope may reference `RealParameter` state nodes (for example,
+`intercept="@linearIntercept" slope="@linearSlope"`) with suitable priors and operators.
+The trait bounds are fixed settings and cannot be estimated by MCMC. When changing the link in an
+existing MCMC XML, remove unused state nodes, priors, and operators, and add those needed for
+the estimated coefficients.
+
 ## Starting and sampling options
 
 | Input | Meaning and default |

@@ -2387,6 +2387,39 @@ public class QuaSSEDistributionTest {
         return distribution;
     }
 
+    // Zero slopes must reproduce constant links; real State restoration catches stale coefficient
+    // caches that pointwise tests cannot. Retire if link caching is removed from QuaSSE.
+    @Test
+    public void testLinearLinksAndRestoration() {
+        RealParameter a = new RealParameter("0.3"), b = new RealParameter("0");
+        LinearLinkFn birth = new LinearLinkFn(), death = new LinearLinkFn();
+        birth.initByName("intercept", a, "slope", b, "lower_trait", -1.0, "upper_trait", 1.0);
+        death.initByName("intercept", "0.1", "slope", "0", "lower_trait", -1.0);
+        QuaSSEDistribution constant = fossilDistribution("(A:2,B:2);", 0, false,
+                1024, .01, .01, 5, 2);
+        QuaSSEDistribution linear = fossilDistribution("(A:2,B:2);", 0, false,
+                1024, .01, .01, 5, 2, "q2mLambda", birth, "q2mMu", death);
+        State state = new State();
+        state.initByName("stateNode", Arrays.asList(a, b));
+        state.initialise();
+        state.setPosterior(linear);
+        double initial = state.robustlyCalcPosterior(linear);
+        Assert.assertEquals(evaluate(constant), initial, 1e-12);
+        RealParameter[] parameters = {a, b};
+        double[] proposals = {.4, .1};
+        for (int i = 0; i < parameters.length; i++) {
+            state.store(i + 1);
+            parameters[i].setValue(proposals[i]);
+            state.storeCalculationNodes();
+            state.checkCalculationNodesDirtiness();
+            double proposed = linear.calculateLogP();
+            Assert.assertTrue(Double.isFinite(proposed));
+            Assert.assertNotEquals(initial, proposed, 1e-8);
+            state.restore(); state.restoreCalculationNodes(); state.setEverythingDirty(false);
+            Assert.assertEquals(initial, linear.calculateLogP(), 1e-12);
+        }
+    }
+
     // Closed-form Riccati flow and its derivative provide an independent constant-rate oracle.
     // The derivative propagates D; this avoids duplicating the production reaction implementation.
     private double[] scalarFlow(double age, double lambda, double psi) {
