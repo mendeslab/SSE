@@ -48,13 +48,11 @@ the actual XML, verifies living/fossil/ancestor ages, changes ψ, ρ, diffusion 
 through BEAST State, compares with fresh distributions, rejects/restores each proposal, and checks
 an out-of-bounds ψ proposal. Invalid tree structures and missing sample observations are rejected.
 The example's actual 20-step MCMC runs on Java and native with seed 42 have 21 matching trace rows;
-the maximum difference across their numeric entries is **8.17e−14**. Logs/state files remain under
-`build/fossil-validation/example-java` and `example-native`.
+the maximum difference across their numeric entries is **8.17e−14**.
 
 Reaction references were generated with
-`python3 build/fossil-validation/reaction-references.py` (mpmath 1.4.1, 70 decimal digits).
-Its compact input/output table is retained in `src/test/PropagatesQuaSSETest.java`; the temporary
-generator and output remain under build. Scalar tree references use the separate generator below.
+`python3 ../Reports/SSE/numerics/fossil-sampling/reproduce/reaction-references.py` (mpmath 1.4.1, 70 decimal digits).
+Its compact input/output table is retained in `src/test/PropagatesQuaSSETest.java`; the generator and output are in the LSU fossil-sampling reproduction directory. Scalar tree references use the separate generator below.
 
 
 ## Independent scalar references
@@ -115,20 +113,21 @@ conditioning integral, actual bin centers and boundaries, Fourier width, and ela
 Times are single evaluations, not a warmed performance comparison. The numerator and denominator
 include the existing Flat density 1/((nX−1)*dX); its grid-dependent scalar cancels in their ratio.
 
-The local driver is `build/fossil-validation/FossilStudy.java`; its previous version and measurements
-are preserved under `build/fossil-validation/fixed-center-endpoints/`. The corrected output is
-`build/fossil-validation/continuous-study-bin-boundaries.csv`. Compile/run with:
+The LSU reproduction directory contains the corrected driver. The canonical measurements are
+in [fossil-sampling-bin-boundaries.csv](fossil-sampling-bin-boundaries.csv). From the SSE root:
 
 ```sh
 export BEAST2_HOME=/home/bredelings/Applications/beast2/beast
 ant compile-test native
-study_cp="build/fossil-validation:build:build-test:lib/*"
+repro=../Reports/SSE/numerics/fossil-sampling/reproduce
+work=$(mktemp -d)
+study_cp="$work:build:build-test:lib/*"
 study_cp="$study_cp:$BEAST2_HOME/lib/packages/BEAST.base.jar:$BEAST2_HOME/lib/launcher.jar"
 study_cp="$study_cp:build/test-libs/junit-platform-console-standalone-1.8.2.jar"
-javac -cp "$study_cp" -d build/fossil-validation build/fossil-validation/FossilStudy.java
+javac -cp "$study_cp" -d "$work" "$repro/FossilStudy.java"
 java --enable-native-access=ALL-UNNAMED -Xcheck:jni -Djava.library.path=build/native \
-    -cp "$study_cp" test.FossilStudy > build/fossil-validation/continuous-study-bin-boundaries.csv
-python3 build/fossil-validation/check-bin-boundaries.py
+    -cp "$study_cp" test.FossilStudy > "$work/boundaries.csv"
+python3 "$repro/check-bin-boundaries.py" "$work/boundaries.csv"
 ```
 
 The study driver and checks are local investigation scripts, not permanent test infrastructure.
@@ -180,10 +179,8 @@ endpoints ±7.751041938, log numerator −13.9007313384464, conditioning integra
 0.122830643685753, and log likelihood −11.803782585461912. This changes the Flat domain
 and is not an integration-convergence failure.
 
-Local reproduction artifacts are under `build/fossil-validation/`: `tree-references.py`,
-`continuous-study.csv`, `run-tests.sh`, and the test reports/logs. The initial `FossilStudy.java`
-is archived in `fixed-center-endpoints/`; the current driver uses bin boundaries instead.
-These investigation scripts are intentionally not tracked as permanent test infrastructure.
+The LSU fossil-sampling reproduction directory contains `tree-references.py` and its expected
+output. The companion historical-inputs archive includes the earlier fixed-center driver.
 
 ## Rounded extant tip ages: resolved at parsing
 
@@ -216,9 +213,9 @@ implementation.
 ## Warmed native timing comparison
 
 Measured sequentially on an AMD Ryzen 9 7900X, GCC 16.2.0, `-O3`, default architecture flags,
-with FFTW/native integration. The local `build/fossil-validation/timing/TimingStudy.java` driver
+with FFTW/native integration. The local `../Reports/SSE/numerics/fossil-sampling/reproduce/timing/TimingStudy.java` driver
 repeats BEAST posterior evaluation with fixed parameter values, excludes startup, and reports
-the likelihood separately from priors. `timing/run.sh` runs each variant in a separate JVM.
+the likelihood separately from priors. Each variant ran in a separate JVM.
 [Per-evaluation measurements](fossil-sampling-timing.csv) retain all measured samples.
 
 The primate case uses the existing 233-species Observed reference at 4096 bins, dtMax=H/8000,
