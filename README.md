@@ -7,8 +7,10 @@ We are finalizing the implementation of a stochastic character mapper as in Frey
 
 ## Mathematical documentation
 
-See [the mathematical documentation](docs/README.md) for the QuaSSE guide, derivations,
-and ongoing numerical explorations, including build instructions and contribution conventions.
+From the repository root, run `make -C docs` to build the QuaSSE manuals. The PDFs are
+`build/docs/guide.pdf`, `build/docs/theory.pdf`, and `build/docs/explorations.pdf`.
+See the [documentation overview](docs/README.md) for prerequisites, individual build targets,
+and contribution conventions.
 
 ## Command-line build with BEAST 2.7
 
