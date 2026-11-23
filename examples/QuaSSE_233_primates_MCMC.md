@@ -114,5 +114,5 @@ prior contributions, prior sums and posterior sums within 1e-12. Corrected diver
 matched the two final log likelihoods within 2e-12. These are execution checks, not evidence of
 mixing or convergence; operator suggestions from such short runs were not used to retune the XML.
 
-Temporary checks and run outputs are under `build/PrimateReference.R`, `build/PrimateCheck.java`,
-`build/PrimateTraceCheck.R`, `build/primate-*.log`, and `build/primate-runs/`.
+The LSU reference scripts, fitted estimates, and seed-127/128 traces are in
+`../Reports/SSE/datasets/primate-mcmc/reference-checks.tar.gz`.
