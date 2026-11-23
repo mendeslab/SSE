@@ -77,9 +77,9 @@ def prepare(previous, libraries):
 
 
 # Each subprocess releases native memory. Completed rows are appended immediately for resuming.
-def measure(budget, native_library):
+def measure(budget, native_library, original_library):
     os.chdir(ROOT)
-    libraries = {"Strang": native_library, "Original": ROOT / "build/strang/baseline/libsse_quasse.so"}
+    libraries = {"Strang": native_library, "Original": original_library}
     deadline = time.monotonic() + budget
     metadata, rows = read_table()
     done = {key(row) for row in rows}
@@ -312,6 +312,8 @@ if __name__ == "__main__":
     parser.add_argument("--seconds", type=float, default=900, help="Total computation budget; default 900 seconds")
     parser.add_argument("--native-library", type=Path, default=ROOT / "build/native/libsse_quasse.so",
                         help="Current-method library; default build/native/libsse_quasse.so (ignored for --plot-only)")
+    parser.add_argument("--original-library", type=Path, default=ROOT / "build/strang/baseline/libsse_quasse.so",
+                        help="Archived original-method library (verified by SHA-256 before measurement)")
     args = parser.parse_args()
     if args.interactive:
         try:
@@ -322,5 +324,7 @@ if __name__ == "__main__":
         # Java loads this fixed basename from its directory; hash the same file, retaining symlinks.
         if args.native_library.name != "libsse_quasse.so":
             parser.error("--native-library must point to a file named libsse_quasse.so")
-        measure(args.seconds, args.native_library.expanduser().absolute())
+        if args.original_library.name != "libsse_quasse.so":
+            parser.error("--original-library must point to a file named libsse_quasse.so")
+        measure(args.seconds, args.native_library.expanduser().absolute(), args.original_library.expanduser().absolute())
     plot(args.interactive)

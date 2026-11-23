@@ -235,7 +235,9 @@ python3 validation/likelihood_reference2/run.py
 Static plotting requires Python and Matplotlib only; interactive HTML additionally requires Plotly.
 Measurement additionally requires Java, BEAST2, the current native library (default
 `build/native/libsse_quasse.so`), and the verified archived library at
-`build/strang/baseline/libsse_quasse.so`. The latter is a local archive, not rebuilt by this runner.
+`build/strang/baseline/libsse_quasse.so`. For the curated LSU copy, pass
+`--original-library ../Reports/SSE/numerics/likelihood-reference/original/libsse_quasse.so`.
+The runner verifies the archived binary's SHA-256 before measurement.
 Use `--native-library /path/to/libsse_quasse.so` to select another current-method build; relative
 paths are resolved from the directory where you invoke the runner. This option is ignored for
 `--plot-only`, which needs neither library. The saved measurements used the release library at
