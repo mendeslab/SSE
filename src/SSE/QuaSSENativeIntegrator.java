@@ -56,8 +56,8 @@ public final class QuaSSENativeIntegrator implements AutoCloseable {
     /**
      * Repeat T(dt/2), X(dt), T(dt/2); row zero is E and remaining rows are D.
      * E is the probability of no sampled descendants; D is a descendant-subtree likelihood.
-     * Allows E alone or E plus D rows; storage follows propagateX's contract. Rates and the
-     * kernel are copied once per call and reused, while the E-dependent D factors change each step.
+     * Each step acts on the real (even) entries. Completed segments return zero in the odd slots.
+     * Rates and the kernel are copied once per call, while the E-dependent D factors change each step.
      * Inputs other than E/D are unchanged. Zero steps or zero dt are the identity.
      *
      * @param esDs distinct rows of 2*N alternating real/imaginary entries, updated in place

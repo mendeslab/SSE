@@ -10,18 +10,71 @@ using namespace quasse_native;
 
 namespace {
 
+// Independent real rows share a kernel. FFTW stores only the nonredundant spectrum of each row.
+class BatchedRealFFT {
+    const int size, dimensions, frequencies;
+    std::unique_ptr<double, decltype(&fftw_free)> next;
+    std::unique_ptr<fftw_complex, decltype(&fftw_free)> spectrum;
+    std::unique_ptr<fftw_plan_s, decltype(&fftw_destroy_plan)> forward{nullptr, fftw_destroy_plan};
+    std::unique_ptr<fftw_plan_s, decltype(&fftw_destroy_plan)> inverse{nullptr, fftw_destroy_plan};
+
+public:
+    std::unique_ptr<double, decltype(&fftw_free)> current;
+
+    // Plans can overwrite the buffers during preparation. The caller loads E and D afterwards.
+    BatchedRealFFT(int n, int dims) : size(n), dimensions(dims), frequencies(n / 2 + 1),
+        next(fftw_alloc_real(std::size_t(n) * dims), fftw_free),
+        spectrum(fftw_alloc_complex(std::size_t(frequencies) * dims), fftw_free),
+        current(fftw_alloc_real(std::size_t(n) * dims), fftw_free) {
+        if (!next || !spectrum || !current) throw std::bad_alloc();
+        forward.reset(fftw_plan_many_dft_r2c(1, &size, dims, current.get(), nullptr, 1, size,
+                                             spectrum.get(), nullptr, 1, frequencies, FFTW_MEASURE));
+        inverse.reset(fftw_plan_many_dft_c2r(1, &size, dims, spectrum.get(), nullptr, 1, frequencies,
+                                             next.get(), nullptr, 1, size, FFTW_MEASURE));
+        if (!forward || !inverse) throw std::runtime_error("FFTW could not prepare real QuaSSE transforms.");
+    }
+
+    // A real drift kernel can have a complex spectrum. Apply it to each row separately so
+    // rounding in the order-one E row cannot swamp a small D row.
+    void propagate(const std::vector<double>& kernel, int left, int right) {
+        fftw_execute_dft_r2c(forward.get(), current.get(), spectrum.get());
+        for (int d = 0; d < dimensions; ++d) {
+            auto* row = spectrum.get() + std::size_t(d) * frequencies;
+            for (int k = 0; k < frequencies; ++k) {
+                const double a = row[k][0], b = row[k][1];
+                row[k][0] = a * kernel[2 * k] - b * kernel[2 * k + 1];
+                row[k][1] = a * kernel[2 * k + 1] + b * kernel[2 * k];
+            }
+        }
+        fftw_execute_dft_c2r(inverse.get(), spectrum.get(), next.get());
+        const int useful = size - left - right - 1;
+        const double scale = 1.0 / size;
+        for (int d = 0; d < dimensions; ++d) {
+            const auto* input = current.get() + std::size_t(d) * size;
+            auto* output = next.get() + std::size_t(d) * size;
+            // Convolution reads input[i-offset], so the right kernel extent protects the left edge.
+            std::copy_n(input, right, output);
+            for (int i = right; i < useful - left; ++i) output[i] = std::max(output[i] * scale, 0.0);
+            std::copy_n(input + useful - left, left, output + useful - left);
+            std::fill(output + useful, output + size, 0.0);
+        }
+        current.swap(next);
+    }
+};
+
 // Reusable storage, not a cache: every call replaces all original arrays and the kernel.
 class Integration {
 public:
     ComplexFFT fft;
+    std::unique_ptr<BatchedRealFFT> real;
     const int dimensions;
-    std::vector<double> original, result, kernel;
+    std::vector<double> original, kernel;
     std::vector<double> birth, death, dFactors, lowerRoot, rootOffsetRate;
     std::vector<double> decayFullStep, decayIntegralFullStep, decayHalfStep, decayIntegralHalfStep;
 
     // Caller holds preparation_mutex, including destruction if an allocation fails.
     Integration(int size, int dims) : fft(size), dimensions(dims),
-        original(std::size_t(2) * size * dims), result(original.size()), kernel(2 * size),
+        original(std::size_t(2) * size * dims), kernel(2 * size),
         birth(size), death(size), dFactors(size), lowerRoot(size), rootOffsetRate(size),
         decayFullStep(size), decayIntegralFullStep(size), decayHalfStep(size), decayIntegralHalfStep(size) {}
 
@@ -44,12 +97,12 @@ public:
     // J satisfies J′ = [2λE − (λ + μ + ψ)]J, J(0) = 1, so Dnew = Dold * J is exact too.
     // Both updates use old E. Real useful bins are updated first; saved dFactors then update D.
     // E-only execution needs no D factor. Negative D is cleared without multiplying;
-    // NaN follows the multiplication branch, as before. Padding/imaginary entries are unchanged.
+    // NaN follows the multiplication branch, as before. Padding is unchanged.
     void propagateT(int useful, const std::vector<double>& decayFactor,
                     const std::vector<double>& decayIntegral,
                     double psi, double duration) {
         for (int i = 0; i < useful; ++i) {
-            const double e = original[2 * i];
+            const double e = real->current.get()[i];
             const double denominatorTerm = (rootOffsetRate[i] + birth[i] * (1 - e)) * decayIntegral[i];
             const double denominator = decayFactor[i] + denominatorTerm;
             const double nextE = (decayFactor[i] * e + lowerRoot[i] * denominatorTerm) / denominator;
@@ -61,23 +114,28 @@ public:
                         << ", mu=" << death[i] << ", psi=" << psi << ", dt=" << duration << ", old E=" << e;
                 throw std::runtime_error(message.str());
             }
-            original[2 * i] = nextE;
+            real->current.get()[i] = nextE;
             if (dimensions > 1) dFactors[i] = dFactor;
         }
         for (int d = 1; d < dimensions; ++d) {
-            auto* values = original.data() + std::size_t(d) * 2 * fft.size;
+            auto* values = real->current.get() + std::size_t(d) * fft.size;
             for (int i = 0; i < useful; ++i) {
-                if (values[2 * i] < 0) values[2 * i] = 0;
-                else values[2 * i] *= dFactors[i];
+                if (values[i] < 0) values[i] = 0;
+                else values[i] *= dFactors[i];
             }
         }
     }
 
     // Adjacent Strang half-Ts compose to T(dt) for fixed rates: T/2, X, T, ..., X, T/2.
     // X still restores its input boundaries. Combine only within this fixed-resolution segment;
-    // zero steps remain the identity and final values reside in original after each swap and T.
+    // Java stores real model values in the even slots of its interleaved rows.
     void integrate(double psi, double dt, int steps, int left, int right) {
-        if (steps == 0 || dt == 0) return;
+        if (!real) {
+            std::lock_guard lock(preparation_mutex);
+            real = std::make_unique<BatchedRealFFT>(fft.size, dimensions);
+        }
+        const std::size_t bins = std::size_t(dimensions) * fft.size;
+        for (std::size_t i = 0; i < bins; ++i) real->current.get()[i] = original[2 * i];
         const int useful = fft.size - left - right - 1;
         // Prepare coefficients once per segment: rates and dt stay fixed in the loop below,
         // but each reaction step still calculates its E-dependent denominator and D multiplier.
@@ -101,11 +159,14 @@ public:
         }
         propagateT(useful, decayHalfStep, decayIntegralHalfStep, psi, dt / 2);
         for (int step = 0; step < steps; ++step) {
-            propagate(left, right);
-            original.swap(result);
+            real->propagate(kernel, left, right);
             const bool last = step == steps - 1;
             propagateT(useful, last ? decayHalfStep : decayFullStep,
                        last ? decayIntegralHalfStep : decayIntegralFullStep, psi, last ? dt / 2 : dt);
+        }
+        for (std::size_t i = 0; i < bins; ++i) {
+            original[2 * i] = real->current.get()[i];
+            original[2 * i + 1] = 0;
         }
     }
 
@@ -118,7 +179,7 @@ public:
         auto* input = reinterpret_cast<double*>(fft.input.get());
         auto* output = reinterpret_cast<double*>(fft.output.get());
         for (int d = 0; d < dimensions; ++d) {
-            const auto* source = original.data() + std::size_t(d) * length;
+            auto* source = original.data() + std::size_t(d) * length;
             std::copy_n(source, length, input);
             fft.transform(false);
             for (int i = 0; i < length; i += 2) {
@@ -135,7 +196,7 @@ public:
                 output[2 * i] = std::max(output[2 * i], 0.0);
             for (int i = useful - left; i < useful; ++i) output[2 * i] = source[2 * i];
             for (int i = useful; i < fft.size; ++i) output[2 * i] = 0;
-            std::copy_n(output, length, result.data() + std::size_t(d) * length);
+            std::copy_n(output, length, source);
         }
     }
 
@@ -174,12 +235,12 @@ public:
     }
 
     // Write only completed results into the caller's existing rows.
-    void writeOutput(JNIEnv* env, jobjectArray rows, const std::vector<double>& values) {
+    void writeOutput(JNIEnv* env, jobjectArray rows) {
         const int length = 2 * fft.size;
         for (int d = 0; d < dimensions; ++d) {
             auto row = static_cast<jdoubleArray>(env->GetObjectArrayElement(rows, d));
             if (env->ExceptionCheck()) return;
-            env->SetDoubleArrayRegion(row, 0, length, values.data() + std::size_t(d) * length);
+            env->SetDoubleArrayRegion(row, 0, length, original.data() + std::size_t(d) * length);
             env->DeleteLocalRef(row);
             if (env->ExceptionCheck()) return;
         }
@@ -215,7 +276,7 @@ JNIEXPORT void JNICALL Java_SSE_QuaSSENativeIntegrator_propagateXNative(JNIEnv* 
         }
         if (!integration->readInputs(env, rows, kernel, left, right)) return;
         integration->propagate(left, right);
-        integration->writeOutput(env, rows, integration->result);
+        integration->writeOutput(env, rows);
     } catch (...) {
         translate_exception(env);
     }
@@ -244,7 +305,7 @@ JNIEXPORT void JNICALL Java_SSE_QuaSSENativeIntegrator_integrateSegmentNative(JN
         env->GetDoubleArrayRegion(death, 0, useful, integration->death.data());
         if (env->ExceptionCheck()) return;
         integration->integrate(psi, dt, steps, left, right);
-        integration->writeOutput(env, rows, integration->original);
+        integration->writeOutput(env, rows);
     } catch (...) {
         translate_exception(env);
     }

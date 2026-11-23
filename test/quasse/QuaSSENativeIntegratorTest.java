@@ -31,7 +31,7 @@ public class QuaSSENativeIntegratorTest {
                         death[i] = .01 + .05 * random.nextDouble();
                     }
                     for (int d = 0; d < dims; ++d) {
-                        for (int i = 0; i < 2 * size; ++i)
+                        for (int i = 0; i < 2 * size; i += 2)
                             initial[d][i] = random.nextDouble() - (d == 0 ? 0 : .2);
                     }
                     double[] savedBirth = birth.clone(), savedDeath = death.clone(), savedKernel = spectrum.clone();
@@ -63,6 +63,41 @@ public class QuaSSENativeIntegratorTest {
                     assertArrayEquals(savedDeath, death, 0);
                     assertArrayEquals(savedKernel, spectrum, 0);
                 }
+            }
+        }
+    }
+
+    // Likelihood normalization can hide leakage from E into tiny D. With zero reaction rates,
+    // direct convolution supplies a scale-sensitive reference for the real segment calculation.
+    @Test
+    public void preservesDAtItsOwnScale() {
+        int size = 64, left = 2, right = 1, useful = size - left - right - 1, steps = 10;
+        double[] kernel = new double[2 * size], spectrum = new double[2 * size], rates = new double[useful];
+        double[] weights = {0.05, 0.15, 0.45, 0.35};
+        for (int offset = -left; offset <= right; ++offset)
+            kernel[2 * Math.floorMod(offset, size)] = weights[offset + left];
+
+        try (FftwFFT fft = new FftwFFT(size); QuaSSENativeIntegrator owner = new QuaSSENativeIntegrator(size, 2)) {
+            fft.forward(kernel, spectrum);
+            for (double scale : new double[]{1, 1e-24, 0}) {
+                double[][] rows = new double[2][2 * size];
+                double[] expected = new double[size];
+                for (int i = 0; i < useful; ++i) {
+                    rows[0][2 * i] = .5 + .2 * Math.sin(i);
+                    rows[1][2 * i] = expected[i] = scale / (1 + Math.abs(i - size / 2));
+                }
+                for (int step = 0; step < steps; ++step) {
+                    double[] next = expected.clone();
+                    for (int i = right; i < useful - left; ++i) {
+                        next[i] = 0;
+                        for (int offset = -left; offset <= right; ++offset)
+                            next[i] += weights[offset + left] * expected[i - offset];
+                    }
+                    expected = next;
+                }
+                owner.integrateSegment(rows, rates, rates, spectrum, 0, .01, steps, left, right);
+                double peak = java.util.Arrays.stream(expected).max().getAsDouble();
+                for (int i = 0; i < size; ++i) assertEquals(expected[i], rows[1][2 * i], 1e-12 * peak);
             }
         }
     }

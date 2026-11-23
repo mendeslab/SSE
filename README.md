@@ -135,8 +135,9 @@ step, then half a reaction step. This does not remove spatial or boundary error 
 automatically select a timestep.
 
 To run repeated steps in C++, set `integrationBackend="native"` alongside
-`fftBackend="fftw"` on the QuaSSE distribution. The default is `integrationBackend="java"`;
-Java still selects time steps and handles grids, tree operations, and normalization.
+`fftBackend="fftw"` on the QuaSSE distribution. The default is `integrationBackend="java"`.
+The native integrator uses batched real FFTs for E and D throughout each fixed-resolution segment.
+Java selects time steps and handles grids, tree operations, and normalization.
 Rebuild with `ant native` after updating the JNI interface.
 
 Native builds default to release mode. Each mode selects its own directory and default flags:
