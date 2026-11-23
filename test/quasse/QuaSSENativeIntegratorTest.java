@@ -132,6 +132,34 @@ public class QuaSSENativeIntegratorTest {
         }
     }
 
+    // A late numerical failure can leave partially updated native rows. Check isolation and reuse
+    // at the segment boundary, where full-tree likelihood tests cannot observe the failed input.
+    @Test
+    public void recoversAfterInvalidReaction() {
+        int size = 16, left = 1, right = 1, useful = size - left - right - 1;
+        double[] rates = new double[useful], spectrum = new double[2 * size];
+        double[][] rows = new double[2][2 * size];
+        for (int i = 0; i < size; ++i) {
+            spectrum[2 * i] = 1; // Identity convolution.
+            rows[0][2 * i] = .5;
+            rows[1][2 * i] = 1;
+        }
+        int last = 2 * (useful - 1);
+        rows[0][last] = Double.NaN;
+        double[][] saved = {rows[0].clone(), rows[1].clone()};
+        try (QuaSSENativeIntegrator owner = new QuaSSENativeIntegrator(size, 2);
+             QuaSSENativeIntegrator fresh = new QuaSSENativeIntegrator(size, 2)) {
+            assertThrows(IllegalStateException.class,
+                    () -> owner.integrateSegment(rows, rates, rates, spectrum, .1, .02, 1, left, right));
+            for (int d = 0; d < rows.length; ++d) assertArrayEquals(saved[d], rows[d], 0);
+
+            rows[0][last] = saved[0][last] = .5;
+            owner.integrateSegment(rows, rates, rates, spectrum, .1, .02, 1, left, right);
+            fresh.integrateSegment(saved, rates, rates, spectrum, .1, .02, 1, left, right);
+            for (int d = 0; d < rows.length; ++d) assertArrayEquals(saved[d], rows[d], 1e-12);
+        }
+    }
+
     // JNI must reject malformed storage before writing results and serialize close with use.
     // Model tests cannot exercise this public boundary; obsolete if native ownership is removed.
     @Test

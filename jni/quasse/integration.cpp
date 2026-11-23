@@ -96,33 +96,33 @@ public:
     // Aq is denominatorTerm and B is denominator. Differentiating Enew in e gives J = w/B².
     // J satisfies J′ = [2λE − (λ + μ + ψ)]J, J(0) = 1, so Dnew = Dold * J is exact too.
     // Both updates use old E. Real useful bins are updated first; saved dFactors then update D.
-    // E-only execution needs no D factor. Negative D is cleared without multiplying;
-    // NaN follows the multiplication branch, as before. Padding is unchanged.
+    // E-only execution needs no D factor. Padding is unchanged.
     void propagateT(int useful, const std::vector<double>& decayFactor,
                     const std::vector<double>& decayIntegral,
                     double psi, double duration) {
+        // Reduce the validity checks across bins so the reaction can run in SIMD lanes.
+        bool anyInvalid = false;
         for (int i = 0; i < useful; ++i) {
             const double e = real->current.get()[i];
             const double denominatorTerm = (rootOffsetRate[i] + birth[i] * (1 - e)) * decayIntegral[i];
             const double denominator = decayFactor[i] + denominatorTerm;
             const double nextE = (decayFactor[i] * e + lowerRoot[i] * denominatorTerm) / denominator;
             const double dFactor = dimensions > 1 ? (decayFactor[i] / denominator) / denominator : 1;
-            if (!(denominator > 0) || !std::isfinite(denominator) || !std::isfinite(nextE)
-                    || !(dFactor > 0) || !std::isfinite(dFactor)) {
-                std::ostringstream message;
-                message << "Invalid QuaSSE reaction at bin " << i << ": lambda=" << birth[i]
-                        << ", mu=" << death[i] << ", psi=" << psi << ", dt=" << duration << ", old E=" << e;
-                throw std::runtime_error(message.str());
-            }
+            anyInvalid |= !(denominator > 0) | !std::isfinite(denominator) | !std::isfinite(nextE)
+                        | !(dFactor > 0) | !std::isfinite(dFactor);
             real->current.get()[i] = nextE;
             if (dimensions > 1) dFactors[i] = dFactor;
         }
+        if (anyInvalid) {
+            std::ostringstream message;
+            message << "Invalid QuaSSE reaction: psi=" << psi << ", dt=" << duration;
+            throw std::runtime_error(message.str());
+        }
         for (int d = 1; d < dimensions; ++d) {
             auto* values = real->current.get() + std::size_t(d) * fft.size;
-            for (int i = 0; i < useful; ++i) {
-                if (values[i] < 0) values[i] = 0;
-                else values[i] *= dFactors[i];
-            }
+            // Valid factors are finite and positive. Clipping D first preserves NaN and signed zero.
+            for (int i = 0; i < useful; ++i)
+                values[i] = std::max(values[i], 0.0) * dFactors[i];
         }
     }
 
