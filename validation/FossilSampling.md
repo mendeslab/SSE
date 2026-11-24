@@ -126,7 +126,7 @@ study_cp="$study_cp:$BEAST2_HOME/lib/packages/BEAST.base.jar:$BEAST2_HOME/lib/la
 study_cp="$study_cp:build/test-libs/junit-platform-console-standalone-1.8.2.jar"
 javac -cp "$study_cp" -d "$work" "$repro/FossilStudy.java"
 java --enable-native-access=ALL-UNNAMED -Xcheck:jni -Djava.library.path=build/native \
-    -cp "$study_cp" test.FossilStudy > "$work/boundaries.csv"
+    -cp "$study_cp" SSE.FossilStudy > "$work/boundaries.csv"
 python3 "$repro/check-bin-boundaries.py" "$work/boundaries.csv"
 ```
 

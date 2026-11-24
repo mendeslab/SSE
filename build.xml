@@ -102,6 +102,10 @@
   </target>
 
   <target name="compile-test" depends="init-test,compile">
+    <!-- Remove classes left by builds before the QuaSSE test moved to package SSE. -->
+    <delete>
+      <fileset dir="${build-test}" includes="test/QuaSSEDistributionTest.class,test/QuaSSEDistributionTest$*.class"/>
+    </delete>
     <javac release="${javaVersion}" srcdir="${src}" destdir="${build-test}" includeantruntime="false"
            includes="test/**/*.java,drivers/**/*.java,validation/**/*.java">
       <classpath refid="test.classpath"/>
@@ -119,6 +123,7 @@
       <arg value="--details=summary"/>
       <arg value="--reports-dir=${test-reports}"/>
       <arg value="--select-package=test"/>
+      <arg value="--select-class=SSE.QuaSSEDistributionTest"/>
     </java>
   </target>
 
@@ -169,7 +174,7 @@
       <arg value="--reports-dir=${test-reports}/native"/>
       <arg value="--select-class=test.ComplexFFTTest"/>
       <arg value="--select-class=quasse.QuaSSENativeIntegratorTest"/>
-      <arg value="--select-class=test.QuaSSEDistributionTest"/>
+      <arg value="--select-class=SSE.QuaSSEDistributionTest"/>
     </java>
     <!-- Repeat model references and rejection/reinitialization checks with native segments. -->
     <java classname="org.junit.platform.console.ConsoleLauncher" fork="true" failonerror="true"
@@ -182,7 +187,7 @@
       <arg value="--disable-banner"/>
       <arg value="--details=summary"/>
       <arg value="--reports-dir=${test-reports}/native-integration"/>
-      <arg value="--select-class=test.QuaSSEDistributionTest"/>
+      <arg value="--select-class=SSE.QuaSSEDistributionTest"/>
     </java>
   </target>
 

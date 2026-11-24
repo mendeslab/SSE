@@ -1,7 +1,5 @@
-package test;
+package SSE;
 
-import SSE.*;
-import beast.base.core.BEASTInterface;
 import beast.base.core.Function;
 import beast.base.inference.util.RPNcalculator;
 import beast.base.inference.State;
