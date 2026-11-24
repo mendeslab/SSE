@@ -286,49 +286,53 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     @Override
     public void populateTipsEsDs(int nDimensionsFFT, int nXbinsHi, boolean ignoreRefresh, boolean jtransforms) {
-        for (Node tip: tree.getExternalNodes()) {
-            String tipName = tip.getID();
-            int nodeIdx = tip.getNr();
+        for (Node tip : tree.getExternalNodes())
+            populateTip(tip, nDimensionsFFT, ignoreRefresh, jtransforms);
+    }
 
-            for (int i=0; i < nDimensionsFFT; i++) {
-                // E's
-                if (i == 0) {
-                    // Living boundary E(x,0) = 1 − ρ; fossil boundaries are set during evaluation.
-                    Arrays.fill(esDsHi[nodeIdx][i], 0);
-                    Arrays.fill(esDsLo[nodeIdx][i], 0);
-                    if (tip.getHeight() == 0) {
-                        int stride = jtransforms ? 1 : 2;
-                        for (int j = 0; j < nUsefulXbinsHi; j++)
-                            esDsHi[nodeIdx][i][stride * j] = 1 - presentSamplingProbability;
-                        for (int j = 0; j < nUsefulXbinsLo; j++)
-                            esDsLo[nodeIdx][i][stride * j] = 1 - presentSamplingProbability;
-                    }
-                }
+    // Initialize the observation on both grids before integrating this tip's branch.
+    private void populateTip(Node tip, int nDimensionsFFT, boolean ignoreRefresh, boolean jtransforms) {
+        String tipName = tip.getID();
+        int nodeIdx = tip.getNr();
 
-                // D's (initialize both just in case tip is non-contemporaneous and t > tc)
-                else {
-                    // high res
-                    esDsHi[nodeIdx][i] = q2d.getY(xHi, esDsHi[nodeIdx][i], nLeftNRightFlanksHi, tipName, ignoreRefresh);
-
-                    // low res (just for debugging)
-                    esDsLo[nodeIdx][i] = q2d.getY(xLo, esDsLo[nodeIdx][i], nLeftNRightFlanksLo, tipName, ignoreRefresh);
-
-                    if (!jtransforms) {
-                        SSEUtils.everyOtherExpandInPlace(esDsHi[nodeIdx][i]);
-                        SSEUtils.everyOtherExpandInPlace(esDsLo[nodeIdx][i]);
-                    }
+        for (int i=0; i < nDimensionsFFT; i++) {
+            // E's
+            if (i == 0) {
+                // Living boundary E(x,0) = 1 − ρ; fossil boundaries are set during evaluation.
+                Arrays.fill(esDsHi[nodeIdx][i], 0);
+                Arrays.fill(esDsLo[nodeIdx][i], 0);
+                if (tip.getHeight() == 0) {
+                    int stride = jtransforms ? 1 : 2;
+                    for (int j = 0; j < nUsefulXbinsHi; j++)
+                        esDsHi[nodeIdx][i][stride * j] = 1 - presentSamplingProbability;
+                    for (int j = 0; j < nUsefulXbinsLo; j++)
+                        esDsLo[nodeIdx][i][stride * j] = 1 - presentSamplingProbability;
                 }
             }
 
-            // Only the grid at the observation's age is used; an unused coarse density may underflow.
-            boolean lowRes = tip.getHeight() >= tc;
-            double dsSum = 0;
-            for (double d : (lowRes ? esDsLo : esDsHi)[nodeIdx][1]) dsSum += d;
-            if (!(dsSum > 0) || !Double.isFinite(dsSum))
-                throw new ArithmeticException("Invalid observation density for " + tipName
-                        + " on the " + (lowRes ? "coarse" : "fine")
-                        + " grid; check observation SD and trait spacing.");
+            // D's (initialize both just in case tip is non-contemporaneous and t > tc)
+            else {
+                // high res
+                esDsHi[nodeIdx][i] = q2d.getY(xHi, esDsHi[nodeIdx][i], nLeftNRightFlanksHi, tipName, ignoreRefresh);
+
+                // low res (just for debugging)
+                esDsLo[nodeIdx][i] = q2d.getY(xLo, esDsLo[nodeIdx][i], nLeftNRightFlanksLo, tipName, ignoreRefresh);
+
+                if (!jtransforms) {
+                    SSEUtils.everyOtherExpandInPlace(esDsHi[nodeIdx][i]);
+                    SSEUtils.everyOtherExpandInPlace(esDsLo[nodeIdx][i]);
+                }
+            }
         }
+
+        // Only the grid at the observation's age is used; an unused coarse density may underflow.
+        boolean lowRes = tip.getHeight() >= tc;
+        double dsSum = 0;
+        for (double d : (lowRes ? esDsLo : esDsHi)[nodeIdx][1]) dsSum += d;
+        if (!(dsSum > 0) || !Double.isFinite(dsSum))
+            throw new ArithmeticException("Invalid observation density for " + tipName
+                    + " on the " + (lowRes ? "coarse" : "fine")
+                    + " grid; check observation SD and trait spacing.");
     }
 
     // Initialize actual sample events after support checks, keeping scalar factors in log space.
@@ -377,11 +381,14 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     @Override
     public void startRecursionAtRootNode(Node rootNode, boolean forceRecalcKernel, boolean jtransforms) {
+        processInternalNode(rootNode, forceRecalcKernel, jtransforms);
+        finishRoot(rootNode, forceRecalcKernel, jtransforms);
+    }
+
+    // Continue from the freshly merged root through the optional stem, then prepare root weights.
+    private void finishRoot(Node rootNode, boolean forceRecalcKernel, boolean jtransforms) {
         int rootIdx = rootNode.getNr();
         double rootHeight = conditionOnRoot ? rootNode.getHeight() : startingAge;
-
-        // start recursion
-        processInternalNode(rootNode, forceRecalcKernel, jtransforms);
         // A zero-length stem is exactly the identity; it adds no event or normalization.
         if (!conditionOnRoot && startingAge > rootNode.getHeight())
             processInterval(rootIdx, rootNode.getHeight(), startingAge, forceRecalcKernel, jtransforms);
