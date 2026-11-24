@@ -71,7 +71,11 @@ public class QuaSSEDistributionTest {
     // Run the same reference and MCMC-lifecycle checks on either FFT, without duplicating their data.
     // The native target selects FFT/integration implementations; reference tolerances stay unchanged.
     private QuaSSEDistribution newDistribution() {
-        QuaSSEDistribution distribution = new QuaSSEDistribution();
+        return configure(new QuaSSEDistribution());
+    }
+
+    // Counted branch traversals use the same backend and cleanup as the reference calculations.
+    private <T extends QuaSSEDistribution> T configure(T distribution) {
         distribution.fftBackendInput.setValue(System.getProperty("test.quasse.fft", "sst"), distribution);
         distribution.integrationBackendInput.setValue(System.getProperty("test.quasse.integration", "java"), distribution);
         opened.add(distribution);
@@ -2340,6 +2344,12 @@ public class QuaSSEDistributionTest {
     // Package access allows the temporary refinement study to reuse these model definitions.
     QuaSSEDistribution fossilDistribution(String newick, double tc, boolean gaussian, int nX,
             double dx, double dt, double support, int ratio, Object... options) {
+        return fossilDistribution(newDistribution(), newick, tc, gaussian, nX, dx, dt, support, ratio, options);
+    }
+
+    // Accept an instrumented likelihood so tests can observe branch integrations on either backend.
+    private QuaSSEDistribution fossilDistribution(QuaSSEDistribution distribution, String newick,
+            double tc, boolean gaussian, int nX, double dx, double dt, double support, int ratio, Object... options) {
         TreeParser tree = new TreeParser();
         tree.initByName("newick", newick, "IsLabelledNewick", true, "adjustTipHeights", false, "threshold", 1e-5);
         RealParameter traits = new RealParameter();
@@ -2372,7 +2382,6 @@ public class QuaSSEDistributionTest {
                 "diffusion", diffusionOption < 0 ? new RealParameter("0.05") : options[diffusionOption + 1],
                 "nX", nX, "dX", dx, "xMid", 0.0,
                 "dtMax", dt, "tc", tc, "hiLoRatio", ratio, "flankWidthScaler", support);
-        QuaSSEDistribution distribution = newDistribution();
         List<Object> inputs = new ArrayList<>(Arrays.asList("tree", tree, "grid", grid, "q2mLambda", birth,
                 "q2mMu", death, "q2d", observation, "dynDt", new BooleanParameter("true"),
                 "priorProbAtRootType", "Flat", "fossilSamplingRate", new RealParameter("0.08"),
@@ -2385,6 +2394,112 @@ public class QuaSSEDistributionTest {
         inputs.addAll(Arrays.asList(options));
         distribution.initByName(inputs.toArray());
         return distribution;
+    }
+
+    private static class CountedBranches extends QuaSSEDistribution {
+        final List<Integer> integrated = new ArrayList<>();
+        int failAfter = -1;
+
+        // Record completed integrations, including a partial traversal that fails before the root.
+        @Override
+        public void processBranch(Node node, boolean recalculate, boolean jtransforms) {
+            super.processBranch(node, recalculate, jtransforms);
+            integrated.add(node.getNr());
+            if (integrated.size() == failAfter) throw new ArithmeticException("Interrupted traversal");
+        }
+    }
+
+    // Scalar agreement alone cannot show that rejection restored reusable endpoints. Count the
+    // integrations after alternating subtree edits; retire this check if pruning loses its cache.
+    @Test
+    public void testBranchReuseAndRollback() {
+        String newick = "((A:1,B:1):1,(F:0.5,S:0.5):1.5);";
+        CountedBranches cached = configure(new CountedBranches());
+        fossilDistribution(cached, newick, 1.05, true, 256, .02, .025, 5, 2);
+        QuaSSEDistribution full = fossilDistribution(newick, 1.05, true, 256, .02, .025, 5, 2);
+        full.getEsDs(false);  // A caller holding writable rows requires full pruning.
+        Tree tree = cached.treeInput.get(), reference = full.treeInput.get();
+        RealParameter rho = cached.presentSamplingProbabilityInput.get();
+        State state = new State();
+        state.initByName("stateNode", List.of(tree, rho));
+        state.initialise();
+        state.setPosterior(cached);
+        double accepted = state.robustlyCalcPosterior(cached);
+        Assert.assertEquals(full.calculateLogP(), accepted, 1e-12);
+        Assert.assertEquals(6, cached.integrated.size());
+
+        // Reject a global move, a local move crossing tc, and a partial write on exception.
+        // Then accept a disjoint edit and verify its rows survive another store/restore.
+        for (String move : List.of("sampling", "left", "interrupted", "accept right", "left again")) {
+            state.store(1);
+            boolean global = move.equals("sampling");
+            boolean accept = move.equals("accept right");
+            Node node = tree.getRoot().getChild(accept ? 1 : 0);
+            Node other = reference.getNode(node.getNr());
+            double before = other.getHeight();
+            double height = accept ? .6 : 1.1;
+            if (global) {
+                rho.setValue(.8);
+                full.presentSamplingProbabilityInput.get().setValue(.8);
+            } else {
+                node.setHeight(height);
+                other.setHeight(height);
+            }
+            state.storeCalculationNodes();
+            state.checkCalculationNodesDirtiness();
+            cached.integrated.clear();
+            if (move.equals("interrupted")) {
+                cached.failAfter = 2;
+                Assert.assertThrows(ArithmeticException.class, cached::calculateLogP);
+                cached.failAfter = -1;
+            } else {
+                double proposed = cached.calculateLogP();
+                Assert.assertEquals(full.calculateLogP(), proposed, 1e-12);
+                if (global) Assert.assertEquals(6, cached.integrated.size());
+                else Assert.assertEquals(List.of(node.getLeft().getNr(), node.getRight().getNr(), node.getNr()),
+                        cached.integrated);
+                cached.integrated.clear();
+                Assert.assertEquals(proposed, cached.calculateLogP(), 1e-12);
+                Assert.assertTrue(cached.integrated.isEmpty());
+                if (accept) accepted = proposed;
+            }
+            if (accept) {
+                state.acceptCalculationNodes();
+            } else {
+                state.restore();
+                state.restoreCalculationNodes();
+                Assert.assertEquals(accepted, cached.getCurrentLogP(), 0);
+                if (global) full.presentSamplingProbabilityInput.get().setValue(.7);
+                else other.setHeight(before);
+            }
+            state.setEverythingDirty(false);
+            cached.integrated.clear();
+            Assert.assertEquals(accepted, cached.calculateLogP(), 1e-12);
+            Assert.assertTrue(cached.integrated.isEmpty());
+        }
+        // BEAST's explicit full-posterior check must also exercise every integration.
+        Assert.assertEquals(accepted, state.robustlyCalcPosterior(cached), 1e-12);
+        Assert.assertEquals(6, cached.integrated.size());
+    }
+
+    // An exchange between equal-height parents preserves every branch length but changes the
+    // subtree products. Height proposals alone cannot catch this error in cached topology keys.
+    @Test
+    public void testExchangeWithUnchangedBranchLengths() {
+        QuaSSEDistribution cached = fossilDistribution("((A:1,B:1):1,(F:1,S:1):1);",
+                1.05, true, 256, .02, .025, 5, 2);
+        QuaSSEDistribution exchanged = fossilDistribution("((A:1,S:1):1,(F:1,B:1):1);",
+                1.05, true, 256, .02, .025, 5, 2);
+        double old = cached.calculateLogP();
+        Node root = cached.treeInput.get().getRoot(), left = root.getLeft(), right = root.getRight();
+        Node b = left.getRight(), s = right.getRight();
+        left.removeChild(b);
+        right.removeChild(s);
+        left.addChild(s);
+        right.addChild(b);
+        double expected = exchanged.calculateLogP();
+        Assert.assertNotEquals(old, expected, 1e-8);
+        Assert.assertEquals(expected, cached.calculateLogP(), 1e-12);
     }
 
     // Zero slopes must reproduce constant links; real State restoration catches stale coefficient

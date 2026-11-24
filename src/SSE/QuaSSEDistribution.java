@@ -5,6 +5,7 @@ import beast.base.core.Function;
 import beast.base.inference.State;
 import beast.base.inference.parameter.RealParameter;
 import beast.base.evolution.tree.Node;
+import beast.base.evolution.tree.Tree;
 
 import java.util.Arrays;
 import java.util.List;
@@ -61,6 +62,108 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     protected double[][][] scratchLo, scratchHi;
     protected double[] logNormalizationFactors;
 
+    // A key describes the ordinary branch ending at its parent's age. The child visit results
+    // additionally certify that both inputs to this merge still represent the same subtrees.
+    private record Branch(int parent, int left, int right, double start, double end,
+                          String taxon, double observation) {}
+
+    // Compare numerical inputs: a shared link can be clean after another consumer refreshes it,
+    // and a restored grid can have equal coordinates under a different revision number.
+    private final class BranchModel {
+        final double[] lo = xLo.clone(), hi = xHi.clone(), birthLo = birthRatesLo.clone(), birthHi = birthRatesHi.clone();
+        final double[] deathLo = deathRatesLo.clone(), deathHi = deathRatesHi.clone();
+        final int[] paddingLo = nLeftNRightFlanksLo.clone(), paddingHi = nLeftNRightFlanksHi.clone();
+        final int[] transfer = hiLoIdxs4Transfer.clone();
+        final double dx = dXbin, split = tc, step = dtMax, drift = grid.getDrift(), diffusion = grid.getDiffusion();
+        final double psi = fossilSamplingRate, rho = presentSamplingProbability, sd;
+
+        BranchModel(double sd) { this.sd = sd; }
+
+        // All branches share the grid, transport, rates, and observation error.
+        boolean matches(double observationSD) {
+            return sd == observationSD && psi == fossilSamplingRate && rho == presentSamplingProbability
+                    && dx == dXbin && split == tc && step == dtMax && drift == grid.getDrift()
+                    && diffusion == grid.getDiffusion() && Arrays.equals(lo, xLo) && Arrays.equals(hi, xHi)
+                    && Arrays.equals(paddingLo, nLeftNRightFlanksLo) && Arrays.equals(paddingHi, nLeftNRightFlanksHi)
+                    && Arrays.equals(transfer, hiLoIdxs4Transfer)
+                    && Arrays.equals(birthLo, birthRatesLo) && Arrays.equals(birthHi, birthRatesHi)
+                    && Arrays.equals(deathLo, deathRatesLo) && Arrays.equals(deathHi, deathRatesHi);
+        }
+    }
+
+    private BranchModel model, storedModel;
+    private Branch[] branches, storedBranches;
+    private double[] storedScales;
+    private double[][][] spareLo, spareHi;
+    private boolean[] switched;
+    // Direct access to writable endpoint rows prevents later reuse on this instance. Calls
+    // from the likelihood traversal itself retain ownership of the rows.
+    private boolean pruning, externalRows;
+
+    // Snapshot keys and scalar factors eagerly. Endpoint rows are saved only when overwritten.
+    @Override
+    public void store() {
+        super.store();
+        storedModel = model;
+        storedBranches = branches.clone();
+        storedScales = logNormalizationFactors.clone();
+        Arrays.fill(switched, false);
+    }
+
+    // Only the first write to an accepted endpoint switches storage. A second evaluation of
+    // this proposal may overwrite its own rows; it must never switch back to the accepted rows.
+    private void prepareWrite(int i) {
+        if (storedBranches != null && storedBranches[i] != null && !switched[i]) {
+            if (spareLo[i] == null) {
+                spareLo[i] = new double[nDimensions][2 * nXbinsLo];
+                spareHi[i] = new double[nDimensions][2 * nXbinsHi];
+            }
+            swapRows(i);
+            switched[i] = true;
+        }
+        branches[i] = null;
+        logNormalizationFactors[i] = 0;
+        for (double[] row : esDsLo[i]) Arrays.fill(row, 0);
+        for (double[] row : esDsHi[i]) Arrays.fill(row, 0);
+    }
+
+    // Keep fine and coarse rows together: a crossing branch writes both during integration.
+    private void swapRows(int i) {
+        double[][] lo = esDsLo[i], hi = esDsHi[i];
+        esDsLo[i] = spareLo[i];
+        esDsHi[i] = spareHi[i];
+        spareLo[i] = lo;
+        spareHi[i] = hi;
+    }
+
+    // BEAST restores the scalar in Distribution. Restore the endpoint rows, local scales
+    // and the model they were computed under without re-integrating any accepted branch.
+    @Override
+    public void restore() {
+        super.restore();
+        if (storedBranches != null) {
+            for (int i = 0; i < switched.length; i++)
+                if (switched[i]) swapRows(i);
+            branches = storedBranches;
+            logNormalizationFactors = storedScales;
+            model = storedModel;
+        }
+        releaseSnapshot();
+    }
+
+    @Override
+    protected void accept() {
+        super.accept();
+        releaseSnapshot();
+    }
+
+    // Old endpoint arrays remain available as spare rows for the next proposal.
+    private void releaseSnapshot() {
+        storedBranches = null;
+        storedScales = null;
+        storedModel = null;
+    }
+
     @Override
     public void initAndValidate() {
 
@@ -107,6 +210,13 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             initializeEsDs(nNodes, nDimensionsFFT, nXbinsLo, nXbinsHi);
 
             populateTipsEsDs(nDimensionsFFT, nXbinsHi, true, false);
+            model = null;
+            releaseSnapshot();
+            branches = new Branch[nNodes];
+            spareLo = new double[nNodes][][];
+            spareHi = new double[nNodes][][];
+            switched = new boolean[nNodes];
+            externalRows = false;
         } catch (RuntimeException | Error failure) {
             close();
             throw failure;
@@ -265,6 +375,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     @Override
     public void initializeEsDs(int nNodes, int nDimensionsFFT, int nXbinsLo, int nXbinsHi) {
+        if (!pruning) externalRows = true;
         esDsLo = new double[nNodes][nDimensionsFFT][2 * nXbinsLo]; // 2 * for real and complex part after FFT
         esDsHi = new double[nNodes][nDimensionsFFT][2 * nXbinsHi];
 
@@ -274,6 +385,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     @Override
     public void populateTipsEsDs(int nDimensionsFFT, int nXbinsHi, boolean ignoreRefresh, boolean jtransforms) {
+        if (!pruning) externalRows = true;
         for (Node tip : tree.getExternalNodes())
             populateTip(tip, nDimensionsFFT, ignoreRefresh, jtransforms);
     }
@@ -398,6 +510,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     @Override
     public void startRecursionAtRootNode(Node rootNode, boolean forceRecalcKernel, boolean jtransforms) {
+        if (!pruning) externalRows = true;
         processInternalNode(rootNode, forceRecalcKernel, jtransforms);
         finishRoot(rootNode, forceRecalcKernel, jtransforms);
     }
@@ -504,6 +617,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     @Override
     public void processInternalNode(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
+        if (!pruning) externalRows = true;
 
         // debugging
         // System.out.println("\nDoing node " + aNode.getID());
@@ -542,6 +656,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     // main branch function
     @Override
     public void processBranch(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
+        if (!pruning) externalRows = true;
         processInterval(aNode.getNr(), aNode.getHeight(), aNode.getParent().getHeight(),
                 forceRecalcKernel, jtransforms);
     }
@@ -657,6 +772,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     public void integrateLength(int nodeIdx, double[][] rows, double[][] scratch, double length,
             boolean dynamicallyAdjust, double maxDt, boolean lowRes, boolean forceRecalcKernel,
             boolean jtransforms) {
+        if (!pruning) externalRows = true;
         // An empty interval is the identity, including branch ends exactly at tc.
         if (length == 0) return;
         integrateSegment(rows, scratch, (lowRes ? fftBufferEsDsLo : fftBufferEsDsHi)[nodeIdx],
@@ -687,6 +803,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     @Override
     public double normalizeDs(int nodeIdx, boolean lowRes, boolean jtransforms) {
+        if (!pruning) externalRows = true;
         double dx;
         double[] dsAtNode;
         if (lowRes) {
@@ -733,6 +850,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     @Override
     public void mergeChildrenNodes(Node aNode, boolean jtransforms) {
+        if (!pruning) externalRows = true;
         int nodeIdx = aNode.getNr();
         double nodeHeight = aNode.getHeight();
 
@@ -873,6 +991,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     // Single-step entry point retained for callers using node storage and a prepared full-dt kernel.
     @Override
     public void doIntegrateInPlace(int nodeIdx, double dt, boolean lowRes) {
+        if (!pruning) externalRows = true;
         integrateStep((lowRes ? esDsLo : esDsHi)[nodeIdx], (lowRes ? scratchLo : scratchHi)[nodeIdx],
                 (lowRes ? fftBufferEsDsLo : fftBufferEsDsHi)[nodeIdx], dt, lowRes, lowRes ? nativeLo : nativeHi, fossilSamplingRate);
     }
@@ -1097,25 +1216,36 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         Node rootNode = tree.getRoot();
         int rootIdx = rootNode.getNr();
         
-        // Pruning mutates every node partial in place, so a full calculation must rebuild them from tips.
-        Arrays.fill(logNormalizationFactors, 0.0);
-        for (int nodeIdx = 0; nodeIdx < esDsLo.length; nodeIdx++) {
-            for (int dimension = 0; dimension < nDimensions; dimension++) {
-                Arrays.fill(esDsLo[nodeIdx][dimension], 0.0);
-                Arrays.fill(esDsHi[nodeIdx][dimension], 0.0);
-            }
-        }
-        // Refresh q2d's cached inputs; the forced call then repopulates arrays that were just cleared.
         q2d.refreshParams();
-        populateTipsEsDs(nDimensions, nXbinsHi, true, false);
-        initializeSampleEvents();
-        
-        boolean forceRecalcKernel = false;
-        // Kernel keys track actual parameter values, including clean restored values after rejection.
-
-        // start recursion for likelihood calculation
-        boolean jtransforms = false;
-        startRecursionAtRootNode(rootNode, forceRecalcKernel, jtransforms);
+        pruning = true;
+        try {
+            if (!externalRows && !hasFossils && !rootNode.isLeaf()
+                    && q2d.getClass() == NormalCenteredAtObservedLinkFn.class) {
+                NormalCenteredAtObservedLinkFn normal = (NormalCenteredAtObservedLinkFn) q2d;
+                double sd = normal.sdNormalQuTrValueInput.get().getArrayValue();
+                if (model == null || !model.matches(sd)) {
+                    Arrays.fill(branches, null);
+                    model = new BranchModel(sd);
+                }
+                pruneBranch(rootNode.getLeft(), normal);
+                pruneBranch(rootNode.getRight(), normal);
+                prepareWrite(rootIdx);
+                mergeChildrenNodes(rootNode, false);
+                finishRoot(rootNode, false, false);
+            } else {
+                for (int i = 0; i < branches.length; i++) prepareWrite(i);
+                populateTipsEsDs(nDimensions, nXbinsHi, true, false);
+                initializeSampleEvents();
+                startRecursionAtRootNode(rootNode, false, false);
+            }
+        } catch (RuntimeException failure) {
+            // A completed child may already have replaced its rows while an ancestor still
+            // has its old key. Force a full visit on retry; store/restore protects accepted keys.
+            Arrays.fill(branches, null);
+            throw failure;
+        } finally {
+            pruning = false;
+        }
 
         // debugging
         // System.out.println("Log-normalization factors = " + Arrays.toString(logNormalizationFactors));
@@ -1142,9 +1272,45 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
         // apply prior within
         // Distribution owns the scalar snapshot used by CompoundDistribution and BEAST rejection.
-        logP = getLogPFromRelevantObjects(esDsAtRootAtRightRes, sumOfLogNormalizationFactors, birthRatesAtRightRes, dxAtRightRes, jtransforms);
+        logP = getLogPFromRelevantObjects(esDsAtRootAtRightRes, sumOfLogNormalizationFactors, birthRatesAtRightRes, dxAtRightRes, false);
 
         return logP;
+    }
+
+    // Visit both children even if the first changed. Propagate an update along each affected
+    // ancestral path; unrelated subtrees keep their endpoint rows and normalization factors.
+    private boolean pruneBranch(Node node, NormalCenteredAtObservedLinkFn normal) {
+        int i = node.getNr();
+        boolean updated = false;
+        int left = -1, right = -1;
+        String taxon = null;
+        double observation = 0;
+        if (node.isLeaf()) {
+            taxon = node.getID();
+            observation = normal.quTraitsInput.get().getValue(taxon);
+        } else {
+            left = node.getLeft().getNr();
+            right = node.getRight().getNr();
+            updated = pruneBranch(node.getLeft(), normal);
+            updated |= pruneBranch(node.getRight(), normal);
+        }
+        Node parent = node.getParent();
+        Branch key = new Branch(parent.getNr(), left, right, node.getHeight(), parent.getHeight(), taxon, observation);
+        // BEAST dirties the tree and its nodes for a full posterior check. A fixed tree can
+        // retain node flags from parsing. Ignore those, and flags already handled in this proposal.
+        boolean dirty = tree.somethingIsDirty() && node.isDirty() != Tree.IS_CLEAN
+                && (storedBranches == null || branches[i] == storedBranches[i]);
+        if (!updated && !dirty && key.equals(branches[i])) return false;
+        prepareWrite(i);
+        if (node.isLeaf()) {
+            populateTip(node, nDimensions, true, false);
+            logNormalizationFactors[i] = Math.log(presentSamplingProbability);
+        } else {
+            mergeChildrenNodes(node, false);
+        }
+        processBranch(node, false, false);
+        branches[i] = key;
+        return true;
     }
 
     // Reconcile the live grid with current parameters, including clean values restored after rejection.
@@ -1189,6 +1355,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     public double[][][] getEsDs(boolean lowRes) {
+        if (!pruning) externalRows = true;
         if (lowRes) return esDsLo;
         else return esDsHi;
     }
@@ -1199,6 +1366,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     public double[][] getEsDsAtNode(int nodeIdx, boolean lowRes) {
+        if (!pruning) externalRows = true;
         if (lowRes) return esDsLo[nodeIdx];
         return esDsHi[nodeIdx];
     }
@@ -1215,6 +1383,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     // for debugging
     public void setEsDsAtNodeElementAtDim(int nodeIdx, int dimIdx, int eleIdx, double val, boolean lowRes) {
+        if (!pruning) externalRows = true;
         if (lowRes) esDsLo[nodeIdx][dimIdx][eleIdx] = val;
         else esDsHi[nodeIdx][dimIdx][eleIdx] = val;
     }
