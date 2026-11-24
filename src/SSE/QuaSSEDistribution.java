@@ -84,18 +84,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                 nativeLo = new QuaSSENativeIntegrator(nXbinsLo, nDimensionsE + nDimensionsD);
                 nativeHi = new QuaSSENativeIntegrator(nXbinsHi, nDimensionsE + nDimensionsD);
             }
-            if (hasFossils || conditionOnRhoSampling) {
-                fossilELo = new double[1][2 * nXbinsLo];
-                fossilEHi = new double[1][2 * nXbinsHi];
-                scratchELo = new double[1][2 * nXbinsLo];
-                scratchEHi = new double[1][2 * nXbinsHi];
-                fftBufferELo = new double[1][2 * nXbinsLo];
-                fftBufferEHi = new double[1][2 * nXbinsHi];
-                if (nativeLo != null) {
-                    nativeELo = new QuaSSENativeIntegrator(nXbinsLo, 1);
-                    nativeEHi = new QuaSSENativeIntegrator(nXbinsHi, 1);
-                }
-            }
             int nNodes = tree.getNodeCount();
 
             logNormalizationFactors = new double[nNodes];
@@ -358,9 +346,38 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         }
     }
 
+    // A dated-tip proposal can introduce the first fossil after initialization.
+    private void ensureProbabilityWorkspace() {
+        if (fossilELo != null) return;
+        // Publish the workspace only after both resolutions have been allocated.
+        double[][] eLo = new double[1][2 * nXbinsLo];
+        double[][] eHi = new double[1][2 * nXbinsHi];
+        double[][] scratchLo = new double[1][2 * nXbinsLo];
+        double[][] scratchHi = new double[1][2 * nXbinsHi];
+        double[][] bufferLo = new double[1][2 * nXbinsLo];
+        double[][] bufferHi = new double[1][2 * nXbinsHi];
+        if (nativeLo != null) {
+            QuaSSENativeIntegrator lo = new QuaSSENativeIntegrator(nXbinsLo, 1);
+            try {
+                nativeEHi = new QuaSSENativeIntegrator(nXbinsHi, 1);
+            } catch (RuntimeException | Error failure) {
+                lo.close();
+                throw failure;
+            }
+            nativeELo = lo;
+        }
+        scratchELo = scratchLo;
+        scratchEHi = scratchHi;
+        fftBufferELo = bufferLo;
+        fftBufferEHi = bufferHi;
+        fossilEHi = eHi;
+        fossilELo = eLo;
+    }
+
     // E and Q share the same equation: Q uses zero sampling rate because fossils do not remove
     // lineages. Restart from 1-rho; transfer at tc before evaluating an endpoint exactly at tc.
     private double[] probabilityAtAge(double age, double samplingRate) {
+        ensureProbabilityWorkspace();
         Arrays.fill(fossilELo[0], 0);
         Arrays.fill(fossilEHi[0], 0);
         boolean lowRes = age >= tc;
