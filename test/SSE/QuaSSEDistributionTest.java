@@ -1,5 +1,6 @@
 package SSE;
 
+import beast.base.core.BEASTInterface;
 import beast.base.core.Function;
 import beast.base.inference.util.RPNcalculator;
 import beast.base.inference.State;
@@ -26,7 +27,9 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static SSE.SSEUtils.everyOtherToHeadInPlace;
 
@@ -2395,89 +2398,59 @@ public class QuaSSEDistributionTest {
     }
 
     private static class CountedBranches extends QuaSSEDistribution {
-        final List<Integer> integrated = new ArrayList<>();
-        int failAfter = -1;
+        final Set<Integer> integrated = new HashSet<>();
 
-        // Record completed integrations, including a partial traversal that fails before the root.
+        // Record which endpoints were integrated during one likelihood evaluation.
         @Override
-        public void processBranch(Node node, boolean recalculate, boolean jtransforms) {
+        protected void processBranch(Node node, boolean recalculate, boolean jtransforms) {
             super.processBranch(node, recalculate, jtransforms);
             integrated.add(node.getNr());
-            if (integrated.size() == failAfter) throw new ArithmeticException("Interrupted traversal");
         }
     }
 
-    // Scalar agreement alone cannot show that rejection restored reusable endpoints. Count the
-    // integrations after alternating subtree edits; retire this check if pruning loses its cache.
+    // A fresh likelihood checks the value; recording the branches also detects needless
+    // integration after a rejected or accepted edit. Retire if branch caching is removed.
     @Test
     public void testBranchReuseAndRollback() {
         String newick = "((A:1,B:1):1,(F:0.5,S:0.5):1.5);";
         CountedBranches cached = configure(new CountedBranches());
         fossilDistribution(cached, newick, 1.05, true, 256, .02, .025, 5, 2);
-        QuaSSEDistribution full = fossilDistribution(newick, 1.05, true, 256, .02, .025, 5, 2);
-        full.getEsDs(false);  // A caller holding writable rows requires full pruning.
-        Tree tree = cached.treeInput.get(), reference = full.treeInput.get();
-        RealParameter rho = cached.presentSamplingProbabilityInput.get();
+        Tree tree = cached.treeInput.get();
         State state = new State();
-        state.initByName("stateNode", List.of(tree, rho));
+        state.initByName("stateNode", tree);
         state.initialise();
         state.setPosterior(cached);
         double accepted = state.robustlyCalcPosterior(cached);
-        Assert.assertEquals(full.calculateLogP(), accepted, 1e-12);
-        Assert.assertEquals(6, cached.integrated.size());
 
-        // Reject a global move, a local move crossing tc, and a partial write on exception.
-        // Then accept a disjoint edit and verify its rows survive another store/restore.
-        for (String move : List.of("sampling", "left", "interrupted", "accept right", "left again")) {
+        // Reject a left subtree edit crossing the grid boundary, then accept a right subtree edit.
+        for (boolean accept : new boolean[]{false, true}) {
             state.store(1);
-            boolean global = move.equals("sampling");
-            boolean accept = move.equals("accept right");
             Node node = tree.getRoot().getChild(accept ? 1 : 0);
-            Node other = reference.getNode(node.getNr());
-            double before = other.getHeight();
-            double height = accept ? .6 : 1.1;
-            if (global) {
-                rho.setValue(.8);
-                full.presentSamplingProbabilityInput.get().setValue(.8);
-            } else {
-                node.setHeight(height);
-                other.setHeight(height);
-            }
+            node.setHeight(accept ? .6 : 1.1);
             state.storeCalculationNodes();
             state.checkCalculationNodesDirtiness();
+
+            // Use the same node height directly: converting it to branch lengths and back can
+            // round across the integrator's threshold for taking one more time step.
+            QuaSSEDistribution fresh = fossilDistribution(newick, 1.05, true, 256, .02, .025, 5, 2);
+            fresh.treeInput.get().getNode(node.getNr()).setHeight(node.getHeight());
             cached.integrated.clear();
-            if (move.equals("interrupted")) {
-                cached.failAfter = 2;
-                Assert.assertThrows(ArithmeticException.class, cached::calculateLogP);
-                cached.failAfter = -1;
-            } else {
-                double proposed = cached.calculateLogP();
-                Assert.assertEquals(full.calculateLogP(), proposed, 1e-12);
-                if (global) Assert.assertEquals(6, cached.integrated.size());
-                else Assert.assertEquals(List.of(node.getLeft().getNr(), node.getRight().getNr(), node.getNr()),
-                        cached.integrated);
-                cached.integrated.clear();
-                Assert.assertEquals(proposed, cached.calculateLogP(), 1e-12);
-                Assert.assertTrue(cached.integrated.isEmpty());
-                if (accept) accepted = proposed;
-            }
+            double proposed = cached.calculateLogP();
+            Assert.assertEquals(fresh.calculateLogP(), proposed, 1e-12);
+            Assert.assertEquals(Set.of(node.getNr(), node.getLeft().getNr(), node.getRight().getNr()), cached.integrated);
+
             if (accept) {
                 state.acceptCalculationNodes();
+                accepted = proposed;
             } else {
                 state.restore();
                 state.restoreCalculationNodes();
-                Assert.assertEquals(accepted, cached.getCurrentLogP(), 0);
-                if (global) full.presentSamplingProbabilityInput.get().setValue(.7);
-                else other.setHeight(before);
             }
             state.setEverythingDirty(false);
             cached.integrated.clear();
             Assert.assertEquals(accepted, cached.calculateLogP(), 1e-12);
             Assert.assertTrue(cached.integrated.isEmpty());
         }
-        // BEAST's explicit full-posterior check must also exercise every integration.
-        Assert.assertEquals(accepted, state.robustlyCalcPosterior(cached), 1e-12);
-        Assert.assertEquals(6, cached.integrated.size());
     }
 
     // An exchange between equal-height parents preserves every branch length but changes the

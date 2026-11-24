@@ -62,7 +62,7 @@ public class MoSSEDistribution extends QuaSSEDistribution {
     }
 
     @Override
-    public void populateTipsEsDs(int nDimensionsFFT, int nUsefulXbinsHi, boolean ignoreRefresh, boolean jtransforms) {
+    protected void populateTipsEsDs(int nDimensionsFFT, int nUsefulXbinsHi, boolean ignoreRefresh, boolean jtransforms) {
         ;
     }
 
@@ -72,18 +72,18 @@ public class MoSSEDistribution extends QuaSSEDistribution {
     }
 
     @Override
-    public void processBranch(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
+    protected void processBranch(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
 
         // TODO stuff
         doMoSSEIntegrateInPlace(aNode.getNr(), esDsHi[0], fftBufferEsDsHi[0], scratch, 0.0, true, dtMax, true);
     }
 
     @Override
-    public void processInternalNode(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
+    protected void processInternalNode(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
     }
 
     @Override
-    public void startRecursionAtRootNode(Node rootNode, boolean forceRecalcKernel, boolean jtransforms) {
+    protected void startRecursionAtRootNode(Node rootNode, boolean forceRecalcKernel, boolean jtransforms) {
 
     }
 

@@ -57,10 +57,10 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     protected LinkFn q2mLambda, q2mMu, q2d;
 
     // state that matters directly for calculateLogP
-    protected double[][][] esDsLo, esDsHi; // first dimension are nodes, second is Es and Ds, third is each E (or D) along X ruler
+    private double[][][] esDsLo, esDsHi; // first dimension are nodes, second is Es and Ds, third is each E (or D) along X ruler
     protected double[][][] fftBufferEsDsLo, fftBufferEsDsHi; // same as above, to be used in propagate in X (during convolution)
     protected double[][][] scratchLo, scratchHi;
-    protected double[] logNormalizationFactors;
+    private double[] logNormalizationFactors;
 
     // A key describes the ordinary branch ending at its parent's age. The child visit results
     // additionally certify that both inputs to this merge still represent the same subtrees.
@@ -96,9 +96,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     private double[] storedScales;
     private double[][][] spareLo, spareHi;
     private boolean[] switched;
-    // Direct access to writable endpoint rows prevents later reuse on this instance. Calls
-    // from the likelihood traversal itself retain ownership of the rows.
-    private boolean pruning, externalRows;
 
     // Snapshot keys and scalar factors eagerly. Endpoint rows are saved only when overwritten.
     @Override
@@ -216,7 +213,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             spareLo = new double[nNodes][][];
             spareHi = new double[nNodes][][];
             switched = new boolean[nNodes];
-            externalRows = false;
         } catch (RuntimeException | Error failure) {
             close();
             throw failure;
@@ -374,8 +370,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public void initializeEsDs(int nNodes, int nDimensionsFFT, int nXbinsLo, int nXbinsHi) {
-        if (!pruning) externalRows = true;
+    protected void initializeEsDs(int nNodes, int nDimensionsFFT, int nXbinsLo, int nXbinsHi) {
         esDsLo = new double[nNodes][nDimensionsFFT][2 * nXbinsLo]; // 2 * for real and complex part after FFT
         esDsHi = new double[nNodes][nDimensionsFFT][2 * nXbinsHi];
 
@@ -384,8 +379,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public void populateTipsEsDs(int nDimensionsFFT, int nXbinsHi, boolean ignoreRefresh, boolean jtransforms) {
-        if (!pruning) externalRows = true;
+    protected void populateTipsEsDs(int nDimensionsFFT, int nXbinsHi, boolean ignoreRefresh, boolean jtransforms) {
         for (Node tip : tree.getExternalNodes())
             populateTip(tip, nDimensionsFFT, ignoreRefresh, jtransforms);
     }
@@ -509,8 +503,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public void startRecursionAtRootNode(Node rootNode, boolean forceRecalcKernel, boolean jtransforms) {
-        if (!pruning) externalRows = true;
+    protected void startRecursionAtRootNode(Node rootNode, boolean forceRecalcKernel, boolean jtransforms) {
         processInternalNode(rootNode, forceRecalcKernel, jtransforms);
         finishRoot(rootNode, forceRecalcKernel, jtransforms);
     }
@@ -616,8 +609,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public void processInternalNode(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
-        if (!pruning) externalRows = true;
+    protected void processInternalNode(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
 
         // debugging
         // System.out.println("\nDoing node " + aNode.getID());
@@ -655,8 +647,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     // main branch function
     @Override
-    public void processBranch(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
-        if (!pruning) externalRows = true;
+    protected void processBranch(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
         processInterval(aNode.getNr(), aNode.getHeight(), aNode.getParent().getHeight(),
                 forceRecalcKernel, jtransforms);
     }
@@ -769,10 +760,9 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public void integrateLength(int nodeIdx, double[][] rows, double[][] scratch, double length,
+    protected void integrateLength(int nodeIdx, double[][] rows, double[][] scratch, double length,
             boolean dynamicallyAdjust, double maxDt, boolean lowRes, boolean forceRecalcKernel,
             boolean jtransforms) {
-        if (!pruning) externalRows = true;
         // An empty interval is the identity, including branch ends exactly at tc.
         if (length == 0) return;
         integrateSegment(rows, scratch, (lowRes ? fftBufferEsDsLo : fftBufferEsDsHi)[nodeIdx],
@@ -802,8 +792,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public double normalizeDs(int nodeIdx, boolean lowRes, boolean jtransforms) {
-        if (!pruning) externalRows = true;
+    protected double normalizeDs(int nodeIdx, boolean lowRes, boolean jtransforms) {
         double dx;
         double[] dsAtNode;
         if (lowRes) {
@@ -849,8 +838,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public void mergeChildrenNodes(Node aNode, boolean jtransforms) {
-        if (!pruning) externalRows = true;
+    protected void mergeChildrenNodes(Node aNode, boolean jtransforms) {
         int nodeIdx = aNode.getNr();
         double nodeHeight = aNode.getHeight();
 
@@ -990,8 +978,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     // Single-step entry point retained for callers using node storage and a prepared full-dt kernel.
     @Override
-    public void doIntegrateInPlace(int nodeIdx, double dt, boolean lowRes) {
-        if (!pruning) externalRows = true;
+    protected void doIntegrateInPlace(int nodeIdx, double dt, boolean lowRes) {
         integrateStep((lowRes ? esDsLo : esDsHi)[nodeIdx], (lowRes ? scratchLo : scratchHi)[nodeIdx],
                 (lowRes ? fftBufferEsDsLo : fftBufferEsDsHi)[nodeIdx], dt, lowRes, lowRes ? nativeLo : nativeHi, fossilSamplingRate);
     }
@@ -1217,9 +1204,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         int rootIdx = rootNode.getNr();
         
         q2d.refreshParams();
-        pruning = true;
         try {
-            if (!externalRows && !hasFossils && !rootNode.isLeaf()
+            if (!hasFossils && !rootNode.isLeaf()
                     && q2d.getClass() == NormalCenteredAtObservedLinkFn.class) {
                 NormalCenteredAtObservedLinkFn normal = (NormalCenteredAtObservedLinkFn) q2d;
                 double sd = normal.sdNormalQuTrValueInput.get().getArrayValue();
@@ -1243,8 +1229,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             // has its old key. Force a full visit on retry; store/restore protects accepted keys.
             Arrays.fill(branches, null);
             throw failure;
-        } finally {
-            pruning = false;
         }
 
         // debugging
@@ -1354,8 +1338,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         else return fftFYHi;
     }
 
-    public double[][][] getEsDs(boolean lowRes) {
-        if (!pruning) externalRows = true;
+    double[][][] getEsDs(boolean lowRes) {
         if (lowRes) return esDsLo;
         else return esDsHi;
     }
@@ -1365,8 +1348,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         else return scratchHi;
     }
 
-    public double[][] getEsDsAtNode(int nodeIdx, boolean lowRes) {
-        if (!pruning) externalRows = true;
+    double[][] getEsDsAtNode(int nodeIdx, boolean lowRes) {
         if (lowRes) return esDsLo[nodeIdx];
         return esDsHi[nodeIdx];
     }
@@ -1379,13 +1361,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     public int getNUsefulTraitBins(boolean lowRes) {
         if (lowRes) return nUsefulXbinsLo;
         else return nUsefulXbinsHi;
-    }
-
-    // for debugging
-    public void setEsDsAtNodeElementAtDim(int nodeIdx, int dimIdx, int eleIdx, double val, boolean lowRes) {
-        if (!pruning) externalRows = true;
-        if (lowRes) esDsLo[nodeIdx][dimIdx][eleIdx] = val;
-        else esDsHi[nodeIdx][dimIdx][eleIdx] = val;
     }
 
     // for debugging
