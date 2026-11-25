@@ -11,6 +11,7 @@ import beast.base.evolution.tree.Tree;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.function.IntConsumer;
 import beast.base.inference.distribution.ParametricDistribution;
 import beast.base.inference.distribution.Uniform;
 import beast.base.inference.distribution.LogNormalDistributionModel;
@@ -22,7 +23,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             "Integration implementation: java or native T/X segments (requires fftBackend=fftw).", "java");
     private QuaSSENativeIntegrator nativeLo, nativeHi, nativeELo, nativeEHi;
     public final Input<Boolean> useThreadsInput = new Input<>("useThreads",
-            "Integrate independent branches concurrently on native full-tree cache rebuilds.", false);
+            "Use native workers to integrate independent branches whose cached results need updating.", false);
     public final Input<Integer> maxNrOfThreadsInput = new Input<>("threads",
             "Maximum branch workers; a nonpositive value uses the BEAST thread budget.", -1);
     private int branchWorkers;
@@ -218,7 +219,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                 nativeLo = new QuaSSENativeIntegrator(nXbinsLo, nDimensionsE + nDimensionsD);
                 nativeHi = new QuaSSENativeIntegrator(nXbinsHi, nDimensionsE + nDimensionsD);
             }
-            int budget = ProgramStatus.m_nThreads;
+            int budget = Math.max(1, ProgramStatus.m_nThreads);
             if (maxNrOfThreadsInput.get() > 0) budget = Math.min(budget, maxNrOfThreadsInput.get());
             branchWorkers = useThreadsInput.get() && nativeLo != null ? Math.min(tree.getLeafNodeCount(), budget) : 1;
             int nNodes = tree.getNodeCount();
@@ -1287,17 +1288,12 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                     && q2d.getClass() == NormalCenteredAtObservedLinkFn.class) {
                 NormalCenteredAtObservedLinkFn normal = (NormalCenteredAtObservedLinkFn) q2d;
                 double sd = normal.sdNormalQuTrValueInput.get().getArrayValue();
-                boolean rebuild = model == null || !model.matches(sd);
-                if (rebuild) {
+                if (model == null || !model.matches(sd)) {
                     Arrays.fill(branches, null);
                     model = new BranchModel(sd);
                 }
-                if (rebuild && branchWorkers > 1) {
-                    parallelPrune(normal);
-                } else {
-                    pruneBranch(rootNode.getLeft(), normal);
-                    pruneBranch(rootNode.getRight(), normal);
-                }
+                if (traversal == null) initializeTraversal();
+                traversal.run(tree, (node, childChanged) -> prepareBranch(node, normal, childChanged));
                 prepareWrite(rootIdx);
                 mergeChildrenNodes(rootNode, false);
                 finishRoot(rootNode, false, false);
@@ -1345,49 +1341,37 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         return logP;
     }
 
-    // Prepare each ready branch on the calling thread, including snapshotting its accepted rows.
-    // Its worker writes only that endpoint and publishes its key after successful integration.
-    private void parallelPrune(NormalCenteredAtObservedLinkFn normal) {
-        if (traversal == null) {
-            workspaces = new Workspace[branchWorkers];
-            try {
+    // Allocate the traversal on first use. Only native parallel execution needs additional workspaces.
+    private void initializeTraversal() {
+        try {
+            if (branchWorkers > 1) {
+                workspaces = new Workspace[branchWorkers];
                 for (int i = 0; i < branchWorkers; i++)
                     workspaces[i] = new Workspace(nXbinsLo, nXbinsHi, nDimensionsE + nDimensionsD);
-                traversal = new QuaSSEBranchTraversal(branchWorkers);
-            } catch (RuntimeException | Error failure) {
-                closeWorkers();
-                throw failure;
             }
+            traversal = new QuaSSEBranchTraversal(branchWorkers);
+        } catch (RuntimeException | Error failure) {
+            closeWorkers();
+            throw failure;
         }
-        traversal.run(tree, (node, slot) -> {
-            Branch key = branchKey(node, normal);
-            prepareEndpoint(node);
-            return () -> {
-                processInterval(node.getNr(), key.start(), key.end(), false, false, workspaces[slot]);
-                branches[node.getNr()] = key;
-            };
-        });
     }
 
-    // Visit both children even if the first changed. Propagate an update along each affected
-    // ancestral path; unrelated subtrees keep their endpoint rows and normalization factors.
-    private boolean pruneBranch(Node node, NormalCenteredAtObservedLinkFn normal) {
-        boolean updated = false;
-        if (!node.isLeaf()) {
-            updated = pruneBranch(node.getLeft(), normal);
-            updated |= pruneBranch(node.getRight(), normal);
-        }
+    // The caller protects accepted rows before dispatch. A hit leaves both rows and scale intact.
+    private IntConsumer prepareBranch(Node node, NormalCenteredAtObservedLinkFn normal, boolean childChanged) {
         int i = node.getNr();
         Branch key = branchKey(node, normal);
         // BEAST dirties the tree and its nodes for a full posterior check. A fixed tree can
         // retain node flags from parsing. Ignore those, and flags already handled in this proposal.
         boolean dirty = tree.somethingIsDirty() && node.isDirty() != Tree.IS_CLEAN
                 && (storedBranches == null || branches[i] == storedBranches[i]);
-        if (!updated && !dirty && key.equals(branches[i])) return false;
+        if (!childChanged && !dirty && key.equals(branches[i])) return null;
         prepareEndpoint(node);
-        processBranch(node, false, false);
-        branches[i] = key;
-        return true;
+        // Publish the key only after this endpoint has been integrated successfully.
+        return slot -> {
+            if (workspaces == null) processBranch(node, false, false);
+            else processInterval(i, key.start(), key.end(), false, false, workspaces[slot]);
+            branches[i] = key;
+        };
     }
 
     // Record endpoint geometry, child order and the observation used by the branch cache.

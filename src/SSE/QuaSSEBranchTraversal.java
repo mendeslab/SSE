@@ -10,6 +10,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
+import java.util.function.IntConsumer;
 
 /** Schedules ordinary branches bottom-up. The caller finishes the root after run returns. */
 final class QuaSSEBranchTraversal implements AutoCloseable {
@@ -19,6 +20,10 @@ final class QuaSSEBranchTraversal implements AutoCloseable {
     // Idle threads may expire if a host application discards a likelihood without closing it.
     QuaSSEBranchTraversal(int workers) {
         this.workers = workers;
+        if (workers == 1) {
+            executor = null;
+            return;
+        }
         executor = new ThreadPoolExecutor(workers, workers, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), r -> {
             Thread t = new Thread(r, "QuaSSE branch worker");
             t.setDaemon(true);
@@ -27,33 +32,51 @@ final class QuaSSEBranchTraversal implements AutoCloseable {
         executor.allowCoreThreadTimeOut(true);
     }
 
-    // The coordinator owns the FIFO, counts completed children and leases a workspace slot to
-    // each active branch. Future.get publishes both child rows before their parent is prepared.
-    void run(Tree tree, BiFunction<Node, Integer, Runnable> prepare) {
+    // Visit children in completion order, preserving tree order for the actual merge. A hit
+    // (prepare returns null) counts as a finished child. A recomputed child also marks the parent
+    // for integration. The caller owns the queue and leases each worker its slot until get().
+    void run(Tree tree, BiFunction<Node, Boolean, IntConsumer> prepare) {
         var ready = new ArrayDeque<>(tree.getExternalNodes());
         var free = new ArrayDeque<Integer>(workers);
         for (int i = 0; i < workers; i++) free.add(i);
-        var completed = new ExecutorCompletionService<Integer>(executor);
+        var completed = executor == null ? null : new ExecutorCompletionService<Integer>(executor);
         Node[] active = new Node[workers];
         int[] childrenDone = new int[tree.getNodeCount()];
+        boolean[] childChanged = new boolean[tree.getNodeCount()];
         int pending = 0;
         boolean interrupted = false;
         try {
             while (!ready.isEmpty() || pending > 0) {
-                while (!ready.isEmpty() && !free.isEmpty()) {
-                    int slot = free.remove();
-                    Node node = ready.remove();
-                    Runnable integrate = prepare.apply(node, slot);
-                    active[slot] = node;
-                    completed.submit(integrate, slot);
-                    pending++;
+                Node node;
+                boolean changed;
+                if (!ready.isEmpty() && !free.isEmpty()) {
+                    node = ready.remove();
+                    IntConsumer integrate = prepare.apply(node, childChanged[node.getNr()]);
+                    changed = integrate != null;
+                    if (changed && completed != null) {
+                        int slot = free.remove();
+                        active[slot] = node;
+                        completed.submit(() -> integrate.accept(slot), slot);
+                        pending++;
+                        continue;
+                    }
+                    if (changed) integrate.accept(0);
+                } else {
+                    // The ready queue is empty or all slots are occupied. In either case
+                    // at least one task is outstanding, since the loop ends when both are empty.
+                    var result = completed.take();
+                    pending--;
+                    int slot = result.get();
+                    node = active[slot];
+                    changed = true;
+                    free.add(slot);
                 }
-                var result = completed.take();
-                pending--;
-                int slot = result.get();
-                Node parent = active[slot].getParent();
-                if (!parent.isRoot() && ++childrenDone[parent.getNr()] == 2) ready.add(parent);
-                free.add(slot);
+                Node parent = node.getParent();
+                if (!parent.isRoot()) {
+                    int i = parent.getNr();
+                    childChanged[i] |= changed;
+                    if (++childrenDone[i] == 2) ready.add(parent);
+                }
             }
         } catch (InterruptedException e) {
             interrupted = true;
@@ -80,6 +103,6 @@ final class QuaSSEBranchTraversal implements AutoCloseable {
 
     @Override
     public void close() {
-        executor.shutdown();
+        if (executor != null) executor.shutdown();
     }
 }
