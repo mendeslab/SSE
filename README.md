@@ -141,10 +141,9 @@ Java selects time steps and handles grids, tree operations, and normalization.
 Rebuild with `ant native` after updating the JNI interface.
 
 For trees with only extant tips and normal trait observations, add `useThreads="true"` to the
-native QuaSSE distribution and run BEAST with, for example, `-threads 4`. Independent branches
-then integrate concurrently on the first evaluation and when shared model parameters change.
-Tree edits that preserve the shared model and grid reuse cached branches on one thread. The
-optional XML attribute `threads` caps the workers for this likelihood within the BEAST thread
+native QuaSSE distribution and run BEAST with, for example, `-threads 4`. The likelihood reuses
+cached branch results and integrates independent branches concurrently when they need an update.
+The optional XML attribute `threads` caps the workers for this likelihood within the BEAST thread
 budget. Branch threading defaults to off.
 
 Native builds default to release mode. Each mode selects its own directory and default flags:
