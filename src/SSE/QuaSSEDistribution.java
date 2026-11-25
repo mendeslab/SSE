@@ -2,6 +2,7 @@ package SSE;
 
 import beast.base.core.Input;
 import beast.base.core.Function;
+import beast.base.core.ProgramStatus;
 import beast.base.inference.State;
 import beast.base.inference.parameter.RealParameter;
 import beast.base.evolution.tree.Node;
@@ -20,6 +21,39 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     public final Input<String> integrationBackendInput = new Input<>("integrationBackend",
             "Integration implementation: java or native T/X segments (requires fftBackend=fftw).", "java");
     private QuaSSENativeIntegrator nativeLo, nativeHi, nativeELo, nativeEHi;
+    public final Input<Boolean> useThreadsInput = new Input<>("useThreads",
+            "Integrate independent branches concurrently on native full-tree cache rebuilds.", false);
+    public final Input<Integer> maxNrOfThreadsInput = new Input<>("threads",
+            "Maximum branch workers; a nonpositive value uses the BEAST thread budget.", -1);
+    private int branchWorkers;
+    private QuaSSEBranchTraversal traversal;
+    private Workspace[] workspaces;
+
+    // Each active branch has exclusive use of both native plans and a spectrum for each resolution.
+    private static final class Workspace implements AutoCloseable {
+        final QuaSSENativeIntegrator lo, hi;
+        final double[] spectrumLo, spectrumHi;
+
+        // Allocate both owners together. Native real transforms are prepared on their first use.
+        Workspace(int nLo, int nHi, int dims) {
+            spectrumLo = new double[2 * nLo];
+            spectrumHi = new double[2 * nHi];
+            lo = new QuaSSENativeIntegrator(nLo, dims);
+            try {
+                hi = new QuaSSENativeIntegrator(nHi, dims);
+            } catch (RuntimeException | Error failure) {
+                lo.close();
+                throw failure;
+            }
+        }
+
+        @Override
+        public void close() {
+            lo.close();
+            hi.close();
+        }
+    }
+
     public final Input<RealParameter> fossilSamplingRateInput = new Input<>("fossilSamplingRate",
             "Constant non-removing fossil sampling rate; defaults to zero.");
     public final Input<RealParameter> presentSamplingProbabilityInput = new Input<>("presentSamplingProbability",
@@ -162,7 +196,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public void initAndValidate() {
+    public synchronized void initAndValidate() {
 
         // Release any existing or newly allocated FFT resources if initialization fails.
         try {
@@ -184,6 +218,9 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                 nativeLo = new QuaSSENativeIntegrator(nXbinsLo, nDimensionsE + nDimensionsD);
                 nativeHi = new QuaSSENativeIntegrator(nXbinsHi, nDimensionsE + nDimensionsD);
             }
+            int budget = ProgramStatus.m_nThreads;
+            if (maxNrOfThreadsInput.get() > 0) budget = Math.min(budget, maxNrOfThreadsInput.get());
+            branchWorkers = useThreadsInput.get() && nativeLo != null ? Math.min(tree.getLeafNodeCount(), budget) : 1;
             int nNodes = tree.getNodeCount();
 
             logNormalizationFactors = new double[nNodes];
@@ -347,7 +384,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     // Also called by parent initialization: release old resolution-specific resources before resizing.
     @Override
-    public void close() {
+    public synchronized void close() {
+        closeWorkers();
         if (nativeLo != null) nativeLo.close();
         if (nativeHi != null) nativeHi.close();
         if (nativeELo != null) nativeELo.close();
@@ -355,6 +393,16 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         nativeLo = nativeHi = nativeELo = nativeEHi = null;
         fossilELo = fossilEHi = scratchELo = scratchEHi = fftBufferELo = fftBufferEHi = null;
         super.close();
+    }
+
+    // All traversals drain their tasks before releasing the likelihood to close or reinitialize.
+    private void closeWorkers() {
+        if (traversal != null) traversal.close();
+        if (workspaces != null)
+            for (Workspace workspace : workspaces)
+                if (workspace != null) workspace.close();
+        traversal = null;
+        workspaces = null;
     }
 
     @Override
@@ -492,13 +540,13 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         for (int i = 0; i < useful; ++i) initial[0][2 * i] = 1 - presentSamplingProbability;
         if (tc > 0) {
             integrateSegment(fossilEHi, scratchEHi, fftBufferEHi, Math.min(age, tc),
-                    true, dtMax, false, false, nativeEHi, samplingRate);
+                    true, dtMax, false, false, nativeEHi, samplingRate, null);
             if (lowRes)
                 SSEUtils.hiToLoTransferInPlace(fossilEHi[0], fossilELo[0], hiLoIdxs4Transfer, false);
         }
         if (lowRes)
             integrateSegment(fossilELo, scratchELo, fftBufferELo, age - tc,
-                    true, dtMax, true, false, nativeELo, samplingRate);
+                    true, dtMax, true, false, nativeELo, samplingRate, null);
         return (lowRes ? fossilELo : fossilEHi)[0];
     }
 
@@ -514,7 +562,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         double rootHeight = conditionOnRoot ? rootNode.getHeight() : startingAge;
         // A zero-length stem is exactly the identity; it adds no event or normalization.
         if (!conditionOnRoot && startingAge > rootNode.getHeight())
-            processInterval(rootIdx, rootNode.getHeight(), startingAge, forceRecalcKernel, jtransforms);
+            processInterval(rootIdx, rootNode.getHeight(), startingAge, forceRecalcKernel, jtransforms, null);
 
         // we're done pruning, let's deal with the prior probs at root now
         double[][] esDsAtRoot;
@@ -649,13 +697,13 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     @Override
     protected void processBranch(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
         processInterval(aNode.getNr(), aNode.getHeight(), aNode.getParent().getHeight(),
-                forceRecalcKernel, jtransforms);
+                forceRecalcKernel, jtransforms, null);
     }
 
     // Propagate one node row backwards over an age interval, retaining the existing resolution
     // transition and accumulating each normalization in that row's scale exactly once.
     private void processInterval(int nodeIdx, double startTime, double endTime,
-            boolean forceRecalcKernel, boolean jtransforms) {
+            boolean forceRecalcKernel, boolean jtransforms, Workspace workspace) {
         double branchLength2Integrate = endTime - startTime;
 
         /*
@@ -693,7 +741,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             logNormalizationFactors[nodeIdx] += normalizeDs(nodeIdx, true, jtransforms); // normalize D's and returns factor, which we record
 
             // now integrate whole branch
-            integrateLength(nodeIdx, esDsAtNode, scratchAtNode, branchLength2Integrate, dynamicallyAdjustDt, dtMax, true, forceRecalcKernel, jtransforms);
+            integrateLength(nodeIdx, esDsAtNode, scratchAtNode, branchLength2Integrate, dynamicallyAdjustDt,
+                    dtMax, true, forceRecalcKernel, jtransforms, workspace);
         }
 
         // option 2: entire branch < tc (all high-res)
@@ -710,7 +759,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             logNormalizationFactors[nodeIdx] += normalizeDs(nodeIdx, false, jtransforms); // normalize D's and returns factor, which we record
 
             // now integrate whole branch (again, normalization and adding to logNormalizationFactors inside)
-            integrateLength(nodeIdx, esDsAtNode, scratchAtNode, branchLength2Integrate, dynamicallyAdjustDt, dtMax, false, forceRecalcKernel, jtransforms);
+            integrateLength(nodeIdx, esDsAtNode, scratchAtNode, branchLength2Integrate, dynamicallyAdjustDt,
+                    dtMax, false, forceRecalcKernel, jtransforms, workspace);
         }
 
         // option 3: tc happens inside branch (tip-end part in high-res, root-end part in low-res)
@@ -734,7 +784,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             // debugging
             // System.out.println("high-res part, lenHi = " + lenHi);
             // System.out.println("calling normalize inside integration in high res");
-            integrateLength(nodeIdx, esDsAtNode, scratchAtNode, lenHi, dynamicallyAdjustDt, dtMax, false, forceRecalcKernel, jtransforms); // normalization and adding to logNormalizationFactors inside
+            integrateLength(nodeIdx, esDsAtNode, scratchAtNode, lenHi, dynamicallyAdjustDt,
+                    dtMax, false, forceRecalcKernel, jtransforms, workspace); // normalization and adding to logNormalizationFactors inside
 
             // normalize and record normalization factor before integration at low res
             // logNormalizationFactors[nodeIdx] += normalizeDs(esDsAtNode[1], dXbin/hiLoRatio);
@@ -755,7 +806,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
             // debugging
             // System.out.println("low-res part, lenLo = " + lenLo);
             // System.out.println("calling normalize after integration in low res");
-            integrateLength(nodeIdx, esDsAtNode, scratchAtNode, lenLo, dynamicallyAdjustDt, dtMax, true, forceRecalcKernel, jtransforms);
+            integrateLength(nodeIdx, esDsAtNode, scratchAtNode, lenLo, dynamicallyAdjustDt,
+                    dtMax, true, forceRecalcKernel, jtransforms, workspace);
         }
     }
 
@@ -763,10 +815,24 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     protected void integrateLength(int nodeIdx, double[][] rows, double[][] scratch, double length,
             boolean dynamicallyAdjust, double maxDt, boolean lowRes, boolean forceRecalcKernel,
             boolean jtransforms) {
+        integrateLength(nodeIdx, rows, scratch, length, dynamicallyAdjust, maxDt, lowRes, forceRecalcKernel,
+                jtransforms, null);
+    }
+
+    // Choose the native owner and kernel destination for this grid, then normalize the endpoint.
+    private void integrateLength(int nodeIdx, double[][] rows, double[][] scratch, double length,
+            boolean dynamicallyAdjust, double maxDt, boolean lowRes, boolean forceRecalcKernel,
+            boolean jtransforms, Workspace workspace) {
         // An empty interval is the identity, including branch ends exactly at tc.
         if (length == 0) return;
+        QuaSSENativeIntegrator owner = lowRes ? nativeLo : nativeHi;
+        double[] spectrumCopy = null;
+        if (workspace != null) {
+            owner = lowRes ? workspace.lo : workspace.hi;
+            spectrumCopy = lowRes ? workspace.spectrumLo : workspace.spectrumHi;
+        }
         integrateSegment(rows, scratch, (lowRes ? fftBufferEsDsLo : fftBufferEsDsHi)[nodeIdx],
-                length, dynamicallyAdjust, maxDt, lowRes, forceRecalcKernel, lowRes ? nativeLo : nativeHi, fossilSamplingRate);
+                length, dynamicallyAdjust, maxDt, lowRes, forceRecalcKernel, owner, fossilSamplingRate, spectrumCopy);
         logNormalizationFactors[nodeIdx] += normalizeDs(nodeIdx, lowRes, jtransforms);
     }
 
@@ -774,20 +840,31 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     // This shares timestep selection, kernels and Strang ordering without inventing a D row for E.
     private void integrateSegment(double[][] rows, double[][] scratch, double[][] transformed,
             double length, boolean dynamicallyAdjust, double maxDt, boolean lowRes, boolean force,
-            QuaSSENativeIntegrator owner, double samplingRate) {
+            QuaSSENativeIntegrator owner, double samplingRate, double[] spectrumCopy) {
         if (length == 0) return;
         double intervals = dynamicallyAdjust ? Math.ceil(length / maxDt) : Math.floor(length / maxDt);
         double dt = dynamicallyAdjust ? length / intervals : maxDt;
         // Compatibility: legacy fixed-dt mode drops the remainder. Sampling inputs require dynDt=true;
         // repairing the old mode's timestep convention is a separate numerical change.
-        populatefY(dt, force, true, lowRes, false);
+        double[] spectrum = lowRes ? fftFYLo : fftFYHi;
+        if (spectrumCopy == null) {
+            populatefY(dt, force, true, lowRes, false);
+        } else {
+            // All workers use the same kernel builder. Capture its spectrum before another
+            // segment changes the time step; the expensive integration runs outside the lock.
+            synchronized (traversal) {
+                populatefY(dt, force, true, lowRes, false);
+                System.arraycopy(spectrum, 0, spectrumCopy, 0, spectrum.length);
+            }
+            spectrum = spectrumCopy;
+        }
         if (owner != null && Double.isFinite(intervals) && intervals >= 0
                 && intervals <= Integer.MAX_VALUE && intervals == Math.rint(intervals)) {
-            integrateNativeSegment(rows, owner, dt, (int) intervals, lowRes, samplingRate);
+            integrateNativeSegment(rows, owner, dt, (int) intervals, lowRes, samplingRate, spectrum);
         } else {
             // Compatibility: preserve the existing int-loop limitation outside JNI's step-count range.
             for (int i = 0; i < intervals; ++i)
-                integrateStep(rows, scratch, transformed, dt, lowRes, owner, samplingRate);
+                integrateStep(rows, scratch, transformed, dt, lowRes, owner, samplingRate, spectrum);
         }
     }
 
@@ -969,10 +1046,10 @@ public class QuaSSEDistribution extends QuaSSEProcess {
 
     // Copy current inputs into the supplied native owner; owners cache storage, not model state.
     private void integrateNativeSegment(double[][] rows, QuaSSENativeIntegrator owner,
-            double dt, int steps, boolean lowRes, double samplingRate) {
+            double dt, int steps, boolean lowRes, double samplingRate, double[] spectrum) {
         int[] flanks = lowRes ? nLeftNRightFlanksLo : nLeftNRightFlanksHi;
         owner.integrateSegment(rows, lowRes ? birthRatesLo : birthRatesHi,
-                lowRes ? deathRatesLo : deathRatesHi, lowRes ? fftFYLo : fftFYHi,
+                lowRes ? deathRatesLo : deathRatesHi, spectrum,
                 samplingRate, dt, steps, flanks[0], flanks[1]);
     }
 
@@ -980,14 +1057,15 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     @Override
     protected void doIntegrateInPlace(int nodeIdx, double dt, boolean lowRes) {
         integrateStep((lowRes ? esDsLo : esDsHi)[nodeIdx], (lowRes ? scratchLo : scratchHi)[nodeIdx],
-                (lowRes ? fftBufferEsDsLo : fftBufferEsDsHi)[nodeIdx], dt, lowRes, lowRes ? nativeLo : nativeHi, fossilSamplingRate);
+                (lowRes ? fftBufferEsDsLo : fftBufferEsDsHi)[nodeIdx], dt, lowRes, lowRes ? nativeLo : nativeHi,
+                fossilSamplingRate, lowRes ? fftFYLo : fftFYHi);
     }
 
     // Strang splitting: reaction half-steps surround transport with the prepared full-dt kernel.
     private void integrateStep(double[][] rows, double[][] scratch, double[][] transformed,
-            double dt, boolean lowRes, QuaSSENativeIntegrator owner, double samplingRate) {
+            double dt, boolean lowRes, QuaSSENativeIntegrator owner, double samplingRate, double[] spectrum) {
         if (owner != null) {
-            integrateNativeSegment(rows, owner, dt, 1, lowRes, samplingRate);
+            integrateNativeSegment(rows, owner, dt, 1, lowRes, samplingRate, spectrum);
             return;
         }
         propagateReaction(rows, scratch, dt / 2, lowRes, false, samplingRate);
@@ -1173,7 +1251,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     }
 
     @Override
-    public double calculateLogP() {
+    public synchronized double calculateLogP() {
 
         tree = treeInput.get();
         if (!refreshSamplingParameters() || !refreshStartingAge() || !refreshGrid())
@@ -1209,12 +1287,17 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                     && q2d.getClass() == NormalCenteredAtObservedLinkFn.class) {
                 NormalCenteredAtObservedLinkFn normal = (NormalCenteredAtObservedLinkFn) q2d;
                 double sd = normal.sdNormalQuTrValueInput.get().getArrayValue();
-                if (model == null || !model.matches(sd)) {
+                boolean rebuild = model == null || !model.matches(sd);
+                if (rebuild) {
                     Arrays.fill(branches, null);
                     model = new BranchModel(sd);
                 }
-                pruneBranch(rootNode.getLeft(), normal);
-                pruneBranch(rootNode.getRight(), normal);
+                if (rebuild && branchWorkers > 1) {
+                    parallelPrune(normal);
+                } else {
+                    pruneBranch(rootNode.getLeft(), normal);
+                    pruneBranch(rootNode.getRight(), normal);
+                }
                 prepareWrite(rootIdx);
                 mergeChildrenNodes(rootNode, false);
                 finishRoot(rootNode, false, false);
@@ -1224,10 +1307,11 @@ public class QuaSSEDistribution extends QuaSSEProcess {
                 initializeSampleEvents();
                 startRecursionAtRootNode(rootNode, false, false);
             }
-        } catch (RuntimeException failure) {
+        } catch (RuntimeException | Error failure) {
             // A completed child may already have replaced its rows while an ancestor still
             // has its old key. Force a full visit on retry; store/restore protects accepted keys.
             Arrays.fill(branches, null);
+            model = null;
             throw failure;
         }
 
@@ -1259,6 +1343,30 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         logP = getLogPFromRelevantObjects(esDsAtRootAtRightRes, sumOfLogNormalizationFactors, birthRatesAtRightRes, dxAtRightRes, false);
 
         return logP;
+    }
+
+    // Prepare each ready branch on the calling thread, including snapshotting its accepted rows.
+    // Its worker writes only that endpoint and publishes its key after successful integration.
+    private void parallelPrune(NormalCenteredAtObservedLinkFn normal) {
+        if (traversal == null) {
+            workspaces = new Workspace[branchWorkers];
+            try {
+                for (int i = 0; i < branchWorkers; i++)
+                    workspaces[i] = new Workspace(nXbinsLo, nXbinsHi, nDimensionsE + nDimensionsD);
+                traversal = new QuaSSEBranchTraversal(branchWorkers);
+            } catch (RuntimeException | Error failure) {
+                closeWorkers();
+                throw failure;
+            }
+        }
+        traversal.run(tree, (node, slot) -> {
+            Branch key = branchKey(node, normal);
+            prepareEndpoint(node);
+            return () -> {
+                processInterval(node.getNr(), key.start(), key.end(), false, false, workspaces[slot]);
+                branches[node.getNr()] = key;
+            };
+        });
     }
 
     // Visit both children even if the first changed. Propagate an update along each affected
