@@ -2,6 +2,7 @@ package SSE;
 
 import beast.base.core.BEASTInterface;
 import beast.base.core.Function;
+import beast.base.core.ProgramStatus;
 import beast.base.inference.util.RPNcalculator;
 import beast.base.inference.State;
 import beast.base.inference.CompoundDistribution;
@@ -25,9 +26,14 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.Arrays;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -2398,33 +2404,90 @@ public class QuaSSEDistributionTest {
     }
 
     private static class CountedBranches extends QuaSSEDistribution {
-        final Set<Integer> integrated = new HashSet<>();
+        final Set<Integer> integrated = ConcurrentHashMap.newKeySet();
+        final Set<Thread> integratingThreads = ConcurrentHashMap.newKeySet();
 
-        // Record which endpoints were integrated during one likelihood evaluation.
+        boolean failIntegration;
+
+        // Normalization visits each integrated endpoint on both traversal paths.
         @Override
-        protected void processBranch(Node node, boolean recalculate, boolean jtransforms) {
-            super.processBranch(node, recalculate, jtransforms);
-            integrated.add(node.getNr());
+        protected double normalizeDs(int node, boolean lowRes, boolean jtransforms) {
+            if (failIntegration) throw new ArithmeticException("test integration failure");
+            integrated.add(node);
+            integratingThreads.add(Thread.currentThread());
+            return super.normalizeDs(node, lowRes, jtransforms);
         }
     }
 
-    // A fresh likelihood checks the value; recording the branches also detects needless
-    // integration after a rejected or accepted edit. Retire if branch caching is removed.
+    // Supply BEAST's application thread budget during initialization and restore it for other tests.
+    private void initBranchWorkers(QuaSSEDistribution q) {
+        int previous = ProgramStatus.m_nThreads;
+        try {
+            ProgramStatus.m_nThreads = 4;
+            q.useThreadsInput.setValue(true, q);
+            q.maxNrOfThreadsInput.setValue(2, q);
+            q.initAndValidate();
+        } finally {
+            ProgramStatus.m_nThreads = previous;
+        }
+    }
+
+    // Compare rows after full rebuilds and count the branches revisited by local proposals.
+    // Posterior comparisons alone miss wasted integration and stale rows after rollback.
     @Test
     public void testBranchReuseAndRollback() {
         String newick = "((A:1,B:1):1,(F:0.5,S:0.5):1.5);";
         CountedBranches cached = configure(new CountedBranches());
         fossilDistribution(cached, newick, 1.05, true, 256, .02, .025, 5, 2);
+        initBranchWorkers(cached);
         Tree tree = cached.treeInput.get();
+        RealParameter rho = cached.presentSamplingProbabilityInput.get();
         State state = new State();
-        state.initByName("stateNode", tree);
+        state.initByName("stateNode", tree, "stateNode", rho);
         state.initialise();
         state.setPosterior(cached);
         double accepted = state.robustlyCalcPosterior(cached);
 
-        // Reject a left subtree edit crossing the grid boundary, then accept a right subtree edit.
+        // Alternate full rebuilds and local proposals, rejecting and accepting one of each.
+        boolean threaded = "native".equals(cached.integrationBackendInput.get());
         for (boolean accept : new boolean[]{false, true}) {
             state.store(1);
+            rho.setValue(accept ? .8 : .9);
+            state.storeCalculationNodes();
+            state.checkCalculationNodesDirtiness();
+            cached.integratingThreads.clear();
+            double global = cached.calculateLogP();
+            QuaSSEDistribution serial = fossilDistribution(newick, 1.05, true, 256, .02, .025, 5, 2,
+                    "presentSamplingProbability", new RealParameter(rho.getValue().toString()));
+            Assert.assertEquals(serial.calculateLogP(), global, 1e-12);
+            for (boolean low : new boolean[]{false, true}) {
+                double[][][] rows = serial.getEsDs(low);
+                for (int n = 0; n < rows.length; n++)
+                    for (int d = 0; d < rows[n].length; d++)
+                        Assert.assertArrayEquals(rows[n][d], cached.getEsDs(low)[n][d], 1e-12);
+            }
+            if (threaded) {
+                Assert.assertTrue(cached.integratingThreads.size() >= 1 && cached.integratingThreads.size() <= 2);
+                Assert.assertFalse(cached.integratingThreads.contains(Thread.currentThread()));
+            } else Assert.assertEquals(Set.of(Thread.currentThread()), cached.integratingThreads);
+            if (accept) {
+                state.acceptCalculationNodes();
+                accepted = global;
+            } else {
+                // A second global edit in the same proposal fails partway through the rebuild.
+                rho.setValue(.95);
+                cached.failIntegration = true;
+                Assert.assertThrows(ArithmeticException.class, cached::calculateLogP);
+                cached.failIntegration = false;
+                state.restore();
+                state.restoreCalculationNodes();
+            }
+            state.setEverythingDirty(false);
+            cached.integrated.clear();
+            Assert.assertEquals(accepted, cached.calculateLogP(), 1e-12);
+            Assert.assertTrue(cached.integrated.isEmpty());
+
+            state.store(2);
             Node node = tree.getRoot().getChild(accept ? 1 : 0);
             node.setHeight(accept ? .6 : 1.1);
             state.storeCalculationNodes();
@@ -2433,11 +2496,14 @@ public class QuaSSEDistributionTest {
             // Use the same node height directly: converting it to branch lengths and back can
             // round across the integrator's threshold for taking one more time step.
             QuaSSEDistribution fresh = fossilDistribution(newick, 1.05, true, 256, .02, .025, 5, 2);
+            fresh.presentSamplingProbabilityInput.get().setValue(rho.getValue());
             fresh.treeInput.get().getNode(node.getNr()).setHeight(node.getHeight());
             cached.integrated.clear();
+            cached.integratingThreads.clear();
             double proposed = cached.calculateLogP();
             Assert.assertEquals(fresh.calculateLogP(), proposed, 1e-12);
             Assert.assertEquals(Set.of(node.getNr(), node.getLeft().getNr(), node.getRight().getNr()), cached.integrated);
+            Assert.assertEquals(Set.of(Thread.currentThread()), cached.integratingThreads);
 
             if (accept) {
                 state.acceptCalculationNodes();
@@ -2461,6 +2527,7 @@ public class QuaSSEDistributionTest {
                 1.05, true, 256, .02, .025, 5, 2);
         QuaSSEDistribution exchanged = fossilDistribution("((A:1,S:1):1,(F:1,B:1):1);",
                 1.05, true, 256, .02, .025, 5, 2);
+        initBranchWorkers(cached);
         double old = cached.calculateLogP();
         Node root = cached.treeInput.get().getRoot(), left = root.getLeft(), right = root.getRight();
         Node b = left.getRight(), s = right.getRight();
@@ -2471,6 +2538,49 @@ public class QuaSSEDistributionTest {
         double expected = exchanged.calculateLogP();
         Assert.assertNotEquals(old, expected, 1e-8);
         Assert.assertEquals(expected, cached.calculateLogP(), 1e-12);
+        cached.presentSamplingProbabilityInput.get().setValue(.8);
+        exchanged.presentSamplingProbabilityInput.get().setValue(.8);
+        Assert.assertEquals(exchanged.calculateLogP(), cached.calculateLogP(), 1e-12);
+        cached.close();
+        initBranchWorkers(cached);
+        Assert.assertEquals(exchanged.calculateLogP(), cached.calculateLogP(), 1e-12);
+    }
+
+    // A failed worker must leave every other writer quiescent before BEAST can restore saved rows.
+    // Likelihood comparisons cannot force this ordering. Retire if workers stop writing proposal rows.
+    @Test
+    public void testBranchWorkerFailureDrainsTraversal() throws Exception {
+        var tree = new TreeParser("((A:1,B:1):1,(F:1,S:1):1);");
+        var coordinator = Executors.newSingleThreadExecutor();
+        var release = new CountDownLatch(1);
+        var throwing = new CountDownLatch(1);
+        var failure = new ArithmeticException("branch integration failed");
+        try (var traversal = new QuaSSEBranchTraversal(2)) {
+            var result = coordinator.submit(() -> traversal.run(tree, (node, slot) -> () -> {
+                if (slot == 0) {
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        throw new AssertionError(e);
+                    }
+                } else {
+                    throwing.countDown();
+                    throw failure;
+                }
+            }));
+            try {
+                Assert.assertTrue(throwing.await(5, TimeUnit.SECONDS));
+                Assert.assertThrows(TimeoutException.class,
+                        () -> result.get(100, TimeUnit.MILLISECONDS));
+            } finally {
+                release.countDown();
+            }
+            var error = Assert.assertThrows(ExecutionException.class,
+                    () -> result.get(5, TimeUnit.SECONDS));
+            Assert.assertSame(failure, error.getCause());
+        } finally {
+            coordinator.shutdownNow();
+        }
     }
 
     // Zero slopes must reproduce constant links; real State restoration catches stale coefficient
@@ -3008,6 +3118,7 @@ public class QuaSSEDistributionTest {
             for (double tc : new double[]{0, .25, .5, 1.25}) {
                 QuaSSEDistribution distribution = fossilDistribution(trees[t], tc, false,
                         2048, 3.75 / 959, 1.0 / 64, Math.sqrt(80), 2);
+                if (t == 0 && tc == 0) initBranchWorkers(distribution);
                 Tree tree = distribution.treeInput.get();
                 Assert.assertEquals(2, tree.getRoot().getHeight(), 0);
                 for (Node node : tree.getExternalNodes()) {
@@ -3102,6 +3213,7 @@ public class QuaSSEDistributionTest {
             }
             if ("A".equals(node.getID()) || "B".equals(node.getID())) Assert.assertEquals(0, node.getHeight(), 0);
         }
+        initBranchWorkers(distribution);
         double reference = evaluate(distribution);
         Assert.assertEquals(-11.075528805735900, reference, 1e-8);
         distribution.close();
