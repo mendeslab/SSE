@@ -140,6 +140,13 @@ The native integrator uses batched real FFTs for E and D throughout each fixed-r
 Java selects time steps and handles grids, tree operations, and normalization.
 Rebuild with `ant native` after updating the JNI interface.
 
+For trees with only extant tips and normal trait observations, add `useThreads="true"` to the
+native QuaSSE distribution and run BEAST with, for example, `-threads 4`. Independent branches
+then integrate concurrently on the first evaluation and when shared model parameters change.
+Tree edits that preserve the shared model and grid reuse cached branches on one thread. The
+optional XML attribute `threads` caps the workers for this likelihood within the BEAST thread
+budget. Branch threading defaults to off.
+
 Native builds default to release mode. Each mode selects its own directory and default flags:
 
 | Mode | Directory | Default compiler flags |
