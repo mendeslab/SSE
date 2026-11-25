@@ -1316,11 +1316,12 @@ public class QuaSSEDistributionTest {
 
         /*
          * now we integrate over 2 dt's = 2 * 0.01 = 0.02, inside class!
-         * note that inside processBranch, we normalize Es and Ds
+         * the interval calculation includes branch normalization
          */
         boolean jtransforms = false;
         boolean forceRecalcKernel = false;
-        q32Dt002.processBranch(sp1Node, forceRecalcKernel, jtransforms);
+        q32Dt002.processInterval(nodeIdx, sp1Node.getHeight(), sp1Node.getParent().getHeight(),
+                forceRecalcKernel, jtransforms, null);
         esDsHiAtNode = q32Dt002.getEsDsAtNode(nodeIdx, false);
 
         double[] expectedInitialDsFirst10 = new double[] { 0.791000831787404, 0, 0.879671919608544, 0, 0.975840371583655, 0, 1.07981933026376, 0, 1.19189412137632, 0, 1.31231629549353, 0, 1.44129748672436, 0, 1.57900316601788, 0, 1.72554637653023, 0, 1.88098154753774, 0 };
@@ -2126,7 +2127,7 @@ public class QuaSSEDistributionTest {
                     reference.normalizeDs(0, low, false);
                 }
                 selected.integrateLength(0, actual, selected.getScratchAtNode(0, low),
-                        length, false, .005, low, false, false);
+                        length, false, .005, low, false, false, null);
                 for (int d = 0; d < expected.length; ++d)
                     Assert.assertArrayEquals(expected[d], actual[d], 1e-10);
             }

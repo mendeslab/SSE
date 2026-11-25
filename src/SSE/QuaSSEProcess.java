@@ -305,16 +305,6 @@ public abstract class QuaSSEProcess extends Distribution implements AutoCloseabl
     /*
      *
      */
-    protected abstract void processBranch(Node aNode, boolean forceRecalcKernel, boolean jtransforms);
-
-    /*
-     *
-     */
-    protected abstract void integrateLength(int nodeIdx, double[][] esDsAtNode, double[][] scratchAtNode, double aLength, boolean dynamicallyAdjust, double maxDt, boolean lowRes, boolean forceRecalcKernel, boolean jtransforms);
-
-    /*
-     *
-     */
     protected abstract double normalizeDs(int nodeIdx, boolean lowRes, boolean jtransforms);
 
     /*

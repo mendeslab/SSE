@@ -71,8 +71,8 @@ public class MoSSEDistribution extends QuaSSEDistribution {
         ;
     }
 
-    @Override
-    protected void processBranch(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
+    // Propagate the molecular partials for this branch.
+    private void processMoSSEBranch(Node aNode) {
 
         // TODO stuff
         doMoSSEIntegrateInPlace(aNode.getNr(), esDsHi[0], fftBufferEsDsHi[0], scratch, 0.0, true, dtMax, true);

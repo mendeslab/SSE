@@ -691,19 +691,14 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         }
 
         // unless we're at the root, now we integrate this branch
-        if (!aNode.isRoot()) processBranch(aNode, forceRecalcKernel, jtransforms);
-    }
-
-    // main branch function
-    @Override
-    protected void processBranch(Node aNode, boolean forceRecalcKernel, boolean jtransforms) {
-        processInterval(aNode.getNr(), aNode.getHeight(), aNode.getParent().getHeight(),
-                forceRecalcKernel, jtransforms, null);
+        if (!aNode.isRoot())
+            processInterval(aNode.getNr(), aNode.getHeight(), aNode.getParent().getHeight(),
+                    forceRecalcKernel, jtransforms, null);
     }
 
     // Propagate one node row backwards over an age interval, retaining the existing resolution
     // transition and accumulating each normalization in that row's scale exactly once.
-    private void processInterval(int nodeIdx, double startTime, double endTime,
+    final void processInterval(int nodeIdx, double startTime, double endTime,
             boolean forceRecalcKernel, boolean jtransforms, Workspace workspace) {
         double branchLength2Integrate = endTime - startTime;
 
@@ -812,16 +807,8 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         }
     }
 
-    @Override
-    protected void integrateLength(int nodeIdx, double[][] rows, double[][] scratch, double length,
-            boolean dynamicallyAdjust, double maxDt, boolean lowRes, boolean forceRecalcKernel,
-            boolean jtransforms) {
-        integrateLength(nodeIdx, rows, scratch, length, dynamicallyAdjust, maxDt, lowRes, forceRecalcKernel,
-                jtransforms, null);
-    }
-
     // Choose the native owner and kernel destination for this grid, then normalize the endpoint.
-    private void integrateLength(int nodeIdx, double[][] rows, double[][] scratch, double length,
+    final void integrateLength(int nodeIdx, double[][] rows, double[][] scratch, double length,
             boolean dynamicallyAdjust, double maxDt, boolean lowRes, boolean forceRecalcKernel,
             boolean jtransforms, Workspace workspace) {
         // An empty interval is the identity, including branch ends exactly at tc.
@@ -1368,8 +1355,7 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         prepareEndpoint(node);
         // Publish the key only after this endpoint has been integrated successfully.
         return slot -> {
-            if (workspaces == null) processBranch(node, false, false);
-            else processInterval(i, key.start(), key.end(), false, false, workspaces[slot]);
+            processInterval(i, key.start(), key.end(), false, false, workspaces == null ? null : workspaces[slot]);
             branches[i] = key;
         };
     }
