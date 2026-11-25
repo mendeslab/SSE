@@ -1264,27 +1264,35 @@ public class QuaSSEDistribution extends QuaSSEProcess {
     // Visit both children even if the first changed. Propagate an update along each affected
     // ancestral path; unrelated subtrees keep their endpoint rows and normalization factors.
     private boolean pruneBranch(Node node, NormalCenteredAtObservedLinkFn normal) {
-        int i = node.getNr();
         boolean updated = false;
-        int left = -1, right = -1;
-        String taxon = null;
-        double observation = 0;
-        if (node.isLeaf()) {
-            taxon = node.getID();
-            observation = normal.quTraitsInput.get().getValue(taxon);
-        } else {
-            left = node.getLeft().getNr();
-            right = node.getRight().getNr();
+        if (!node.isLeaf()) {
             updated = pruneBranch(node.getLeft(), normal);
             updated |= pruneBranch(node.getRight(), normal);
         }
-        Node parent = node.getParent();
-        Branch key = new Branch(parent.getNr(), left, right, node.getHeight(), parent.getHeight(), taxon, observation);
+        int i = node.getNr();
+        Branch key = branchKey(node, normal);
         // BEAST dirties the tree and its nodes for a full posterior check. A fixed tree can
         // retain node flags from parsing. Ignore those, and flags already handled in this proposal.
         boolean dirty = tree.somethingIsDirty() && node.isDirty() != Tree.IS_CLEAN
                 && (storedBranches == null || branches[i] == storedBranches[i]);
         if (!updated && !dirty && key.equals(branches[i])) return false;
+        prepareEndpoint(node);
+        processBranch(node, false, false);
+        branches[i] = key;
+        return true;
+    }
+
+    // Record endpoint geometry, child order and the observation used by the branch cache.
+    private Branch branchKey(Node node, NormalCenteredAtObservedLinkFn normal) {
+        boolean tip = node.isLeaf();
+        return new Branch(node.getParent().getNr(), tip ? -1 : node.getLeft().getNr(),
+                tip ? -1 : node.getRight().getNr(), node.getHeight(), node.getParent().getHeight(),
+                tip ? node.getID() : null, tip ? normal.quTraitsInput.get().getValue(node.getID()) : 0);
+    }
+
+    // Start an ordinary branch from its tip density or its two completed child rows.
+    private void prepareEndpoint(Node node) {
+        int i = node.getNr();
         prepareWrite(i);
         if (node.isLeaf()) {
             populateTip(node, nDimensions, true, false);
@@ -1292,9 +1300,6 @@ public class QuaSSEDistribution extends QuaSSEProcess {
         } else {
             mergeChildrenNodes(node, false);
         }
-        processBranch(node, false, false);
-        branches[i] = key;
-        return true;
     }
 
     // Reconcile the live grid with current parameters, including clean values restored after rejection.
