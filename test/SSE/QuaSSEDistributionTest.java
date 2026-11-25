@@ -26,6 +26,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.function.IntConsumer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -2434,12 +2435,18 @@ public class QuaSSEDistributionTest {
 
     // Compare rows after full rebuilds and count the branches revisited by local proposals.
     // Posterior comparisons alone miss wasted integration and stale rows after rollback.
-    @Test
+    @Test(timeout = 30000)
     public void testBranchReuseAndRollback() {
-        String newick = "((A:1,B:1):1,(F:0.5,S:0.5):1.5);";
+        checkBranchReuseAndRollback(false);
+        checkBranchReuseAndRollback(true);
+    }
+
+    // The branch above the edited node's parent keeps its geometry but receives a changed child.
+    private void checkBranchReuseAndRollback(boolean useWorkers) {
+        String newick = "(((A:1,B:1):0.5,F:1.5):0.5,S:2);";
         CountedBranches cached = configure(new CountedBranches());
         fossilDistribution(cached, newick, 1.05, true, 256, .02, .025, 5, 2);
-        initBranchWorkers(cached);
+        if (useWorkers) initBranchWorkers(cached);
         Tree tree = cached.treeInput.get();
         RealParameter rho = cached.presentSamplingProbabilityInput.get();
         State state = new State();
@@ -2449,7 +2456,7 @@ public class QuaSSEDistributionTest {
         double accepted = state.robustlyCalcPosterior(cached);
 
         // Alternate full rebuilds and local proposals, rejecting and accepting one of each.
-        boolean threaded = "native".equals(cached.integrationBackendInput.get());
+        boolean threaded = useWorkers && "native".equals(cached.integrationBackendInput.get());
         for (boolean accept : new boolean[]{false, true}) {
             state.store(1);
             rho.setValue(accept ? .8 : .9);
@@ -2460,12 +2467,7 @@ public class QuaSSEDistributionTest {
             QuaSSEDistribution serial = fossilDistribution(newick, 1.05, true, 256, .02, .025, 5, 2,
                     "presentSamplingProbability", new RealParameter(rho.getValue().toString()));
             Assert.assertEquals(serial.calculateLogP(), global, 1e-12);
-            for (boolean low : new boolean[]{false, true}) {
-                double[][][] rows = serial.getEsDs(low);
-                for (int n = 0; n < rows.length; n++)
-                    for (int d = 0; d < rows[n].length; d++)
-                        Assert.assertArrayEquals(rows[n][d], cached.getEsDs(low)[n][d], 1e-12);
-            }
+            assertEndpointRows(serial, cached);
             if (threaded) {
                 Assert.assertTrue(cached.integratingThreads.size() >= 1 && cached.integratingThreads.size() <= 2);
                 Assert.assertFalse(cached.integratingThreads.contains(Thread.currentThread()));
@@ -2488,7 +2490,7 @@ public class QuaSSEDistributionTest {
             Assert.assertTrue(cached.integrated.isEmpty());
 
             state.store(2);
-            Node node = tree.getRoot().getChild(accept ? 1 : 0);
+            Node node = tree.getRoot().getLeft().getLeft();
             node.setHeight(accept ? .6 : 1.1);
             state.storeCalculationNodes();
             state.checkCalculationNodesDirtiness();
@@ -2502,13 +2504,23 @@ public class QuaSSEDistributionTest {
             cached.integratingThreads.clear();
             double proposed = cached.calculateLogP();
             Assert.assertEquals(fresh.calculateLogP(), proposed, 1e-12);
-            Assert.assertEquals(Set.of(node.getNr(), node.getLeft().getNr(), node.getRight().getNr()), cached.integrated);
-            Assert.assertEquals(Set.of(Thread.currentThread()), cached.integratingThreads);
+            assertEndpointRows(fresh, cached);
+            Assert.assertEquals(Set.of(node.getParent().getNr(), node.getNr(),
+                    node.getLeft().getNr(), node.getRight().getNr()), cached.integrated);
+            Assert.assertEquals(!threaded, cached.integratingThreads.contains(Thread.currentThread()));
+
+            cached.integrated.clear();
+            Assert.assertEquals(proposed, cached.calculateLogP(), 1e-12);
+            Assert.assertTrue(cached.integrated.isEmpty());
 
             if (accept) {
                 state.acceptCalculationNodes();
                 accepted = proposed;
             } else {
+                node.setHeight(1.125);
+                cached.failIntegration = true;
+                Assert.assertThrows(ArithmeticException.class, cached::calculateLogP);
+                cached.failIntegration = false;
                 state.restore();
                 state.restoreCalculationNodes();
             }
@@ -2516,6 +2528,16 @@ public class QuaSSEDistributionTest {
             cached.integrated.clear();
             Assert.assertEquals(accepted, cached.calculateLogP(), 1e-12);
             Assert.assertTrue(cached.integrated.isEmpty());
+        }
+    }
+
+    // Compare the entire cache, including the rows reused on the untouched side of the tree.
+    private static void assertEndpointRows(QuaSSEDistribution fresh, QuaSSEDistribution cached) {
+        for (boolean low : new boolean[]{false, true}) {
+            double[][][] rows = fresh.getEsDs(low);
+            for (int n = 0; n < rows.length; n++)
+                for (int d = 0; d < rows[n].length; d++)
+                    Assert.assertArrayEquals(rows[n][d], cached.getEsDs(low)[n][d], 1e-12);
         }
     }
 
@@ -2556,7 +2578,9 @@ public class QuaSSEDistributionTest {
         var throwing = new CountDownLatch(1);
         var failure = new ArithmeticException("branch integration failed");
         try (var traversal = new QuaSSEBranchTraversal(2)) {
-            var result = coordinator.submit(() -> traversal.run(tree, (node, slot) -> () -> {
+            Node cachedTip = tree.getExternalNodes().get(0);
+            // Hold one writer open while a second reports its failure.
+            IntConsumer integrate = slot -> {
                 if (slot == 0) {
                     try {
                         release.await();
@@ -2567,7 +2591,9 @@ public class QuaSSEDistributionTest {
                     throwing.countDown();
                     throw failure;
                 }
-            }));
+            };
+            var result = coordinator.submit(() -> traversal.run(tree,
+                    (node, childChanged) -> node == cachedTip ? null : integrate));
             try {
                 Assert.assertTrue(throwing.await(5, TimeUnit.SECONDS));
                 Assert.assertThrows(TimeoutException.class,
